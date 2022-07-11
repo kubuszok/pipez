@@ -6,7 +6,11 @@ import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-final class Macros(val c: blackbox.Context) extends PlatformDefinitions with PlatformDispatchers {
+final class Macros(val c: blackbox.Context)
+    extends PlatformDefinitions
+    with Dispatchers
+    with PlatformProductCaseGeneration
+    with PlatformSumCaseGeneration {
 
   import c.universe._
 

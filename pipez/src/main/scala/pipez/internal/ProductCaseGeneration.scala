@@ -32,8 +32,9 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
       outType:        Type,
       settings:       Settings,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
-    ): CodeGenerator[Pipe, In, Out] =
-      ???
+    ): CodeGenerator[Pipe, In, Out] = new CodeGenerator.Failing(
+      DerivationError.InvalidConfiguration("YOLO")
+    )
 
     private def reportMismatchingInput[Pipe[_, _], In, Out](
       inType:  Type,
@@ -49,7 +50,7 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
       outType: Type
     ): CodeGenerator[Pipe, In, Out] = new CodeGenerator.Failing(
       DerivationError.InvalidConfiguration(
-        s"While input type ${outType.toString} seem to be a case class or a Java bean, the output type ${inType.toString} doesn't"
+        s"While input type ${inType.toString} seem to be a case class or a Java bean, the output type ${outType.toString} doesn't"
       )
     )
   }

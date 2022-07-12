@@ -10,7 +10,7 @@ trait PlatformDefinitions extends Definitions {
 
   import c.universe._
 
-  override type Type[A] = WeakTypeTag[A]
+  override type Type[A] = c.Type
 
   override type Code      = Tree
   override type CodeOf[A] = Expr[A]

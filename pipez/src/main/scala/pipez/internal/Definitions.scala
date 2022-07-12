@@ -50,7 +50,7 @@ trait Definitions {
   object DerivationError {
     // TODO: better details and more cases
     final case class InvalidConfiguration(hint: String) extends DerivationError
-    case object NoSupportedCase extends DerivationError
+    final case class NotSupportedCase(hint: String) extends DerivationError
   }
 
   sealed trait DerivationResult[+A] extends Product with Serializable {
@@ -63,12 +63,14 @@ trait Definitions {
     }
     final def map[B](f: A => B): DerivationResult[B] = flatMap(f andThen pure)
 
-    def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = (this, other) match {
-      case (Success(a), Success(b))   => Success((a, b))
+    def map2[B, C](other: DerivationResult[B])(f: (A, B) => C): DerivationResult[C] = (this, other) match {
+      case (Success(a), Success(b))   => Success(f(a, b))
       case (Failure(e1), Failure(e2)) => Failure(e1 ++ e2)
       case (Failure(e), _)            => Failure(e)
       case (_, Failure(e))            => Failure(e)
     }
+
+    def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = map2(other)(_ -> _)
   }
   object DerivationResult {
     final case class Success[+A](value: A) extends DerivationResult[A]

@@ -15,15 +15,21 @@ trait Dispatchers extends ProductCaseGeneration with SumCaseGeneration { self: D
   )
 
   trait CodeGeneratorExtractor {
+
     def unapply[Pipe[_, _], In, Out](
       configuration: Configuration[Pipe, In, Out]
     ): Option[DerivationResult[CodeOf[Pipe[In, Out]]]]
   }
 
   // TODO: other cases
-  def resolveConversion[Pipe[_, _], In, Out]: Configuration[Pipe, In, Out] => DerivationResult[CodeOf[Pipe[In, Out]]] = {
+  def resolveConversion[Pipe[_, _], In, Out]: Configuration[Pipe, In, Out] => DerivationResult[
+    CodeOf[Pipe[In, Out]]
+  ] = {
     case ProductTypeConversion(generator) => generator
     case SumTypeConversion(generator)     => generator
-    case _                                => DerivationResult.fail(DerivationError.NoSupportedCase)
+    case Configuration(inType, outType, _, _) =>
+      DerivationResult.fail(
+        DerivationError.NotSupportedCase(s"Pipe from $inType to $outType was not recognized as any of supported cases")
+      )
   }
 }

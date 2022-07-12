@@ -30,7 +30,7 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
   sealed trait OutData extends Product with Serializable
   object OutData {
 
-    final class ConstructorParamData[OutField](
+    final case class ConstructorParamData[OutField](
       name: String,
       tpe:  Type[OutField]
     )
@@ -44,7 +44,7 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
     final case class JavaBeanData[Out](
       defaultConstructor: CodeOf[Out],
       setters:            ListMap[String, SetterData[_]]
-    )
+    ) extends OutData
   }
 
   trait ProductTypeConversion extends CodeGeneratorExtractor {

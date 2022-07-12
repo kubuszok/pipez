@@ -33,8 +33,8 @@ final class Macros(val c: blackbox.Context)
     (for {
       settings <- readSettingsIfGiven(configurationCode)
       configuration = Configuration[Pipe, In, Out](
-        inType = weakTypeTag[In],
-        outType = weakTypeTag[Out],
+        inType = weakTypeTag[In].tpe,
+        outType = weakTypeTag[Out].tpe,
         settings = settings,
         pipeDerivation = pipeDerivationCode
       )

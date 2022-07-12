@@ -10,9 +10,12 @@ import scala.util.chaining._
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration { self: Definitions with Dispatchers =>
 
-  def isUsableAsProductOutput[Out](tpe: Type[Out]): Boolean
-  def isCaseClass[A](tpe:               Type[A]):   Boolean
-  def isJavaBean[A](tpe:                Type[A]):   Boolean
+  def isCaseClass[A](tpe:    Type[A]): Boolean
+  def isJavaBean[A](tpe:     Type[A]): Boolean
+  def isInstantiable[A](tpe: Type[A]): Boolean
+
+  def isUsableAsProductOutput[Out](tpe: Type[Out]): Boolean =
+    (isCaseClass(tpe) || isJavaBean(tpe)) && isInstantiable(tpe)
 
   final case class InData(getters: ListMap[String, InData.Getter[_]])
   object InData {
@@ -24,6 +27,8 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
     ) {
 
       lazy val nonJavaBeanName: String = ProductCaseGeneration.dropGetIs(name)
+
+      lazy val names: Set[String] = Set(name, nonJavaBeanName)
     }
   }
 
@@ -43,6 +48,8 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
     ) {
 
       lazy val nonJavaBeanName: String = ProductCaseGeneration.dropSet(name)
+
+      lazy val names: Set[String] = Set(name, nonJavaBeanName)
     }
     final case class JavaBean[Out](
       defaultConstructor: CodeOf[Out],
@@ -53,7 +60,10 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
   sealed trait GeneratorData extends Product with Serializable
   object GeneratorData {
 
-    final case class CaseClass(pipes: List[List[Any]]) extends GeneratorData // TODO
+    final case class ConstructorParam(caller: Argument => CodeOf[_])
+    final case class CaseClass(
+      pipes: List[List[ConstructorParam]]
+    ) extends GeneratorData
 
     final case class JavaBean() extends GeneratorData // TODO
   }
@@ -108,15 +118,29 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
       inData:   InData,
       outData:  OutData,
       settings: Settings
-    ): ((String, OutData.ConstructorParam[_])) => DerivationResult[Any] = { case (outParamName, constructorParam) =>
-      settings.forOutputFieldUse(outParamName) match {
-        case Left(pipe) =>
-          println(s"for output ${outParamName} using pipe ${pipe}")
-          DerivationResult.pure(())
-        case Right(inField) =>
-          println(s"for output ${outParamName} using field name ${inField}")
-          DerivationResult.pure(())
-      }
+    ): ((String, OutData.ConstructorParam[_])) => DerivationResult[GeneratorData.ConstructorParam] = {
+      case (outParamName, constructorParam) =>
+        settings.forOutputFieldUse(outParamName) match {
+          case Left(pipe) =>
+            // TODO: pass pd and use unlift
+            // use passed Pipe[In, OutField], instead of creating one:
+            //   (Argument, Context) => pd.unlift(pipe)(argument, context)
+            DerivationResult.pure(GeneratorData.ConstructorParam(caller = _ => pipe.asInstanceOf[CodeOf[_]]))
+          case Right(inField) =>
+            // TODO: in.tpe =:= out.tpe
+            // use getter to create value:
+            //   (Argument, Context) =>
+            for {
+              getter <- DerivationResult.fromOption(inData.getters.find { case (_, getter) =>
+                getter.names.contains(outParamName)
+              })(DerivationError.MissingPublicSource(outParamName))
+              _ = println(s"for output ${outParamName} using field name ${inField}")
+              // TODO: create pipe or whatever
+              _ <- DerivationResult.fail(DerivationError.NotYetSupported)
+            } yield GeneratorData.ConstructorParam(caller = ???)
+          // TODO: in.tpe =!:= out.tpe
+          //  (Argument, Context) => pd.unlift(implicit[Pipe[InField, OutField]])(argument, context)
+        }
     }
 
     private def assignSetterPipe(

@@ -5,7 +5,7 @@ import pipez.PipeDerivation
 import scala.annotation.nowarn
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Dispatchers extends ProductCaseGeneration with SumCaseGeneration { self: Definitions =>
+trait Generators extends ProductCaseGeneration with SumCaseGeneration { self: Definitions =>
 
   final case class Configuration[Pipe[_, _], In, Out](
     inType:         Type[In],
@@ -32,4 +32,6 @@ trait Dispatchers extends ProductCaseGeneration with SumCaseGeneration { self: D
         DerivationError.NotSupportedConversion(inType.asInstanceOf[Type[_]], outType.asInstanceOf[Type[_]])
       )
   }
+
+  // TODO: common methods for: unlift, lift, pure
 }

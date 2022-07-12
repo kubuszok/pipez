@@ -4,6 +4,7 @@ import pipez.PipeDerivationConfig
 
 import scala.annotation.nowarn
 import scala.collection.{ Factory, mutable }
+import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait Definitions {
@@ -76,31 +77,31 @@ trait Definitions {
     final def flatMap[B](f: A => DerivationResult[B]): DerivationResult[B] = this match {
       case Success(value, diagnostic) =>
         f(value) match {
-          case Success(value, diagnostic2)  => Success(value, diagnostic ++ diagnostic)
-          case Failure(errors, diagnostic2) => Failure(errors, diagnostic ++ diagnostic)
+          case Success(value, diagnostic2)  => Success(value, diagnostic ++ diagnostic2)
+          case Failure(errors, diagnostic2) => Failure(errors, diagnostic ++ diagnostic2)
         }
       case Failure(errors, diagnostic) => Failure(errors, diagnostic)
     }
     final def map[B](f: A => B): DerivationResult[B] = flatMap(f andThen pure)
 
-    def map2[B, C](other: DerivationResult[B])(f: (A, B) => C): DerivationResult[C] = (this, other) match {
+    final def map2[B, C](other: DerivationResult[B])(f: (A, B) => C): DerivationResult[C] = (this, other) match {
       case (Success(a, d1), Success(b, d2))   => Success(f(a, b), d1 ++ d2)
       case (Failure(e1, d1), Failure(e2, d2)) => Failure(e1 ++ e2, d1 ++ d2)
       case (Failure(e, d1), Success(_, d2))   => Failure(e, d1 ++ d2)
       case (Success(_, d1), Failure(e, d2))   => Failure(e, d1 ++ d2)
     }
 
-    def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = map2(other)(_ -> _)
+    final def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = map2(other)(_ -> _)
 
-    def fold[B](success: A => B)(failure: List[DerivationError] => B): B = this match {
+    final def fold[B](success: A => B)(failure: List[DerivationError] => B): B = this match {
       case Success(value, _)  => success(value)
       case Failure(errors, _) => failure(errors)
     }
 
     def diagnostic: Diagnostic
-    def log(message: String): DerivationResult[A] = this match {
-      case Success(value, diagnostic)  => ???
-      case Failure(errors, diagnostic) => ???
+    final def log(message: String): DerivationResult[A] = this match {
+      case Success(value, diagnostic)  => Success(value, diagnostic :+ message)
+      case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ message)
     }
   }
   object DerivationResult {
@@ -139,5 +140,7 @@ trait Definitions {
   final def readSettingsIfGiven[Pipe[_, _], In, Out](
     code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]
   ): DerivationResult[Settings] =
-    code.fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
+    code
+      .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
+      .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
 }

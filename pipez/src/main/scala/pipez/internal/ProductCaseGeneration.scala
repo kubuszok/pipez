@@ -8,7 +8,7 @@ import scala.collection.immutable.ListMap
 import scala.util.chaining._
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait ProductCaseGeneration { self: Definitions with Dispatchers =>
+trait ProductCaseGeneration { self: Definitions with Generators =>
 
   def isCaseClass[A](tpe:    Type[A]): Boolean
   def isJavaBean[A](tpe:     Type[A]): Boolean

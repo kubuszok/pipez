@@ -1,6 +1,6 @@
 package pipez.internal
 
-trait SumCaseGeneration { self: Definitions with Dispatchers =>
+trait SumCaseGeneration { self: Definitions with Generators =>
 
   trait SumTypeConversion extends CodeGeneratorExtractor {
 

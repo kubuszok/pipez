@@ -17,9 +17,7 @@ sealed trait PipeDerivationConfig[Pipe[_, _], In, Out] {
     pipe:        Pipe[InField, OutField]
   ): this.type = this
 
-  final def javaBeanInput: this.type = this
-
-  final def javaBeanOutput: this.type = this
+  final def fieldMatchingCaseInsensitive: this.type = this
 }
 object PipeDerivationConfig {
 

@@ -9,10 +9,6 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
 
   import c.universe._
 
-  final def isUsableAsProductOutput[Out](tpe: Type[Out]): Boolean =
-    (isCaseClass(tpe) || isJavaBean(tpe)) &&
-      !tpe.typeSymbol.isAbstract &&
-      tpe.members.exists(m => m.isPublic && m.isConstructor)
   final def isCaseClass[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isClass &&
       tpe.typeSymbol.asClass.isCaseClass
@@ -20,6 +16,8 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
     tpe.typeSymbol.isClass &&
       tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
       tpe.members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
+  final def isInstantiable[A](tpe: Type[A]): Boolean =
+    !tpe.typeSymbol.isAbstract && tpe.members.exists(m => m.isPublic && m.isConstructor)
 
   object ProductTypeConversion extends ProductTypeConversion {
     // TODO: implement abstract members

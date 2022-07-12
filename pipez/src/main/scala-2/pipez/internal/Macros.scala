@@ -29,8 +29,8 @@ final class Macros(val c: blackbox.Context)
   def derive[Pipe[_, _], In: WeakTypeTag, Out: WeakTypeTag](
     configurationCode:  Option[c.Expr[PipeDerivationConfig[Pipe, In, Out]]],
     pipeDerivationCode: c.Expr[PipeDerivation[Pipe]]
-  ): c.Expr[Pipe[In, Out]] =
-    (for {
+  ): c.Expr[Pipe[In, Out]] = {
+    val result = for {
       settings <- readSettingsIfGiven(configurationCode)
       configuration = Configuration[Pipe, In, Out](
         inType = weakTypeTag[In].tpe,
@@ -39,8 +39,11 @@ final class Macros(val c: blackbox.Context)
         pipeDerivation = pipeDerivationCode
       )
       expr <- resolveConversion(configuration)
-    } yield expr) match {
-      case DerivationResult.Success(value)  => value
-      case DerivationResult.Failure(errors) => c.abort(c.enclosingPosition, errors.mkString(", ")) // TODO: better
-    }
+    } yield expr
+
+    println("Macro diagnostics")
+    println(result.diagnostic.mkString("\n"))
+
+    result.fold(identity)(errors => c.abort(c.enclosingPosition, errors.mkString(", ")))
+  }
 }

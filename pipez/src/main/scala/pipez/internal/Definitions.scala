@@ -64,6 +64,7 @@ trait Definitions {
   object DerivationError {
 
     final case class MissingPublicConstructor(outType: Type[_]) extends DerivationError
+    final case class MissingPublicSource(outFieldName: String) extends DerivationError
     final case class NotSupportedConversion(inType: Type[_], outType: Type[_]) extends DerivationError
     case object NotYetSupported extends DerivationError
   }
@@ -73,27 +74,52 @@ trait Definitions {
     import DerivationResult._
 
     final def flatMap[B](f: A => DerivationResult[B]): DerivationResult[B] = this match {
-      case Success(value)  => f(value)
-      case Failure(errors) => Failure(errors)
+      case Success(value, diagnostic) =>
+        f(value) match {
+          case Success(value, diagnostic2)  => Success(value, diagnostic ++ diagnostic)
+          case Failure(errors, diagnostic2) => Failure(errors, diagnostic ++ diagnostic)
+        }
+      case Failure(errors, diagnostic) => Failure(errors, diagnostic)
     }
     final def map[B](f: A => B): DerivationResult[B] = flatMap(f andThen pure)
 
     def map2[B, C](other: DerivationResult[B])(f: (A, B) => C): DerivationResult[C] = (this, other) match {
-      case (Success(a), Success(b))   => Success(f(a, b))
-      case (Failure(e1), Failure(e2)) => Failure(e1 ++ e2)
-      case (Failure(e), _)            => Failure(e)
-      case (_, Failure(e))            => Failure(e)
+      case (Success(a, d1), Success(b, d2))   => Success(f(a, b), d1 ++ d2)
+      case (Failure(e1, d1), Failure(e2, d2)) => Failure(e1 ++ e2, d1 ++ d2)
+      case (Failure(e, d1), Success(_, d2))   => Failure(e, d1 ++ d2)
+      case (Success(_, d1), Failure(e, d2))   => Failure(e, d1 ++ d2)
     }
 
     def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = map2(other)(_ -> _)
+
+    def fold[B](success: A => B)(failure: List[DerivationError] => B): B = this match {
+      case Success(value, _)  => success(value)
+      case Failure(errors, _) => failure(errors)
+    }
+
+    def diagnostic: Diagnostic
+    def log(message: String): DerivationResult[A] = this match {
+      case Success(value, diagnostic)  => ???
+      case Failure(errors, diagnostic) => ???
+    }
   }
   object DerivationResult {
-    final case class Success[+A](value: A) extends DerivationResult[A]
-    final case class Failure(errors: List[DerivationError]) extends DerivationResult[Nothing]
 
-    def pure[A](value: A):                           DerivationResult[A]       = Success(value)
-    def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error))
-    def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors)
+    final private case class Success[+A](
+      value:      A,
+      diagnostic: Diagnostic
+    ) extends DerivationResult[A]
+
+    final private case class Failure(
+      errors:     List[DerivationError],
+      diagnostic: Diagnostic
+    ) extends DerivationResult[Nothing]
+
+    type Diagnostic = Vector[String]
+
+    def pure[A](value: A):                           DerivationResult[A]       = Success(value, Vector.empty)
+    def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error), Vector.empty)
+    def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors, Vector.empty)
 
     def sequence[A, Coll[A0] <: Seq[A0]](
       seq: Coll[DerivationResult[A]]
@@ -101,6 +127,9 @@ trait Definitions {
       factory: Factory[A, Coll[A]]
     ): DerivationResult[Coll[A]] =
       seq.foldLeft(pure(factory.newBuilder))((builder, next) => builder.map2(next)(_.addOne(_))).map(_.result())
+
+    def fromOption[A](opt: Option[A])(err: => DerivationError): DerivationResult[A] =
+      opt.fold[DerivationResult[A]](fail(err))(pure)
   }
 
   def readConfig[Pipe[_, _], In, Out](

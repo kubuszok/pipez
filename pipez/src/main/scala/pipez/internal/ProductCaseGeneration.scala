@@ -4,6 +4,7 @@ import pipez.PipeDerivation
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
+import scala.util.chaining._
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration { self: Definitions with Dispatchers =>
@@ -13,14 +14,14 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
   def isCaseClass[A](tpe:               Type[A]):   Boolean
   def isJavaBean[A](tpe:                Type[A]):   Boolean
 
-  final case class InData(getters: ListMap[String, InData.GetterData[_]]) {
+  final case class InData(getters: ListMap[String, InData.Getter[_]]) {
 
-    def dropJavaGetterPrefix: InData =
+    lazy val dropJavaGetterPrefix: InData =
       InData(getters.map { case (name, data) => ProductCaseGeneration.dropGetIs(name) -> data })
   }
   object InData {
 
-    final case class GetterData[InField](
+    final case class Getter[InField](
       name:   String,
       tpe:    Type[InField],
       caller: Argument => CodeOf[InField]
@@ -30,21 +31,29 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
   sealed trait OutData extends Product with Serializable
   object OutData {
 
-    final case class ConstructorParamData[OutField](
+    final case class ConstructorParam[OutField](
       name: String,
       tpe:  Type[OutField]
     )
-    final case class CaseClassData(params: List[ListMap[String, ConstructorParamData[_]]]) extends OutData
+    final case class CaseClass(params: List[ListMap[String, ConstructorParam[_]]]) extends OutData
 
-    final case class SetterData[OutField](
+    final case class Setter[OutField](
       name:   String,
       tpe:    Type[OutField],
       caller: (Argument, CodeOf[OutField]) => CodeOf[Unit]
     )
-    final case class JavaBeanData[Out](
+    final case class JavaBean[Out](
       defaultConstructor: CodeOf[Out],
-      setters:            ListMap[String, SetterData[_]]
+      setters:            ListMap[String, Setter[_]]
     ) extends OutData
+  }
+
+  sealed trait GeneratorData extends Product with Serializable
+  object GeneratorData {
+
+    final case class CaseClass(pipes: List[List[Any]]) extends GeneratorData // TODO
+
+    final case class JavaBean() extends GeneratorData // TODO
   }
 
   trait ProductTypeConversion extends CodeGeneratorExtractor {
@@ -54,10 +63,7 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
     ): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] = {
       val Configuration(inType, outType, settings, pipeDerivation) = configuration
 
-      val productCaseInput  = isUsableAsProductInput(inType)
-      val productCaseOutput = isUsableAsProductInput(outType)
-
-      (productCaseInput, productCaseOutput) match {
+      (isUsableAsProductInput(inType), isUsableAsProductOutput(outType)) match {
         case (true, true)  => Some(attemptProductRendering(inType, outType, settings, pipeDerivation))
         case (false, true) => Some(reportMismatchingInput(inType, outType))
         case (true, false) => Some(reportMismatchingOutput(inType, outType))
@@ -65,36 +71,88 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
       }
     }
 
+    def extractInData[In](inType: Type[In], settings: Settings): DerivationResult[InData]
+
+    def extractOutData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData]
+
+    def generateCode[Pipe[_, _], In, Out](
+      generatorData:  GeneratorData,
+      pipeDerivation: CodeOf[PipeDerivation[Pipe]]
+    ): DerivationResult[CodeOf[Pipe[In, Out]]]
+
     private def attemptProductRendering[Pipe[_, _], In, Out](
       inType:         Type[In],
       outType:        Type[Out],
       settings:       Settings,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
     ): DerivationResult[CodeOf[Pipe[In, Out]]] =
-      (inputData(inType, settings) zip outputData(outType, settings)).flatMap { _ =>
-        // TODO: matching these together
-        DerivationResult.fail(DerivationError.InvalidConfiguration("Work in Progress"))
+      for {
+        data <- extractInData(inType, settings) zip extractOutData(outType, settings)
+        (inData, outData) = data
+        generatorData <- matchFields(inData, outData, settings)
+        code <- generateCode[Pipe, In, Out](generatorData, pipeDerivation)
+      } yield code
+
+    private def matchFields(inData: InData, outData: OutData, settings: Settings): DerivationResult[GeneratorData] =
+      outData match {
+        case OutData.CaseClass(listOfParamsList) =>
+          listOfParamsList
+            .map(_.map(assignConstructorParamPipe(inData, outData, settings)).toList.pipe(DerivationResult.sequence(_)))
+            .pipe(DerivationResult.sequence(_))
+            .map(GeneratorData.CaseClass(_))
+
+        case OutData.JavaBean(defaultConstructor, setters) if settings.isJavaBeanOutputAllowed =>
+          // TODO
+          DerivationResult.fail(DerivationError.InvalidConfiguration("Java Beans not yet ready"))
+
+        case OutData.JavaBean(_, _) =>
+          reportDisabledJavaBeanOutput
       }
 
-    def inputData[In](inType: Type[In], settings: Settings): DerivationResult[InData]
+    private def assignConstructorParamPipe(
+      inData:   InData,
+      outData:  OutData,
+      settings: Settings
+    ): ((String, OutData.ConstructorParam[_])) => DerivationResult[Any] = { case (outFieldName, outFieldType) =>
+      lazy val inDataJavaBeans = inData.dropJavaGetterPrefix
 
-    def outputData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData]
+      settings.forOutputFieldUse(outFieldName) match {
+        case Left(pipe) =>
+          println(s"for output ${outFieldName} using pipe ${pipe}")
+          DerivationResult.pure(())
+        case Right(inField) =>
+          println(s"for output ${outFieldName} using field name ${inField}")
+          DerivationResult.pure(())
+      }
+    }
 
-    private def reportMismatchingInput[Pipe[_, _], In, Out](
+    private def assignSetterPipe(
+      inData:   InData,
+      outData:  OutData,
+      settings: Settings
+    ) = ()
+
+    private def reportMismatchingInput[In, Out](
       inType:  Type[In],
       outType: Type[Out]
-    ): DerivationResult[CodeOf[Pipe[In, Out]]] = DerivationResult.fail(
+    ): DerivationResult[Nothing] = DerivationResult.fail(
       DerivationError.InvalidConfiguration(
         s"While output type ${outType.toString} seem to be a case class or a Java bean, the input type ${inType.toString} doesn't"
       )
     )
 
-    private def reportMismatchingOutput[Pipe[_, _], In, Out](
+    private def reportMismatchingOutput[In, Out](
       inType:  Type[In],
       outType: Type[Out]
-    ): DerivationResult[CodeOf[Pipe[In, Out]]] = DerivationResult.fail(
+    ): DerivationResult[Nothing] = DerivationResult.fail(
       DerivationError.InvalidConfiguration(
         s"While input type ${inType.toString} seem to be a case class or a Java bean, the output type ${outType.toString} doesn't"
+      )
+    )
+
+    private def reportDisabledJavaBeanOutput: DerivationResult[Nothing] = DerivationResult.fail(
+      DerivationError.InvalidConfiguration(
+        s"Output type TODO seem to be a Java Bean but Java Bean outputs are disabled"
       )
     )
   }

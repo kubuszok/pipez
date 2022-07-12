@@ -17,7 +17,7 @@ trait PlatformDefinitions extends Definitions {
 
   override type Argument = Ident
   override type Field    = Tree
-  override type Subtype  = Tree
+  override type Subtype  = c.Type
   override type KeyValue = Tree
 
   override def readConfig[Pipe[_, _], In, Out](

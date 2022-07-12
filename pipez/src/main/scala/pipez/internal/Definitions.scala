@@ -3,6 +3,7 @@ package pipez.internal
 import pipez.PipeDerivationConfig
 
 import scala.annotation.nowarn
+import scala.collection.{ Factory, mutable }
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait Definitions {
@@ -35,15 +36,33 @@ trait Definitions {
     final case class RemoveSubtype(inputSubtype: Path, pipe: Code) extends ConfigEntry
     final case class RenameSubtype(inputSubtype: Path, outputSubtype: Path) extends ConfigEntry
     final case class PlugIn(inputField: Path, outputField: Path, pipe: Code) extends ConfigEntry
+    final case object FieldCaseInsensitive extends ConfigEntry
     final case object AllowJavaBeanInput extends ConfigEntry
     final case object AllowJavaBeanOutput extends ConfigEntry
   }
 
   final class Settings(entries: List[ConfigEntry]) {
 
-    def isJavaBeanInputAllowed: Boolean = entries.contains(ConfigEntry.AllowJavaBeanInput)
+    import Path._
+    import ConfigEntry._
 
-    def isJavaBeanOutputAllowed: Boolean = entries.contains(ConfigEntry.AllowJavaBeanOutput)
+    lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
+
+    lazy val isJavaBeanInputAllowed:  Boolean = entries.contains(AllowJavaBeanInput)
+    lazy val isJavaBeanOutputAllowed: Boolean = entries.contains(AllowJavaBeanOutput)
+
+    // TODO: Pipe[From, To] or Input Field name
+    def forOutputFieldUse(outField: String): Either[Code, String] =
+      entries.foldLeft[Either[Code, String]](Right(outField)) {
+        case (_, AddField(Field(Root, name), pipe))
+            if name.toString.equals(outField) || (isFieldCaseInsensitive && name.toString.equalsIgnoreCase(outField)) =>
+          Left(pipe)
+        case (_, RenameField(Field(Root, inName), Field(Root, outName)))
+            if outName.toString
+              .equals(outField) || (isFieldCaseInsensitive && outName.toString.equalsIgnoreCase(outField)) =>
+          Right(inName.toString)
+        case (old, _) => old
+      }
   }
 
   sealed trait DerivationError extends Product with Serializable
@@ -79,6 +98,13 @@ trait Definitions {
     def pure[A](value: A):                           DerivationResult[A]       = Success(value)
     def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error))
     def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors)
+
+    def sequence[A, Coll[A0] <: Seq[A0]](
+      seq: Coll[DerivationResult[A]]
+    )(implicit
+      factory: Factory[A, Coll[A]]
+    ): DerivationResult[Coll[A]] =
+      seq.foldLeft(pure(factory.newBuilder))((builder, next) => builder.map2(next)(_.addOne(_))).map(_.result())
   }
 
   def readConfig[Pipe[_, _], In, Out](

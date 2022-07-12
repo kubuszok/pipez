@@ -1,5 +1,7 @@
 package pipez.internal
 
+import pipez.PipeDerivation
+
 import scala.collection.immutable.ListMap
 import scala.util.chaining._
 
@@ -19,12 +21,12 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
   object ProductTypeConversion extends ProductTypeConversion {
     // TODO: implement abstract members
 
-    override def inputData[In](inType: Type[In], settings: Settings): DerivationResult[InData] =
+    override def extractInData[In](inType: Type[In], settings: Settings): DerivationResult[InData] =
       inType.members // we fetch ALL members, even those that might have been inherited
         .to(List)
         .collect {
           case member if member.isMethod && member.asMethod.isGetter =>
-            member.name.toString -> InData.GetterData[Any](
+            member.name.toString -> InData.Getter[Any](
               name = member.name.toString, // TODO
               tpe = member.asMethod.returnType,
               caller = (arg: Argument) => c.Expr[Any](q"$arg.${member.asMethod.name.toTermName}")
@@ -35,7 +37,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
         .pipe(DerivationResult.pure)
         .tap(d => println(s"Out getters: $d"))
 
-    override def outputData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData] =
+    override def extractOutData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData] =
       if (isJavaBean(outType)) {
         // Java Bean case
 
@@ -57,7 +59,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
           .collect {
             case member if member.isPublic && member.isMethod && member.asMethod.isSetter =>
               member.asMethod.paramLists.flatten.map { param =>
-                param.name.toString -> OutData.SetterData(
+                param.name.toString -> OutData.Setter(
                   name = param.name.toString,
                   tpe = param.typeSignature,
                   caller = (_: Argument, _: CodeOf[Any]) => c.Expr[Unit](q"()")
@@ -68,7 +70,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
           .to(ListMap)
           .pipe(DerivationResult.pure(_))
 
-        defaultConstructor.map2(setters)(OutData.JavaBeanData(_, _))
+        defaultConstructor.map2(setters)(OutData.JavaBean(_, _))
       } else {
         // case class case
 
@@ -79,7 +81,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
               member.asMethod.paramLists.map { params =>
                 params
                   .map { param =>
-                    param.name.toString -> OutData.ConstructorParamData(
+                    param.name.toString -> OutData.ConstructorParam(
                       name = param.name.toString,
                       tpe = param.typeSignature
                     )
@@ -87,7 +89,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
                   .to(ListMap)
               }
           }
-          .map(OutData.CaseClassData(_)) match {
+          .map(OutData.CaseClass(_)) match {
           case Some(value) => DerivationResult.pure(value)
           case None =>
             DerivationResult.fail(
@@ -97,5 +99,15 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
             )
         }
       }.tap(d => println(s"Out setters: $d"))
+
+    override def generateCode[Pipe[_, _], In, Out](
+      generatorData:  GeneratorData,
+      pipeDerivation: CodeOf[PipeDerivation[Pipe]]
+    ): DerivationResult[CodeOf[Pipe[In, Out]]] = {
+      println("Derivation so far")
+      println(generatorData)
+      println(pipeDerivation)
+      DerivationResult.fail(DerivationError.InvalidConfiguration("not yet ready"))
+    }
   }
 }

@@ -8,14 +8,17 @@ trait PlatformDefinitions extends Definitions {
 
   val c: blackbox.Context
 
-  override type Type = c.Type
+  import c.universe._
 
-  override type Code      = c.Tree
-  override type CodeOf[A] = c.Expr[A]
+  override type Type[A] = WeakTypeTag[A]
 
-  override type Field    = c.Tree
-  override type Subtype  = c.Tree
-  override type KeyValue = c.Tree
+  override type Code      = Tree
+  override type CodeOf[A] = Expr[A]
+
+  override type Argument = Ident
+  override type Field    = Tree
+  override type Subtype  = Tree
+  override type KeyValue = Tree
 
   override def readConfig[Pipe[_, _], In, Out](
     code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]

@@ -7,11 +7,12 @@ import scala.annotation.nowarn
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait Definitions {
 
-  type Type
+  type Type[A]
 
   type Code // TODO: remove?
   type CodeOf[A]
 
+  type Argument
   type Field
   type Subtype
   type KeyValue
@@ -61,20 +62,28 @@ trait Definitions {
       case Failure(errors) => Failure(errors)
     }
     final def map[B](f: A => B): DerivationResult[B] = flatMap(f andThen pure)
+
+    def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = (this, other) match {
+      case (Success(a), Success(b))   => Success((a, b))
+      case (Failure(e1), Failure(e2)) => Failure(e1 ++ e2)
+      case (Failure(e), _)            => Failure(e)
+      case (_, Failure(e))            => Failure(e)
+    }
   }
   object DerivationResult {
     final case class Success[+A](value: A) extends DerivationResult[A]
     final case class Failure(errors: List[DerivationError]) extends DerivationResult[Nothing]
 
-    def pure[A](value: A):            DerivationResult[A]       = Success(value)
-    def fail(error: DerivationError): DerivationResult[Nothing] = Failure(List(error))
+    def pure[A](value: A):                           DerivationResult[A]       = Success(value)
+    def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error))
+    def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors)
   }
 
   def readConfig[Pipe[_, _], In, Out](
     code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]
   ): DerivationResult[Settings]
 
-  final def readConfigIfGiven[Pipe[_, _], In, Out](
+  final def readSettingsIfGiven[Pipe[_, _], In, Out](
     code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]
   ): DerivationResult[Settings] =
     code.fold(DerivationResult.pure(new Settings(Nil)))(readConfig)

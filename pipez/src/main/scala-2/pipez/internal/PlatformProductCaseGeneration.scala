@@ -9,14 +9,17 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
 
   import c.universe._
 
-  final def isUsableAsProductInput[In](tpe: Type[In]): Boolean =
-    isCaseClass(tpe) || isJavaBean(tpe) // TODO: possibly reconsider
   final def isUsableAsProductOutput[Out](tpe: Type[Out]): Boolean =
-    (isCaseClass(tpe) || isJavaBean(tpe)) && !tpe.typeSymbol.isAbstract
+    (isCaseClass(tpe) || isJavaBean(tpe)) &&
+      !tpe.typeSymbol.isAbstract &&
+      tpe.members.exists(m => m.isPublic && m.isConstructor)
   final def isCaseClass[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isCaseClass
+    tpe.typeSymbol.isClass &&
+      tpe.typeSymbol.asClass.isCaseClass
   final def isJavaBean[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isClass && tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) // TODO
+    tpe.typeSymbol.isClass &&
+      tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
+      tpe.members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
 
   object ProductTypeConversion extends ProductTypeConversion {
     // TODO: implement abstract members
@@ -35,23 +38,18 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
         .to(ListMap)
         .pipe(InData(_))
         .pipe(DerivationResult.pure)
-        .tap(d => println(s"Out getters: $d"))
+        .tap(d => println(s"In getters: $d"))
 
     override def extractOutData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData] =
       if (isJavaBean(outType)) {
         // Java Bean case
 
-        val defaultConstructor: DerivationResult[CodeOf[Out]] = outType.decls.collectFirst {
+        val defaultConstructor = outType.decls.collectFirst {
           case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
             c.Expr[Out](q"new ${outType}()")
         } match {
           case Some(value) => DerivationResult.pure(value)
-          case None =>
-            DerivationResult.fail(
-              DerivationError.NotSupportedCase(
-                s"Output type ${outType} was recognized as JavaBean but had no default constructor"
-              )
-            )
+          case None        => DerivationResult.fail(DerivationError.MissingPublicConstructor(outType))
         }
 
         val setters = outType.decls
@@ -70,7 +68,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
           .to(ListMap)
           .pipe(DerivationResult.pure(_))
 
-        defaultConstructor.map2(setters)(OutData.JavaBean(_, _))
+        defaultConstructor.map2(setters)(OutData.JavaBean(_, _)).tap(d => println(s"Out setters: $d"))
       } else {
         // case class case
 
@@ -89,25 +87,18 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
                   .to(ListMap)
               }
           }
-          .map(OutData.CaseClass(_)) match {
-          case Some(value) => DerivationResult.pure(value)
-          case None =>
-            DerivationResult.fail(
-              DerivationError.NotSupportedCase(
-                s"Output type ${outType} was recognized as a case class but no public constructor found"
-              )
-            )
-        }
-      }.tap(d => println(s"Out setters: $d"))
+          .get
+          .pipe(OutData.CaseClass(_))
+          .pipe(DerivationResult.pure(_))
+          .tap(d => println(s"Out params: $d"))
+      }
 
     override def generateCode[Pipe[_, _], In, Out](
       generatorData:  GeneratorData,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
     ): DerivationResult[CodeOf[Pipe[In, Out]]] = {
-      println("Derivation so far")
-      println(generatorData)
-      println(pipeDerivation)
-      DerivationResult.fail(DerivationError.InvalidConfiguration("not yet ready"))
+      println(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")
+      DerivationResult.fail(DerivationError.NotYetSupported)
     }
   }
 }

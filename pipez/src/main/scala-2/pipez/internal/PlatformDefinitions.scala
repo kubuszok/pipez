@@ -23,5 +23,5 @@ trait PlatformDefinitions extends Definitions {
   override def readConfig[Pipe[_, _], In, Out](
     code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]
   ): DerivationResult[Settings] =
-    DerivationResult.Failure(List(DerivationError.InvalidConfiguration("WOLOLO"))) // TODO
+    DerivationResult.Failure(List(DerivationError.NotYetSupported))
 }

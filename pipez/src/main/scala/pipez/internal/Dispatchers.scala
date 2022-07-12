@@ -29,7 +29,7 @@ trait Dispatchers extends ProductCaseGeneration with SumCaseGeneration { self: D
     case SumTypeConversion(generator)     => generator
     case Configuration(inType, outType, _, _) =>
       DerivationResult.fail(
-        DerivationError.NotSupportedCase(s"Pipe from $inType to $outType was not recognized as any of supported cases")
+        DerivationError.NotSupportedConversion(inType.asInstanceOf[Type[_]], outType.asInstanceOf[Type[_]])
       )
   }
 }

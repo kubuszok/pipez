@@ -13,7 +13,7 @@ trait Definitions {
   type Code // TODO: remove?
   type CodeOf[A]
 
-  type Argument
+  type Argument // TODO: add type?
   type Field
   type Subtype
   type KeyValue
@@ -37,8 +37,6 @@ trait Definitions {
     final case class RenameSubtype(inputSubtype: Path, outputSubtype: Path) extends ConfigEntry
     final case class PlugIn(inputField: Path, outputField: Path, pipe: Code) extends ConfigEntry
     final case object FieldCaseInsensitive extends ConfigEntry
-    final case object AllowJavaBeanInput extends ConfigEntry
-    final case object AllowJavaBeanOutput extends ConfigEntry
   }
 
   final class Settings(entries: List[ConfigEntry]) {
@@ -47,9 +45,6 @@ trait Definitions {
     import ConfigEntry._
 
     lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
-
-    lazy val isJavaBeanInputAllowed:  Boolean = entries.contains(AllowJavaBeanInput)
-    lazy val isJavaBeanOutputAllowed: Boolean = entries.contains(AllowJavaBeanOutput)
 
     // TODO: Pipe[From, To] or Input Field name
     def forOutputFieldUse(outField: String): Either[Code, String] =
@@ -67,9 +62,10 @@ trait Definitions {
 
   sealed trait DerivationError extends Product with Serializable
   object DerivationError {
-    // TODO: better details and more cases
-    final case class InvalidConfiguration(hint: String) extends DerivationError
-    final case class NotSupportedCase(hint: String) extends DerivationError
+
+    final case class MissingPublicConstructor(outType: Type[_]) extends DerivationError
+    final case class NotSupportedConversion(inType: Type[_], outType: Type[_]) extends DerivationError
+    case object NotYetSupported extends DerivationError
   }
 
   sealed trait DerivationResult[+A] extends Product with Serializable {

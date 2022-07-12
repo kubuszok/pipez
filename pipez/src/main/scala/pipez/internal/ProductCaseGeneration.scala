@@ -1,6 +1,7 @@
 package pipez.internal
 
 import pipez.PipeDerivation
+import pipez.internal.ProductCaseGeneration.dropGetIs
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
@@ -9,23 +10,21 @@ import scala.util.chaining._
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration { self: Definitions with Dispatchers =>
 
-  def isUsableAsProductInput[In](tpe:   Type[In]):  Boolean
   def isUsableAsProductOutput[Out](tpe: Type[Out]): Boolean
   def isCaseClass[A](tpe:               Type[A]):   Boolean
   def isJavaBean[A](tpe:                Type[A]):   Boolean
 
-  final case class InData(getters: ListMap[String, InData.Getter[_]]) {
-
-    lazy val dropJavaGetterPrefix: InData =
-      InData(getters.map { case (name, data) => ProductCaseGeneration.dropGetIs(name) -> data })
-  }
+  final case class InData(getters: ListMap[String, InData.Getter[_]])
   object InData {
 
     final case class Getter[InField](
       name:   String,
       tpe:    Type[InField],
       caller: Argument => CodeOf[InField]
-    )
+    ) {
+
+      lazy val nonJavaBeanName: String = ProductCaseGeneration.dropGetIs(name)
+    }
   }
 
   sealed trait OutData extends Product with Serializable
@@ -41,7 +40,10 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
       name:   String,
       tpe:    Type[OutField],
       caller: (Argument, CodeOf[OutField]) => CodeOf[Unit]
-    )
+    ) {
+
+      lazy val nonJavaBeanName: String = ProductCaseGeneration.dropSet(name)
+    }
     final case class JavaBean[Out](
       defaultConstructor: CodeOf[Out],
       setters:            ListMap[String, Setter[_]]
@@ -63,12 +65,8 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
     ): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] = {
       val Configuration(inType, outType, settings, pipeDerivation) = configuration
 
-      (isUsableAsProductInput(inType), isUsableAsProductOutput(outType)) match {
-        case (true, true)  => Some(attemptProductRendering(inType, outType, settings, pipeDerivation))
-        case (false, true) => Some(reportMismatchingInput(inType, outType))
-        case (true, false) => Some(reportMismatchingOutput(inType, outType))
-        case _             => None
-      }
+      if (isUsableAsProductOutput(outType)) Some(attemptProductRendering(inType, outType, settings, pipeDerivation))
+      else None
     }
 
     def extractInData[In](inType: Type[In], settings: Settings): DerivationResult[InData]
@@ -101,27 +99,22 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
             .pipe(DerivationResult.sequence(_))
             .map(GeneratorData.CaseClass(_))
 
-        case OutData.JavaBean(defaultConstructor, setters) if settings.isJavaBeanOutputAllowed =>
+        case OutData.JavaBean(defaultConstructor, setters) =>
           // TODO
-          DerivationResult.fail(DerivationError.InvalidConfiguration("Java Beans not yet ready"))
-
-        case OutData.JavaBean(_, _) =>
-          reportDisabledJavaBeanOutput
+          DerivationResult.fail(DerivationError.NotYetSupported)
       }
 
     private def assignConstructorParamPipe(
       inData:   InData,
       outData:  OutData,
       settings: Settings
-    ): ((String, OutData.ConstructorParam[_])) => DerivationResult[Any] = { case (outFieldName, outFieldType) =>
-      lazy val inDataJavaBeans = inData.dropJavaGetterPrefix
-
-      settings.forOutputFieldUse(outFieldName) match {
+    ): ((String, OutData.ConstructorParam[_])) => DerivationResult[Any] = { case (outParamName, constructorParam) =>
+      settings.forOutputFieldUse(outParamName) match {
         case Left(pipe) =>
-          println(s"for output ${outFieldName} using pipe ${pipe}")
+          println(s"for output ${outParamName} using pipe ${pipe}")
           DerivationResult.pure(())
         case Right(inField) =>
-          println(s"for output ${outFieldName} using field name ${inField}")
+          println(s"for output ${outParamName} using field name ${inField}")
           DerivationResult.pure(())
       }
     }
@@ -130,31 +123,9 @@ trait ProductCaseGeneration { self: Definitions with Dispatchers =>
       inData:   InData,
       outData:  OutData,
       settings: Settings
-    ) = ()
-
-    private def reportMismatchingInput[In, Out](
-      inType:  Type[In],
-      outType: Type[Out]
-    ): DerivationResult[Nothing] = DerivationResult.fail(
-      DerivationError.InvalidConfiguration(
-        s"While output type ${outType.toString} seem to be a case class or a Java bean, the input type ${inType.toString} doesn't"
-      )
-    )
-
-    private def reportMismatchingOutput[In, Out](
-      inType:  Type[In],
-      outType: Type[Out]
-    ): DerivationResult[Nothing] = DerivationResult.fail(
-      DerivationError.InvalidConfiguration(
-        s"While input type ${inType.toString} seem to be a case class or a Java bean, the output type ${outType.toString} doesn't"
-      )
-    )
-
-    private def reportDisabledJavaBeanOutput: DerivationResult[Nothing] = DerivationResult.fail(
-      DerivationError.InvalidConfiguration(
-        s"Output type TODO seem to be a Java Bean but Java Bean outputs are disabled"
-      )
-    )
+    ) = {
+      // TODO: here test all: name, nonJavaBeanName against name, nonJavaBeanName
+    }
   }
 
   val ProductTypeConversion: ProductTypeConversion
@@ -166,6 +137,12 @@ object ProductCaseGeneration {
   private val dropGetIs: String => String = {
     case getAccessor(head, tail) => head.toLowerCase + tail
     case isAccessor(head, tail)  => head.toLowerCase + tail
+    case other                   => other
+  }
+
+  private val setAccessor = raw"set(.)(.*)".r
+  private val dropSet: String => String = {
+    case setAccessor(head, tail) => head.toLowerCase + tail
     case other                   => other
   }
 }

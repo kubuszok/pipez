@@ -31,17 +31,16 @@ final class Macros(val c: blackbox.Context)
     pipeDerivationCode: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] =
     (for {
-      settings <- readConfigIfGiven(configurationCode)
+      settings <- readSettingsIfGiven(configurationCode)
       configuration = Configuration[Pipe, In, Out](
-        inType = weakTypeTag[In].tpe,
-        outType = weakTypeTag[Out].tpe,
+        inType = weakTypeTag[In],
+        outType = weakTypeTag[Out],
         settings = settings,
         pipeDerivation = pipeDerivationCode
       )
-      generator <- resolveConversion(configuration)
-      expr <- generator.generate
+      expr <- resolveConversion(configuration)
     } yield expr) match {
       case DerivationResult.Success(value)  => value
-      case DerivationResult.Failure(errors) => c.abort(c.enclosingPosition, errors.mkString(", "))
+      case DerivationResult.Failure(errors) => c.abort(c.enclosingPosition, errors.mkString(", ")) // TODO: better
     }
 }

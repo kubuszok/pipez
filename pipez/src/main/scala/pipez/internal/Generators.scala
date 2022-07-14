@@ -21,17 +21,47 @@ trait Generators extends ProductCaseGeneration with SumCaseGeneration { self: De
     ): Option[DerivationResult[CodeOf[Pipe[In, Out]]]]
   }
 
-  // TODO: other cases
   def resolveConversion[Pipe[_, _], In, Out]: Configuration[Pipe, In, Out] => DerivationResult[
     CodeOf[Pipe[In, Out]]
   ] = {
     case ProductTypeConversion(generator) => generator
     case SumTypeConversion(generator)     => generator
     case Configuration(inType, outType, _, _) =>
-      DerivationResult.fail(
-        DerivationError.NotSupportedConversion(inType.asInstanceOf[Type[_]], outType.asInstanceOf[Type[_]])
-      )
+      DerivationResult.fail(DerivationError.NotSupportedConversion(inType, outType))
   }
 
-  // TODO: common methods for: unlift, lift, pure
+  type ArbitraryContext
+  type ArbitraryResult[Out]
+
+  /** Should generate code `pd.unlift(pipe)(in, ctx)` */
+  def unlift[Pipe[_, _], In, Out](
+    pipeDerivation: CodeOf[PipeDerivation[Pipe]],
+    pipe:           CodeOf[Pipe[In, Out]],
+    in:             CodeOf[In],
+    ctx:            CodeOf[ArbitraryContext]
+  ): CodeOf[ArbitraryResult[Out]]
+
+  /** Should generate code `pd.lift { (in, ctx) => ... }` */
+  def lift[Pipe[_, _], In, Out](
+    pipeDerivation: CodeOf[PipeDerivation[Pipe]],
+    call:           CodeOf[(In, ArbitraryContext) => ArbitraryResult[Out]]
+  ): CodeOf[Pipe[In, Out]]
+
+  /** Should generate code `pd.updateContext(ctx, path)` */
+  def updateContext[Pipe[_, _]](
+    pipeDerivation: CodeOf[PipeDerivation[Pipe]],
+    context:        CodeOf[ArbitraryContext],
+    path:           CodeOf[Path]
+  ): CodeOf[ArbitraryContext]
+
+  /** Should generate code `pd.pureResult(a)` */
+  def pureResult[Pipe[_, _], A](pipeDerivation: CodeOf[PipeDerivation[Pipe]], a: A): CodeOf[ArbitraryResult[A]]
+
+  /** Should generate code `pd.mergeResults(ra, rb) { (a, b) => ... }` */
+  def mergeResults[Pipe[_, _], A, B, C](
+    pipeDerivation: CodeOf[PipeDerivation[Pipe]],
+    ra:             CodeOf[ArbitraryResult[A]],
+    rb:             CodeOf[ArbitraryResult[B]],
+    f:              CodeOf[(A, B) => C]
+  ): CodeOf[ArbitraryResult[C]]
 }

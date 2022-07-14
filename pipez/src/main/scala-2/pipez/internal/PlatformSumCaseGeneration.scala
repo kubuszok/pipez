@@ -1,6 +1,6 @@
 package pipez.internal
 
-trait PlatformSumCaseGeneration extends SumCaseGeneration { self: PlatformDefinitions with Generators =>
+trait PlatformSumCaseGeneration extends SumCaseGeneration { self: PlatformDefinitions with PlatformGenerators =>
 
   import c.universe._
 

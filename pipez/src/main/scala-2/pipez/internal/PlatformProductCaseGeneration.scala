@@ -5,7 +5,8 @@ import pipez.PipeDerivation
 import scala.collection.immutable.ListMap
 import scala.util.chaining._
 
-trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: PlatformDefinitions with PlatformGenerators =>
+trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] {
+  self: PlatformDefinitions[Pipe, In, Out] with PlatformGenerators[Pipe, In, Out] =>
 
   import c.universe._
 
@@ -22,7 +23,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
   object ProductTypeConversion extends ProductTypeConversion {
     // TODO: implement abstract members
 
-    override def extractInData[In](inType: Type[In], settings: Settings): DerivationResult[InData] =
+    override def extractInData(inType: Type[In], settings: Settings): DerivationResult[InData] =
       inType.members // we fetch ALL members, even those that might have been inherited
         .to(List)
         .collect {
@@ -38,7 +39,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
         .pipe(DerivationResult.pure)
         .tap(d => println(s"In getters: $d"))
 
-    override def extractOutData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData] =
+    override def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[OutData] =
       if (isJavaBean(outType)) {
         // Java Bean case
 
@@ -91,7 +92,7 @@ trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: Platfo
           .tap(d => println(s"Out params: $d"))
       }
 
-    override def generateCode[Pipe[_, _], In, Out](
+    override def generateCode(
       generatorData:  GeneratorData,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
     ): DerivationResult[CodeOf[Pipe[In, Out]]] = {

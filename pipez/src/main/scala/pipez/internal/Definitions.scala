@@ -7,7 +7,7 @@ import scala.collection.{ Factory, mutable }
 import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Definitions {
+trait Definitions[Pipe[_, _], In, Out] {
 
   type Type[A]
 
@@ -133,11 +133,11 @@ trait Definitions {
       opt.fold[DerivationResult[A]](fail(err))(pure)
   }
 
-  def readConfig[Pipe[_, _], In, Out](
+  def readConfig(
     code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]
   ): DerivationResult[Settings]
 
-  final def readSettingsIfGiven[Pipe[_, _], In, Out](
+  final def readSettingsIfGiven(
     code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]
   ): DerivationResult[Settings] =
     code

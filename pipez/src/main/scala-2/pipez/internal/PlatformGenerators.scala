@@ -2,31 +2,30 @@ package pipez.internal
 
 import pipez.PipeDerivation
 
-trait PlatformGenerators extends Generators { self: PlatformDefinitions =>
+trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] {
+  self: PlatformDefinitions[Pipe, In, Out] =>
 
-  final def unlift[Pipe[_, _], In, Out](
+  final def unlift[I, O](
     pipeDerivation: CodeOf[PipeDerivation[Pipe]],
-    pipe:           CodeOf[Pipe[In, Out]],
-    in:             CodeOf[In],
+    pipe:           CodeOf[Pipe[I, O]],
+    in:             CodeOf[I],
     ctx:            CodeOf[ArbitraryContext]
-  ): CodeOf[ArbitraryResult[Out]] = ???
+  ): CodeOf[ArbitraryResult[O]] = ???
 
-  final def lift[Pipe[_, _], In, Out](
+  final def lift[I, O](
     pipeDerivation: CodeOf[PipeDerivation[Pipe]],
-    call:           CodeOf[(In, ArbitraryContext) => ArbitraryResult[Out]]
-  ): CodeOf[Pipe[In, Out]] = ???
+    call:           CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
+  ): CodeOf[Pipe[I, O]] = ???
 
-  final def updateContext[Pipe[_, _]](
+  final def updateContext(
     pipeDerivation: CodeOf[PipeDerivation[Pipe]],
     context:        CodeOf[ArbitraryContext],
     path:           CodeOf[Path]
   ): CodeOf[ArbitraryContext] = ???
 
-  final def pureResult[Pipe[_, _], A](pipeDerivation: CodeOf[PipeDerivation[Pipe]], a: A): CodeOf[ArbitraryResult[A]] =
-    ???
+  final def pureResult[A](pipeDerivation: CodeOf[PipeDerivation[Pipe]], a: A): CodeOf[ArbitraryResult[A]] = ???
 
-  /** Should generate code `pd.mergeResults(ra, rb) { (a, b) => ... }` */
-  final def mergeResults[Pipe[_, _], A, B, C](
+  final def mergeResults[A, B, C](
     pipeDerivation: CodeOf[PipeDerivation[Pipe]],
     ra:             CodeOf[ArbitraryResult[A]],
     rb:             CodeOf[ArbitraryResult[B]],

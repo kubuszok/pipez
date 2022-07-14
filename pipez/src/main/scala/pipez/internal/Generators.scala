@@ -25,10 +25,13 @@ trait Generators[Pipe[_, _], In, Out]
     case ProductTypeConversion(generator) => generator
     case SumTypeConversion(generator)     => generator
     case Configuration(inType, outType, _, _) =>
-      DerivationResult.fail(DerivationError.NotSupportedConversion(inType, outType))
+      DerivationResult.fail(DerivationError.NotYetSupported) // TODO: better error message
   }
 
+  /** Can be used instead of pd.Context to avoid path-dependent types */
   type ArbitraryContext
+
+  /** Can be used instead of pd.Context to avoid path-dependent types */
   type ArbitraryResult[Out]
 
   /** Should generate code `pd.unlift(pipe)(in, ctx)` */

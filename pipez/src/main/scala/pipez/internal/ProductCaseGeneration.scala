@@ -17,13 +17,13 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   def isUsableAsProductOutput(tpe: Type[Out]): Boolean =
     (isCaseClass(tpe) || isJavaBean(tpe)) && isInstantiable(tpe)
 
-  final case class InData(getters: ListMap[String, InData.Getter[_]])
-  object InData {
+  final case class ProductInData(getters: ListMap[String, ProductInData.Getter[_]])
+  object ProductInData {
 
     final case class Getter[InField](
       name:   String,
       tpe:    Type[InField],
-      caller: Argument => CodeOf[InField]
+      caller: Argument[In] => CodeOf[InField]
     ) {
 
       lazy val nonJavaBeanName: String = ProductCaseGeneration.dropGetIs(name)
@@ -32,19 +32,19 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
   }
 
-  sealed trait OutData extends Product with Serializable
-  object OutData {
+  sealed trait ProductOutData extends Product with Serializable
+  object ProductOutData {
 
     final case class ConstructorParam[OutField](
       name: String,
       tpe:  Type[OutField]
     )
-    final case class CaseClass(params: List[ListMap[String, ConstructorParam[_]]]) extends OutData
+    final case class CaseClass(params: List[ListMap[String, ConstructorParam[_]]]) extends ProductOutData
 
     final case class Setter[OutField](
       name:   String,
       tpe:    Type[OutField],
-      caller: (Argument, CodeOf[OutField]) => CodeOf[Unit]
+      caller: (Argument[Out], CodeOf[OutField]) => CodeOf[Unit]
     ) {
 
       lazy val nonJavaBeanName: String = ProductCaseGeneration.dropSet(name)
@@ -54,18 +54,29 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class JavaBean(
       defaultConstructor: CodeOf[Out],
       setters:            ListMap[String, Setter[_]]
-    ) extends OutData
+    ) extends ProductOutData
   }
 
-  sealed trait GeneratorData extends Product with Serializable
-  object GeneratorData {
+  sealed trait ProductGeneratorData extends Product with Serializable
+  object ProductGeneratorData {
 
-    final case class ConstructorParam(caller: Argument => CodeOf[_])
+    sealed trait ConstructorParam extends Product with Serializable
+    object ConstructorParam {
+
+      final case class Pure[A](
+        caller: (Argument[In], Argument[ArbitraryContext]) => CodeOf[A]
+      ) extends ConstructorParam
+
+      final case class Result[A](
+        caller: (Argument[In], Argument[ArbitraryContext]) => CodeOf[ArbitraryResult[A]]
+      ) extends ConstructorParam
+    }
+
     final case class CaseClass(
       pipes: List[List[ConstructorParam]]
-    ) extends GeneratorData
+    ) extends ProductGeneratorData
 
-    final case class JavaBean() extends GeneratorData // TODO
+    final case class JavaBean() extends ProductGeneratorData // TODO
   }
 
   trait ProductTypeConversion extends CodeGeneratorExtractor {
@@ -77,12 +88,12 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       else None
     }
 
-    def extractInData(inType: Type[In], settings: Settings): DerivationResult[InData]
+    def extractInData(inType: Type[In], settings: Settings): DerivationResult[ProductInData]
 
-    def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[OutData]
+    def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[ProductOutData]
 
     def generateCode(
-      generatorData:  GeneratorData,
+      generatorData:  ProductGeneratorData,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
     ): DerivationResult[CodeOf[Pipe[In, Out]]]
 
@@ -99,51 +110,66 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         code <- generateCode(generatorData, pipeDerivation)
       } yield code
 
-    private def matchFields(inData: InData, outData: OutData, settings: Settings): DerivationResult[GeneratorData] =
+    private def matchFields(
+      inData:   ProductInData,
+      outData:  ProductOutData,
+      settings: Settings
+    ): DerivationResult[ProductGeneratorData] =
       outData match {
-        case OutData.CaseClass(listOfParamsList) =>
+        case ProductOutData.CaseClass(listOfParamsList) =>
           listOfParamsList
-            .map(_.map(assignConstructorParamPipe(inData, outData, settings)).toList.pipe(DerivationResult.sequence(_)))
+            .map(
+              _.values
+                .map(assignConstructorParamPipe(inData, outData, settings))
+                .toList
+                .pipe(DerivationResult.sequence(_))
+            )
             .pipe(DerivationResult.sequence(_))
-            .map(GeneratorData.CaseClass(_))
+            .map(ProductGeneratorData.CaseClass(_))
 
-        case OutData.JavaBean(defaultConstructor, setters) =>
+        case ProductOutData.JavaBean(defaultConstructor, setters) =>
           // TODO
           DerivationResult.fail(DerivationError.NotYetSupported)
       }
 
     private def assignConstructorParamPipe(
-      inData:   InData,
-      outData:  OutData,
+      inData:   ProductInData,
+      outData:  ProductOutData,
       settings: Settings
-    ): ((String, OutData.ConstructorParam[_])) => DerivationResult[GeneratorData.ConstructorParam] = {
-      case (outParamName, constructorParam) =>
-        settings.forOutputFieldUse(outParamName) match {
-          case Left(pipe) =>
-            // TODO: pass pd and use unlift
-            // use passed Pipe[In, OutField], instead of creating one:
-            //   (Argument, Context) => pd.unlift(pipe)(argument, context)
-            DerivationResult.pure(GeneratorData.ConstructorParam(caller = _ => pipe.asInstanceOf[CodeOf[_]]))
-          case Right(inField) =>
-            // TODO: in.tpe =:= out.tpe
-            // use getter to create value:
-            //   (Argument, Context) =>
-            for {
-              getter <- DerivationResult.fromOption(inData.getters.find { case (_, getter) =>
-                getter.names.contains(outParamName)
-              })(DerivationError.MissingPublicSource(outParamName))
-              _ = println(s"for output ${outParamName} using field name ${inField}")
-              // TODO: create pipe or whatever
-              _ <- DerivationResult.fail(DerivationError.NotYetSupported)
-            } yield GeneratorData.ConstructorParam(caller = ???)
-          // TODO: in.tpe =!:= out.tpe
-          //  (Argument, Context) => pd.unlift(implicit[Pipe[InField, OutField]])(argument, context)
+    ): ProductOutData.ConstructorParam[_] => DerivationResult[ProductGeneratorData.ConstructorParam] = {
+      case ProductOutData.ConstructorParam(outParamName, outType) =>
+        settings.forOutputFieldUse(outParamName, outType) match {
+          case OutFieldLogic.DefaultField() =>
+            // TODO: match with field from inData
+            // TODO: if inType <:< outType ProductGeneratorData.ConstructorParam.Pure
+            // TODO: else attemptSummon
+            // TODO:   then ProductGeneratorData.ConstructorParam.Result((in, ctx) => unlift(pipe)(in.field, ctx)
+            // old code:
+//            for {
+//              getter <- DerivationResult.fromOption(inData.getters.find { case (_, getter) =>
+//                getter.names.contains(outParamName)
+//              })(DerivationError.MissingPublicSource(outParamName))
+//              _ = println(s"for output ${outParamName} using field name ${inField}")
+//              // TODO: create pipe or whatever
+//              _ <- DerivationResult.fail(DerivationError.NotYetSupported)
+//            } yield ProductGeneratorData.ConstructorParam(caller = ???)
+            DerivationResult.fail(DerivationError.NotYetSupported)
+          case OutFieldLogic.FieldAdded(pipe) =>
+            // TODO: ProductGeneratorData.ConstructorParam.Result((in, ctx) => unlift(pipe)(in, ctx))
+            DerivationResult.fail(DerivationError.NotYetSupported)
+          case OutFieldLogic.FieldRenamed(inField, inFieldType) =>
+            // TODO: summon Pipe[InField, OutField]
+            // TODO: ProductGeneratorData.ConstructorParam.Result((in, ctx) => unlift(pipe)(in.inField, ctx))
+            DerivationResult.fail(DerivationError.NotYetSupported)
+          case OutFieldLogic.PipeProvided(inField, inFieldType, pipe) =>
+            // TODO: ProductGeneratorData.ConstructorParam.Result((in, ctx) => unlift(pipe)(in.field, ctx))
+            DerivationResult.fail(DerivationError.NotYetSupported)
         }
     }
 
     private def assignSetterPipe(
-      inData:   InData,
-      outData:  OutData,
+      inData:   ProductInData,
+      outData:  ProductOutData,
       settings: Settings
     ) = {
       // TODO: here test all: name, nonJavaBeanName against name, nonJavaBeanName

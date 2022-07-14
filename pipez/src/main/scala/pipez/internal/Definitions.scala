@@ -10,34 +10,79 @@ import scala.util.chaining.scalaUtilChainingOps
 trait Definitions[Pipe[_, _], In, Out] {
 
   type Type[A]
-
-  type Code // TODO: remove?
+  type Argument[A]
   type CodeOf[A]
 
-  type Argument // TODO: add type?
-  type Field
-  type Subtype
-  type KeyValue
+  val inType:  Type[In]
+  val outType: Type[Out]
 
   sealed trait Path extends Product with Serializable
   object Path {
 
     case object Root extends Path
-    final case class Field(from: Path, name: Field) extends Path
-    final case class Subtype(from: Path, name: Subtype) extends Path
-    final case class AtIndex(from: Path, index: Int) extends Path
-    final case class AtKey(from: Path, key: KeyValue) extends Path
+    final case class Field(from: Path, name: String) extends Path
+    final case class Subtype[A](from: Path, tpe: Type[A]) extends Path
+    final case class AtIndex(from: Path, index: Int) extends Path // might not be needed
+    final case class AtKey(from: Path, key: String) extends Path // might not be needed
   }
 
   sealed trait ConfigEntry extends Product with Serializable
   object ConfigEntry {
 
-    final case class AddField(outputField: Path, pipe: Code) extends ConfigEntry
-    final case class RenameField(inputField: Path, outputField: Path) extends ConfigEntry
-    final case class RemoveSubtype(inputSubtype: Path, pipe: Code) extends ConfigEntry
-    final case class RenameSubtype(inputSubtype: Path, outputSubtype: Path) extends ConfigEntry
-    final case class PlugIn(inputField: Path, outputField: Path, pipe: Code) extends ConfigEntry
-    final case object FieldCaseInsensitive extends ConfigEntry
+    final case class AddField[OutField](
+      outputField:  Path,
+      outFieldType: Type[OutField],
+      pipe:         CodeOf[Pipe[In, OutField]]
+    ) extends ConfigEntry
+
+    final case class RenameField[InField, OutField](
+      inputField:     Path,
+      inputFieldType: Type[InField],
+      outputField:    Path,
+      outFieldType:   Type[OutField]
+    ) extends ConfigEntry
+
+    final case class RemoveSubtype[InSubtype](
+      inputSubtype:  Path,
+      inSubtypeType: Type[InSubtype],
+      pipe:          CodeOf[Pipe[InSubtype, Out]]
+    ) extends ConfigEntry
+
+    final case class RenameSubtype(
+      inputSubtype:  Path,
+      outputSubtype: Path
+    ) extends ConfigEntry
+
+    final case class PlugInField[InField, OutField](
+      inputField:     Path,
+      inputFieldType: Type[InField],
+      outputField:    Path,
+      outFieldType:   Type[OutField],
+      pipe:           CodeOf[Pipe[InField, OutField]]
+    ) extends ConfigEntry
+
+    case object FieldCaseInsensitive extends ConfigEntry
+  }
+
+  sealed trait OutFieldLogic[OutField] extends Product with Serializable
+  object OutFieldLogic {
+
+    final case class DefaultField[OutField]() extends OutFieldLogic[OutField]
+
+    final case class FieldAdded[OutField](
+      pipe: CodeOf[Pipe[In, OutField]]
+    ) extends OutFieldLogic[OutField]
+
+    final case class FieldRenamed[InField, OutField](
+      inField:     String,
+      inFieldType: Type[InField]
+    ) extends OutFieldLogic[OutField]
+
+    final case class PipeProvided[InField, OutField](
+      inField:     String,
+      inFieldType: Type[InField],
+      pipe:        CodeOf[Pipe[InField, OutField]]
+    ) extends OutFieldLogic[OutField]
   }
 
   final class Settings(entries: List[ConfigEntry]) {
@@ -47,16 +92,17 @@ trait Definitions[Pipe[_, _], In, Out] {
 
     lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
 
-    // TODO: Pipe[From, To] or Input Field name
-    def forOutputFieldUse(outField: String): Either[Code, String] =
-      entries.foldLeft[Either[Code, String]](Right(outField)) {
-        case (_, AddField(Field(Root, name), pipe))
-            if name.toString.equals(outField) || (isFieldCaseInsensitive && name.toString.equalsIgnoreCase(outField)) =>
-          Left(pipe)
-        case (_, RenameField(Field(Root, inName), Field(Root, outName)))
-            if outName.toString
-              .equals(outField) || (isFieldCaseInsensitive && outName.toString.equalsIgnoreCase(outField)) =>
-          Right(inName.toString)
+    def forOutputFieldUse[OutField](outField: String, outFieldType: Type[OutField]): OutFieldLogic[OutField] =
+      entries.foldLeft[OutFieldLogic[OutField]](OutFieldLogic.DefaultField()) {
+        case (_, AddField(Field(Root, `outField`), pipe, outType)) =>
+          // validate that outType <:< outFieldType is correct
+          OutFieldLogic.FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
+        case (_, RenameField(Field(Root, inName), inType, Field(Root, `outField`), outType)) =>
+          // validate that outType <:< outFieldType is correct
+          OutFieldLogic.FieldRenamed(inName, inType)
+        case (_, PlugInField(Field(Root, inName), inType, Field(Root, `outField`), outType, pipe)) =>
+          // validate that outType <:< outFieldType is correct
+          OutFieldLogic.PipeProvided(inName, inType, pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]])
         case (old, _) => old
       }
   }
@@ -64,9 +110,19 @@ trait Definitions[Pipe[_, _], In, Out] {
   sealed trait DerivationError extends Product with Serializable
   object DerivationError {
 
-    final case class MissingPublicConstructor(outType: Type[_]) extends DerivationError
-    final case class MissingPublicSource(outFieldName: String) extends DerivationError
-    final case class NotSupportedConversion[In, Out](inType: Type[In], outType: Type[Out]) extends DerivationError
+    case object MissingPublicConstructor extends DerivationError
+
+    final case class MissingPublicSource(
+      outFieldName: String
+    ) extends DerivationError
+
+    final case class NotSupportedConversion[I, O](
+      inField:  String,
+      inType:   Type[I],
+      outField: String,
+      outType:  Type[O]
+    ) extends DerivationError
+
     case object NotYetSupported extends DerivationError
   }
 
@@ -132,6 +188,11 @@ trait Definitions[Pipe[_, _], In, Out] {
     def fromOption[A](opt: Option[A])(err: => DerivationError): DerivationResult[A] =
       opt.fold[DerivationResult[A]](fail(err))(pure)
   }
+
+  def summonPipe[InField, OutField](
+    inType:  Type[InField],
+    outType: Type[OutField]
+  ): DerivationResult[CodeOf[Pipe[InField, OutField]]]
 
   def readConfig(
     code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]

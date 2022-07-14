@@ -12,13 +12,14 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
   override type Type[A] = c.Type
 
-  override type Code      = Tree
-  override type CodeOf[A] = Expr[A]
+  override type Argument[A] = Ident
+  override type CodeOf[A]   = Expr[A]
 
-  override type Argument = Ident
-  override type Field    = Tree
-  override type Subtype  = c.Type
-  override type KeyValue = Tree
+  override def summonPipe[InField, OutField](
+    inType:  Type[InField],
+    outType: Type[OutField]
+  ): DerivationResult[CodeOf[Pipe[InField, OutField]]] =
+    DerivationResult.fail(DerivationError.NotYetSupported)
 
   override def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
     DerivationResult.fail(DerivationError.NotYetSupported)

@@ -5,7 +5,7 @@ import pipez.PipeDerivation
 import scala.collection.immutable.ListMap
 import scala.util.chaining._
 
-trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: PlatformDefinitions with Generators =>
+trait PlatformProductCaseGeneration extends ProductCaseGeneration { self: PlatformDefinitions with PlatformGenerators =>
 
   import c.universe._
 

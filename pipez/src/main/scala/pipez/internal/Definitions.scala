@@ -66,7 +66,7 @@ trait Definitions {
 
     final case class MissingPublicConstructor(outType: Type[_]) extends DerivationError
     final case class MissingPublicSource(outFieldName: String) extends DerivationError
-    final case class NotSupportedConversion(inType: Type[_], outType: Type[_]) extends DerivationError
+    final case class NotSupportedConversion[In, Out](inType: Type[In], outType: Type[Out]) extends DerivationError
     case object NotYetSupported extends DerivationError
   }
 

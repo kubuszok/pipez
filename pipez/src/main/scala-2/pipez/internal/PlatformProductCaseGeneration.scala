@@ -23,23 +23,23 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   object ProductTypeConversion extends ProductTypeConversion {
     // TODO: implement abstract members
 
-    override def extractInData(inType: Type[In], settings: Settings): DerivationResult[InData] =
+    override def extractInData(inType: Type[In], settings: Settings): DerivationResult[ProductInData] =
       inType.members // we fetch ALL members, even those that might have been inherited
         .to(List)
         .collect {
           case member if member.isMethod && member.asMethod.isGetter =>
-            member.name.toString -> InData.Getter[Any](
+            member.name.toString -> ProductInData.Getter[Any](
               name = member.name.toString, // TODO
               tpe = member.asMethod.returnType,
-              caller = (arg: Argument) => c.Expr[Any](q"$arg.${member.asMethod.name.toTermName}")
+              caller = (arg: Argument[In]) => c.Expr[Any](q"$arg.${member.asMethod.name.toTermName}")
             )
         }
         .to(ListMap)
-        .pipe(InData(_))
+        .pipe(ProductInData(_))
         .pipe(DerivationResult.pure)
         .tap(d => println(s"In getters: $d"))
 
-    override def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[OutData] =
+    override def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[ProductOutData] =
       if (isJavaBean(outType)) {
         // Java Bean case
 
@@ -48,7 +48,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             c.Expr[Out](q"new ${outType}()")
         } match {
           case Some(value) => DerivationResult.pure(value)
-          case None        => DerivationResult.fail(DerivationError.MissingPublicConstructor(outType))
+          case None        => DerivationResult.fail(DerivationError.MissingPublicConstructor)
         }
 
         val setters = outType.decls
@@ -56,10 +56,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .collect {
             case member if member.isPublic && member.isMethod && member.asMethod.isSetter =>
               member.asMethod.paramLists.flatten.map { param =>
-                param.name.toString -> OutData.Setter(
+                param.name.toString -> ProductOutData.Setter(
                   name = param.name.toString,
                   tpe = param.typeSignature,
-                  caller = (_: Argument, _: CodeOf[Any]) => c.Expr[Unit](q"()")
+                  caller = (_: Argument[In], _: CodeOf[Any]) => c.Expr[Unit](q"()")
                 )
               }
           }
@@ -67,7 +67,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .to(ListMap)
           .pipe(DerivationResult.pure(_))
 
-        defaultConstructor.map2(setters)(OutData.JavaBean(_, _)).tap(d => println(s"Out setters: $d"))
+        defaultConstructor.map2(setters)(ProductOutData.JavaBean(_, _)).tap(d => println(s"Out setters: $d"))
       } else {
         // case class case
 
@@ -78,7 +78,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               member.asMethod.paramLists.map { params =>
                 params
                   .map { param =>
-                    param.name.toString -> OutData.ConstructorParam(
+                    param.name.toString -> ProductOutData.ConstructorParam(
                       name = param.name.toString,
                       tpe = param.typeSignature
                     )
@@ -87,13 +87,13 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               }
           }
           .get
-          .pipe(OutData.CaseClass(_))
+          .pipe(ProductOutData.CaseClass(_))
           .pipe(DerivationResult.pure(_))
           .tap(d => println(s"Out params: $d"))
       }
 
     override def generateCode(
-      generatorData:  GeneratorData,
+      generatorData:  ProductGeneratorData,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
     ): DerivationResult[CodeOf[Pipe[In, Out]]] = {
       println(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")

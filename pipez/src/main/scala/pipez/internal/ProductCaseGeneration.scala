@@ -8,13 +8,13 @@ import scala.collection.immutable.ListMap
 import scala.util.chaining._
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait ProductCaseGeneration { self: Definitions with Generators =>
+trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] with Generators[Pipe, In, Out] =>
 
   def isCaseClass[A](tpe:    Type[A]): Boolean
   def isJavaBean[A](tpe:     Type[A]): Boolean
   def isInstantiable[A](tpe: Type[A]): Boolean
 
-  def isUsableAsProductOutput[Out](tpe: Type[Out]): Boolean =
+  def isUsableAsProductOutput(tpe: Type[Out]): Boolean =
     (isCaseClass(tpe) || isJavaBean(tpe)) && isInstantiable(tpe)
 
   final case class InData(getters: ListMap[String, InData.Getter[_]])
@@ -51,7 +51,7 @@ trait ProductCaseGeneration { self: Definitions with Generators =>
 
       lazy val names: Set[String] = Set(name, nonJavaBeanName)
     }
-    final case class JavaBean[Out](
+    final case class JavaBean(
       defaultConstructor: CodeOf[Out],
       setters:            ListMap[String, Setter[_]]
     ) extends OutData
@@ -70,25 +70,23 @@ trait ProductCaseGeneration { self: Definitions with Generators =>
 
   trait ProductTypeConversion extends CodeGeneratorExtractor {
 
-    final def unapply[Pipe[_, _], In, Out](
-      configuration: Configuration[Pipe, In, Out]
-    ): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] = {
+    final def unapply(configuration: Configuration): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] = {
       val Configuration(inType, outType, settings, pipeDerivation) = configuration
 
       if (isUsableAsProductOutput(outType)) Some(attemptProductRendering(inType, outType, settings, pipeDerivation))
       else None
     }
 
-    def extractInData[In](inType: Type[In], settings: Settings): DerivationResult[InData]
+    def extractInData(inType: Type[In], settings: Settings): DerivationResult[InData]
 
-    def extractOutData[Out](outType: Type[Out], settings: Settings): DerivationResult[OutData]
+    def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[OutData]
 
-    def generateCode[Pipe[_, _], In, Out](
+    def generateCode(
       generatorData:  GeneratorData,
       pipeDerivation: CodeOf[PipeDerivation[Pipe]]
     ): DerivationResult[CodeOf[Pipe[In, Out]]]
 
-    private def attemptProductRendering[Pipe[_, _], In, Out](
+    private def attemptProductRendering(
       inType:         Type[In],
       outType:        Type[Out],
       settings:       Settings,
@@ -98,7 +96,7 @@ trait ProductCaseGeneration { self: Definitions with Generators =>
         data <- extractInData(inType, settings) zip extractOutData(outType, settings)
         (inData, outData) = data
         generatorData <- matchFields(inData, outData, settings)
-        code <- generateCode[Pipe, In, Out](generatorData, pipeDerivation)
+        code <- generateCode(generatorData, pipeDerivation)
       } yield code
 
     private def matchFields(inData: InData, outData: OutData, settings: Settings): DerivationResult[GeneratorData] =

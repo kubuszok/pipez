@@ -6,33 +6,21 @@ import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-final class Macros(val c: blackbox.Context)
-    extends PlatformDefinitions
-    with PlatformGenerators
-    with PlatformProductCaseGeneration
-    with PlatformSumCaseGeneration {
+final class Macros[Pipe[_, _], In, Out](val c: blackbox.Context)
+    extends PlatformDefinitions[Pipe, In, Out]
+    with PlatformGenerators[Pipe, In, Out]
+    with PlatformProductCaseGeneration[Pipe, In, Out]
+    with PlatformSumCaseGeneration[Pipe, In, Out] {
 
   import c.universe._
 
-  def deriveDefault[Pipe[_, _], In: WeakTypeTag, Out: WeakTypeTag](
-    pd: c.Expr[PipeDerivation[Pipe]]
-  ): c.Expr[Pipe[In, Out]] =
-    derive[Pipe, In, Out](None, pd)
-
-  def deriveConfigured[Pipe[_, _], In: WeakTypeTag, Out: WeakTypeTag](
-    config: c.Expr[PipeDerivationConfig[Pipe, In, Out]]
-  )(
-    pd: c.Expr[PipeDerivation[Pipe]]
-  ): c.Expr[Pipe[In, Out]] =
-    derive[Pipe, In, Out](Some(config), pd)
-
-  def derive[Pipe[_, _], In: WeakTypeTag, Out: WeakTypeTag](
+  def derive(
     configurationCode:  Option[c.Expr[PipeDerivationConfig[Pipe, In, Out]]],
     pipeDerivationCode: c.Expr[PipeDerivation[Pipe]]
-  ): c.Expr[Pipe[In, Out]] = {
+  )(implicit In:        WeakTypeTag[In], Out: WeakTypeTag[Out]): c.Expr[Pipe[In, Out]] = {
     val result = for {
       settings <- readSettingsIfGiven(configurationCode)
-      configuration = Configuration[Pipe, In, Out](
+      configuration = Configuration(
         inType = weakTypeTag[In].tpe,
         outType = weakTypeTag[Out].tpe,
         settings = settings,
@@ -45,5 +33,31 @@ final class Macros(val c: blackbox.Context)
     println(result.diagnostic.mkString("\n"))
 
     result.fold(identity)(errors => c.abort(c.enclosingPosition, errors.mkString(", ")))
+  }
+}
+
+final class MacroDispatcher(val c: blackbox.Context) {
+
+  import c.universe._
+
+  def deriveDefault[Pipe[_, _], In: WeakTypeTag, Out: WeakTypeTag](
+    pd: c.Expr[PipeDerivation[Pipe]]
+  ): c.Expr[Pipe[In, Out]] = {
+    val macros = new Macros[Pipe, In, Out](c)
+    macros.derive(None, pd.asInstanceOf[macros.c.Expr[PipeDerivation[Pipe]]]).asInstanceOf[c.Expr[Pipe[In, Out]]]
+  }
+
+  def deriveConfigured[Pipe[_, _], In: WeakTypeTag, Out: WeakTypeTag](
+    config: c.Expr[PipeDerivationConfig[Pipe, In, Out]]
+  )(
+    pd: c.Expr[PipeDerivation[Pipe]]
+  ): c.Expr[Pipe[In, Out]] = {
+    val macros = new Macros[Pipe, In, Out](c)
+    macros
+      .derive(
+        Some(config.asInstanceOf[macros.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]),
+        pd.asInstanceOf[macros.c.Expr[PipeDerivation[Pipe]]]
+      )
+      .asInstanceOf[c.Expr[Pipe[In, Out]]]
   }
 }

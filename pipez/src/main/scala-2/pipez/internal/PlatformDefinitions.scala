@@ -4,7 +4,7 @@ import pipez.PipeDerivationConfig
 
 import scala.reflect.macros.blackbox
 
-trait PlatformDefinitions extends Definitions {
+trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
 
   val c: blackbox.Context
 
@@ -20,8 +20,6 @@ trait PlatformDefinitions extends Definitions {
   override type Subtype  = c.Type
   override type KeyValue = Tree
 
-  override def readConfig[Pipe[_, _], In, Out](
-    code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]
-  ): DerivationResult[Settings] =
+  override def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
     DerivationResult.fail(DerivationError.NotYetSupported)
 }

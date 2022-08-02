@@ -10,6 +10,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   import c.universe._
 
+  final def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean =
+    lower <:< higher
+
   final def isCaseClass[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isClass &&
       tpe.typeSymbol.asClass.isCaseClass
@@ -23,7 +26,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   object ProductTypeConversion extends ProductTypeConversion {
     // TODO: implement abstract members
 
-    override def extractInData(inType: Type[In], settings: Settings): DerivationResult[ProductInData] =
+    override def extractInData(settings: Settings): DerivationResult[ProductInData] =
       inType.members // we fetch ALL members, even those that might have been inherited
         .to(List)
         .collect {
@@ -39,7 +42,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .pipe(DerivationResult.pure)
         .tap(d => println(s"In getters: $d"))
 
-    override def extractOutData(outType: Type[Out], settings: Settings): DerivationResult[ProductOutData] =
+    override def extractOutData(settings: Settings): DerivationResult[ProductOutData] =
       if (isJavaBean(outType)) {
         // Java Bean case
 
@@ -92,10 +95,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .tap(d => println(s"Out params: $d"))
       }
 
-    override def generateCode(
-      generatorData:  ProductGeneratorData,
-      pipeDerivation: CodeOf[PipeDerivation[Pipe]]
-    ): DerivationResult[CodeOf[Pipe[In, Out]]] = {
+    override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = {
       println(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")
       DerivationResult.fail(DerivationError.NotYetSupported)
     }

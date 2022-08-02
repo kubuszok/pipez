@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.PipeDerivationConfig
+import pipez.{ PipeDerivation, PipeDerivationConfig }
 
 import scala.annotation.nowarn
 import scala.collection.{ Factory, mutable }
@@ -15,6 +15,9 @@ trait Definitions[Pipe[_, _], In, Out] {
 
   val inType:  Type[In]
   val outType: Type[Out]
+
+  val inCode:         Argument[In] => CodeOf[In]
+  val pipeDerivation: CodeOf[PipeDerivation[Pipe]]
 
   sealed trait Path extends Product with Serializable
   object Path {
@@ -64,27 +67,6 @@ trait Definitions[Pipe[_, _], In, Out] {
     case object FieldCaseInsensitive extends ConfigEntry
   }
 
-  sealed trait OutFieldLogic[OutField] extends Product with Serializable
-  object OutFieldLogic {
-
-    final case class DefaultField[OutField]() extends OutFieldLogic[OutField]
-
-    final case class FieldAdded[OutField](
-      pipe: CodeOf[Pipe[In, OutField]]
-    ) extends OutFieldLogic[OutField]
-
-    final case class FieldRenamed[InField, OutField](
-      inField:     String,
-      inFieldType: Type[InField]
-    ) extends OutFieldLogic[OutField]
-
-    final case class PipeProvided[InField, OutField](
-      inField:     String,
-      inFieldType: Type[InField],
-      pipe:        CodeOf[Pipe[InField, OutField]]
-    ) extends OutFieldLogic[OutField]
-  }
-
   final class Settings(entries: List[ConfigEntry]) {
 
     import Path._
@@ -92,19 +74,9 @@ trait Definitions[Pipe[_, _], In, Out] {
 
     lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
 
-    def forOutputFieldUse[OutField](outField: String, outFieldType: Type[OutField]): OutFieldLogic[OutField] =
-      entries.foldLeft[OutFieldLogic[OutField]](OutFieldLogic.DefaultField()) {
-        case (_, AddField(Field(Root, `outField`), pipe, outType)) =>
-          // validate that outType <:< outFieldType is correct
-          OutFieldLogic.FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
-        case (_, RenameField(Field(Root, inName), inType, Field(Root, `outField`), outType)) =>
-          // validate that outType <:< outFieldType is correct
-          OutFieldLogic.FieldRenamed(inName, inType)
-        case (_, PlugInField(Field(Root, inName), inType, Field(Root, `outField`), outType, pipe)) =>
-          // validate that outType <:< outFieldType is correct
-          OutFieldLogic.PipeProvided(inName, inType, pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]])
-        case (old, _) => old
-      }
+    def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
+      (a, entry) => overrideWhen.applyOrElse[ConfigEntry, A](entry, _ => a)
+    }
   }
 
   sealed trait DerivationError extends Product with Serializable

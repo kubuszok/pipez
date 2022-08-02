@@ -4,7 +4,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
 
   trait SumTypeConversion extends CodeGeneratorExtractor {
 
-    final def unapply(configuration: Configuration): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] = None
+    final def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] = None
   }
   val SumTypeConversion: SumTypeConversion
 }

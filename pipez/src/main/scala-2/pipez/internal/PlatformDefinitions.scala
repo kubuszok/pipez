@@ -15,12 +15,15 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   override type Argument[A] = Ident
   override type CodeOf[A]   = Expr[A]
 
-  override def summonPipe[InField, OutField](
+  final val inCode: Argument[In] => CodeOf[In] =
+    id => c.Expr[In](id)
+
+  final def summonPipe[InField, OutField](
     inType:  Type[InField],
     outType: Type[OutField]
   ): DerivationResult[CodeOf[Pipe[InField, OutField]]] =
     DerivationResult.fail(DerivationError.NotYetSupported)
 
-  override def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
+  final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
     DerivationResult.fail(DerivationError.NotYetSupported)
 }

@@ -19,6 +19,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   final def isUsableAsProductOutput: Boolean =
     (isCaseClass(outType) || isJavaBean(outType)) && isInstantiable(outType)
 
+  type Constructor = List[List[CodeOf[_]]] => CodeOf[Out]
+
   final case class ProductInData(getters: ListMap[String, ProductInData.Getter[_]]) {
 
     def findGetter(inParamName: String, outParamName: String): DerivationResult[ProductInData.Getter[_]] =
@@ -47,7 +49,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       name: String,
       tpe:  Type[OutField]
     )
-    final case class CaseClass(params: List[ListMap[String, ConstructorParam[_]]]) extends ProductOutData
+    final case class CaseClass(caller: Constructor, params: List[ListMap[String, ConstructorParam[_]]]) extends ProductOutData
 
     final case class Setter[OutField](
       name:   String,
@@ -114,15 +116,18 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     object ConstructorParam {
 
       final case class Pure[A](
+        tpe:    Type[A],
         caller: (Argument[In], Argument[ArbitraryContext]) => CodeOf[A]
       ) extends ConstructorParam
 
       final case class Result[A](
+        tpe:    Type[A],
         caller: (Argument[In], Argument[ArbitraryContext]) => CodeOf[ArbitraryResult[A]]
       ) extends ConstructorParam
     }
 
     final case class CaseClass(
+      caller: Constructor,
       pipes: List[List[ConstructorParam]]
     ) extends ProductGeneratorData
 
@@ -157,7 +162,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       settings: Settings
     ): DerivationResult[ProductGeneratorData] =
       outData match {
-        case ProductOutData.CaseClass(listOfParamsList) =>
+        case ProductOutData.CaseClass(caller, listOfParamsList) =>
           listOfParamsList
             .map(
               _.values
@@ -166,7 +171,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
                 .pipe(DerivationResult.sequence(_))
             )
             .pipe(DerivationResult.sequence(_))
-            .map(ProductGeneratorData.CaseClass(_))
+            .map(ProductGeneratorData.CaseClass(caller, _))
 
         case ProductOutData.JavaBean(defaultConstructor, setters) =>
           // TODO
@@ -187,7 +192,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             inData.findGetter(outParamName, outParamName).flatMap(fromFieldConstructorParam(_, outType))
           case OutFieldLogic.FieldAdded(pipe) =>
             // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
-            DerivationResult.pure(fieldAddedConstructorParam(pipe))
+            DerivationResult.pure(fieldAddedConstructorParam(pipe, outType))
           case OutFieldLogic.FieldRenamed(inField, inFieldType) =>
             // if inField (name provided) not found then error
             // else if inField <:< outField then (in, ctx) => in : OutField
@@ -198,7 +203,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
             inData
               .findGetter(inField, outParamName)
-              .map(g => pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]], pipe))
+              .map(g => pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]], pipe, outType))
         }
     }
 
@@ -210,30 +215,34 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     ): DerivationResult[ProductGeneratorData.ConstructorParam] = {
       val inType = getter.tpe
       if (isSubtype(inType, outType)) {
-        DerivationResult.pure(ProductGeneratorData.ConstructorParam.Pure((in, _) => getter.caller(in)))
+        DerivationResult.pure(ProductGeneratorData.ConstructorParam.Pure(outType.asInstanceOf[Type[InField]], (in, _) => getter.caller(in)))
       } else {
         summonPipe(inType, outType).map { pipe: CodeOf[Pipe[InField, OutField]] =>
-          ProductGeneratorData.ConstructorParam.Result { (in, ctx) =>
-            unlift[InField, OutField](pipe, getter.caller(in), ctx)
-          }
+          ProductGeneratorData.ConstructorParam.Result(
+            outType,
+            (in, ctx) => unlift[InField, OutField](pipe, getter.caller(in), ctx)
+          )
         }
       }
     }
 
     // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
     private def fieldAddedConstructorParam[OutField](
-      pipe: CodeOf[Pipe[In, OutField]]
+      pipe: CodeOf[Pipe[In, OutField]],
+      outType: Type[OutField]
     ): ProductGeneratorData.ConstructorParam =
-      ProductGeneratorData.ConstructorParam.Result((in, ctx) => unlift[In, OutField](pipe, inCode(in), ctx))
+      ProductGeneratorData.ConstructorParam.Result(outType, (in, ctx) => unlift[In, OutField](pipe, inCode(in), ctx))
 
     // (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
     private def pipeProvidedConstructorParam[InField, OutField](
       getter: ProductInData.Getter[InField],
-      pipe:   CodeOf[Pipe[InField, OutField]]
+      pipe:   CodeOf[Pipe[InField, OutField]],
+        outType: Type[OutField]
     ): ProductGeneratorData.ConstructorParam =
-      ProductGeneratorData.ConstructorParam.Result { (in, ctx) =>
-        unlift[InField, OutField](pipe, getter.caller(in), ctx)
-      }
+      ProductGeneratorData.ConstructorParam.Result(
+        outType,
+        (in, ctx) => unlift[InField, OutField](pipe, getter.caller(in), ctx)
+      )
 
     private def assignSetterPipe(
       inData:   ProductInData,

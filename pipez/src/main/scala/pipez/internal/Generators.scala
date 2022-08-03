@@ -21,6 +21,25 @@ trait Generators[Pipe[_, _], In, Out]
       DerivationResult.fail(DerivationError.NotYetSupported) // TODO: better error message
   }
 
+  def diagnosticsMessage[A](result: DerivationResult[A]): String =
+    "Macro diagnostics\n" + result.diagnostic.mkString("\n")
+
+  def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
+    .map {
+      case DerivationError.MissingPublicConstructor =>
+        s"$outType is missing a public constructor that could be used to initiate its value"
+      case DerivationError.MissingPublicSource(outFieldName) =>
+        s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
+      case DerivationError.NotSupportedConversion(inField, inFieldType, outField, outFieldType) =>
+        s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
+      case DerivationError.NotYetSupported =>
+        s"Your setup is valid, but the library doesn't support it yet; if you think it's a bug contact library authors"
+      case DerivationError.NotYetImplemented(msg) =>
+        s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
+    }
+    .map(" - " + _)
+    .mkString("\n")
+
   /** Can be used instead of pd.Context to avoid path-dependent types */
   type ArbitraryContext
 

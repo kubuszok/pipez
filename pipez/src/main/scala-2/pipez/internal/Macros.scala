@@ -17,42 +17,29 @@ final class Macros[Pipe[_, _], In, Out](val c: blackbox.Context)(
     with PlatformSumCaseGeneration[Pipe, In, Out] {
 
   val inType:  Type[In]  = inTpe.asInstanceOf[Type[In]]
-  val outType: Type[Out] = inTpe.asInstanceOf[Type[Out]]
+  val outType: Type[Out] = outTpe.asInstanceOf[Type[Out]]
 
   val pipeDerivation: CodeOf[PipeDerivation[Pipe]] = pd.asInstanceOf[CodeOf[PipeDerivation[Pipe]]]
 
   import c.universe._
 
-  private def reportDiagnostics[A](result: DerivationResult[A]): Unit = {
-    val msg = "Macro diagnostics\n" + result.diagnostic.mkString("\n")
+  private def reportDiagnostics[A](result: DerivationResult[A]): Unit =
+    c.echo(c.enclosingPosition, diagnosticsMessage(result))
 
-    c.echo(c.enclosingPosition, msg)
-  }
-
-  private def reportError(errors: List[DerivationError]): Nothing = {
-    val msg = "Pipe couldn't be generated due to errors:\n" + errors
-      .map {
-        case DerivationError.MissingPublicConstructor =>
-          s"$outType is missing a public constructor that could be used to initiate its value"
-        case DerivationError.MissingPublicSource(outFieldName) =>
-          s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
-        case DerivationError.NotSupportedConversion(inField, inType, outField, outType) =>
-          s"Couldn't find an implicit value converting $inType to $outType, required by $inTpe.$inField to $outTpe.$outField conversion; provide the right implicit or configuration"
-        case DerivationError.NotYetSupported =>
-          s"Your setup is valid, but the library doesn't support it yet; if you think it's a bug contact library authors"
-        case DerivationError.NotYetImplemented(msg) =>
-          s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
-      }
-      .map(" - " + _)
-      .mkString("\n")
-
-    c.abort(c.enclosingPosition, msg)
-  }
+  private def reportError(errors: List[DerivationError]): Nothing = c.abort(c.enclosingPosition, errorMessage(errors))
 
   def derive(
     configurationCode: Option[c.Expr[PipeDerivationConfig[Pipe, In, Out]]]
   )(implicit In:       WeakTypeTag[In], Out: WeakTypeTag[Out]): c.Expr[Pipe[In, Out]] =
-    readSettingsIfGiven(configurationCode).flatMap(resolveConversion).tap(reportDiagnostics).fold(identity)(reportError)
+    readSettingsIfGiven(configurationCode)
+      .flatMap { config =>
+        val result = resolveConversion(config)
+        if (config.isDiagnosticsEnabled) {
+          reportDiagnostics(result)
+        }
+        result
+      }
+      .fold(identity)(reportError)
 }
 
 final class MacroDispatcher(val c: blackbox.Context) {

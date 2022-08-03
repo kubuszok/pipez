@@ -6,6 +6,9 @@ val pipez = project
   .settings(
     name := "pipez",
     scalaVersion := scala2version,
+    scalacOptions ++= Seq(
+      "-feature",
+    ),
     crossScalaVersions := Seq(scala2version, scala3version),
     libraryDependencies ++= {
       CrossVersion.partialVersion(scalaVersion.value) match {

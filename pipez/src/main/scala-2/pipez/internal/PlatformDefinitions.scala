@@ -12,11 +12,11 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
   override type Type[A] = c.Type
 
-  override type Argument[A] = Ident
+  override type Argument[A] = TermName
   override type CodeOf[A]   = Expr[A]
 
   final val inCode: Argument[In] => CodeOf[In] =
-    id => c.Expr[In](id)
+    id => c.Expr[In](q"$id")
 
   final def summonPipe[InField, OutField](
     inType:  Type[InField],

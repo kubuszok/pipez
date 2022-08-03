@@ -40,7 +40,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .to(ListMap)
         .pipe(ProductInData(_))
         .pipe(DerivationResult.pure)
-        .tap(d => println(s"In getters: $d"))
+        .logSuccess(data => s"Input getters: $data")
 
     override def extractOutData(settings: Settings): DerivationResult[ProductOutData] =
       if (isJavaBean(outType)) {
@@ -70,7 +70,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .to(ListMap)
           .pipe(DerivationResult.pure(_))
 
-        defaultConstructor.map2(setters)(ProductOutData.JavaBean(_, _)).tap(d => println(s"Out setters: $d"))
+        defaultConstructor.map2(setters)(ProductOutData.JavaBean(_, _)).logSuccess(data => s"Output setters: $data")
       } else {
         // case class case
 
@@ -92,12 +92,12 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .get
           .pipe(ProductOutData.CaseClass(_))
           .pipe(DerivationResult.pure(_))
-          .tap(d => println(s"Out params: $d"))
+          .logSuccess(data => s"Output params: $data")
       }
 
-    override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = {
-      println(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")
-      DerivationResult.fail(DerivationError.NotYetImplemented("Actual code generation"))
-    }
+    override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
+      DerivationResult
+        .fail(DerivationError.NotYetImplemented("Actual code generation"))
+        .log(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")
   }
 }

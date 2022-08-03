@@ -133,6 +133,19 @@ trait Definitions[Pipe[_, _], In, Out] {
       case Success(value, diagnostic)  => Success(value, diagnostic :+ message)
       case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ message)
     }
+    final def logResult(success: A => String)(failure: List[DerivationError] => String): DerivationResult[A] =
+      this match {
+        case DerivationResult.Success(value, _)  => log(success(value))
+        case DerivationResult.Failure(errors, _) => log(failure(errors))
+      }
+    final def logSuccess(success: A => String): DerivationResult[A] = this match {
+      case DerivationResult.Success(value, _) => log(success(value))
+      case DerivationResult.Failure(_, _)     => this
+    }
+    final def logFailure(failure: List[DerivationError] => String): DerivationResult[A] = this match {
+      case DerivationResult.Success(_, _)      => this
+      case DerivationResult.Failure(errors, _) => log(failure(errors))
+    }
   }
   object DerivationResult {
 

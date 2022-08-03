@@ -6,7 +6,7 @@ package pipez
 // TODO: java bean -> java bean
 // TODO: test backticked names like `a b`
 
-class NoContextCodecDerivation extends munit.FunSuite {
+class NoContextCodecDerivationSpec extends munit.FunSuite {
 
   case class CaseClassNullaryIn()
   case class CaseClassNullaryOut()
@@ -33,6 +33,25 @@ class NoContextCodecDerivation extends munit.FunSuite {
     implicit val aCodec: NoContextCodec[Int, String] = int => Right(int.toString)
     assertEquals(
       PipeDerivation.derive[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutModified].decode(CaseClassUnaryIn(1)),
+      Right(CaseClassUnaryOutModified("1"))
+    )
+  }
+
+  // TODO: change fields
+  test("config test") {
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutModified]
+            //.enableDiagnostics
+            .addField(_.a, i => Right(i.a.toString))
+            .renameField(_.a, _.a)
+            //.removeSubtype()
+            //.removeSubtype()
+            .plugIn(_.a, _.a, (a: Int) => Right(a.toString))
+            .fieldMatchingCaseInsensitive
+        )
+        .decode(CaseClassUnaryIn(1)),
       Right(CaseClassUnaryOutModified("1"))
     )
   }

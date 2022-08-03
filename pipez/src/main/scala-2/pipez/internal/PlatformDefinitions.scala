@@ -2,6 +2,7 @@ package pipez.internal
 
 import pipez.PipeDerivationConfig
 
+import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
 trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
@@ -24,14 +25,78 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
     inType:  Type[InField],
     outType: Type[OutField]
   ): DerivationResult[CodeOf[Pipe[InField, OutField]]] =
-    scala.util
-      .Try(c.Expr[Pipe[InField, OutField]](c.inferImplicitValue(pipeType(inType, outType))))
-      .fold(
-        _ => DerivationResult.fail(DerivationError.RequiredImplicitNotFound(inType, outType)),
-        va => DerivationResult.pure(va)
+    DerivationResult
+      .unsafe(c.Expr[Pipe[InField, OutField]](c.inferImplicitValue(pipeType(inType, outType), silent = false)))(_ =>
+        DerivationError.RequiredImplicitNotFound(inType, outType)
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
 
-  final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
-    DerivationResult.fail(DerivationError.NotYetImplemented("readConfig macro"))
+  final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
+    @nowarn("cat=unused")
+    def extractPath(in: Tree): Either[String, Path] = in match {
+      case Function(_, expr)             => extractPath(expr)
+      case Select(expr, TermName(field)) => extractPath(expr).map(Path.Field(_, field)) // extract .field
+      case Ident(TermName(_))            => Right(Path.Root) // drop argName from before .field
+      case els                           => Left(s"Path ${showRaw(in)} is not in format _.field1.field2")
+    }
+
+    def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
+      // matches PipeDerivationConfig[Pipe, In, Out]
+      case TypeApply(Select(Ident(cfg), TermName("apply")), _) if cfg.decodedName.toString == "PipeDerivationConfig" =>
+        Right(new Settings(acc))
+      // matches {cfg}.fieldMatchingCaseInsensitive
+      case Select(expr, TermName("enableDiagnostics")) =>
+        extract(expr, ConfigEntry.EnableDiagnostics :: acc)
+      // matches {cfg}.addField(in, out)
+      case Apply(TypeApply(Select(expr, TermName("addField")), _), List(outputField, pipe)) =>
+        for {
+          outFieldPath <- extractPath(outputField)
+          TypeRef(_, _, List(_, outFieldType)) = outputField.tpe
+          result <- extract(
+            expr,
+            ConfigEntry.AddField(outFieldPath,
+                                 outFieldType,
+                                 c.Expr(q"_root_.scala.Predef.identity[${pipeType(inType, outFieldType)}]($pipe)")
+            ) :: acc
+          )
+        } yield result
+      // matches {cfg}.renameField(in, out)
+      case Apply(TypeApply(Select(expr, TermName("renameField")), _), List(inputField, outputField)) =>
+        for {
+          inPath <- extractPath(inputField)
+          outPath <- extractPath(outputField)
+          result <- extract(
+            expr,
+            ConfigEntry.RenameField(inPath, inputField.tpe.resultType, outPath, outputField.tpe.resultType) :: acc
+          )
+        } yield result
+      // TODO: removeSubtype
+      // TODO: renameSubtype
+      // matches {cfg}.plugIn(in, out)
+      case Apply(TypeApply(Select(expr, TermName("plugIn")), _), List(inputField, outputField, pipe)) =>
+        for {
+          inFieldPath <- extractPath(inputField)
+          outFieldPath <- extractPath(outputField)
+          TypeRef(_, _, List(_, inFieldType))  = inputField.tpe
+          TypeRef(_, _, List(_, outFieldType)) = outputField.tpe
+          result <- extract(
+            expr,
+            ConfigEntry.PlugInField(
+              inFieldPath,
+              inFieldType,
+              outFieldPath,
+              outFieldType,
+              c.Expr(q"_root_.scala.Predef.identity[${pipeType(inFieldType, outFieldType)}]($pipe)")
+            ) :: acc
+          )
+        } yield result
+      // matches {cfg}.fieldMatchingCaseInsensitive
+      case Select(expr, TermName("fieldMatchingCaseInsensitive")) =>
+        extract(expr, ConfigEntry.FieldCaseInsensitive :: acc)
+      case els =>
+        Left(s"${previewCode(code)} is not a right PipeDerivationConfig")
+    }
+
+    DerivationResult.fromEither(extract(code.tree, Nil))(DerivationError.InvalidConfiguration(_))
+  }
 }

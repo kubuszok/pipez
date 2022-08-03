@@ -28,7 +28,7 @@ trait PipeDerivation[Pipe[_, _]] {
   def lift[In, Out](f: (In, Context) => Result[Out]): Pipe[In, Out]
 
   /** Calls `Pipe` as if it was a function */
-  def unlift[In, Out](pipe: Pipe[In, Out])(in: In, ctx: Context): Result[Out]
+  def unlift[In, Out](pipe: Pipe[In, Out], in: In, ctx: Context): Result[Out]
 
   /** Let you inject int information about current Path (extracted field, matched subtypes) into `Context` */
   def updateContext(context: Context, path: Path): Context
@@ -37,7 +37,7 @@ trait PipeDerivation[Pipe[_, _]] {
   def pureResult[A](a: A): Result[A]
 
   /** Combines 2 `Results` into 1 */
-  def mergeResults[A, B, C](ra: Result[A], rb: => Result[B])(f: (A, B) => C): Result[C]
+  def mergeResults[A, B, C](ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C]
 }
 object PipeDerivation extends PipeDerivationPlatform {
 
@@ -45,6 +45,8 @@ object PipeDerivation extends PipeDerivationPlatform {
     type Context     = Context0
     type Result[Out] = Result0[Out]
   }
+
+  @inline def eta[Pipe[_, _], In, Out](pipe: Pipe[In, Out]): Pipe[In, Out] = pipe
 
   /** Specialization for `Pipe`s which are interchangeable to `In => Result[Out]` */
   trait NoContext[Pipe[_, _]] extends PipeDerivation[Pipe] {
@@ -56,8 +58,8 @@ object PipeDerivation extends PipeDerivationPlatform {
     final def lift[In, Out](f: (In, Context) => Result[Out]): Pipe[In, Out] = simpleLift(in => f(in, ()))
 
     /** Calls `Pipe` as if it was a function without `Context` */
-    def simpleUnlift[In, Out](pipe: Pipe[In, Out])(in: In): Result[Out]
-    final def unlift[In, Out](pipe: Pipe[In, Out])(in: In, ctx: Context): Result[Out] = simpleUnlift(pipe)(in)
+    def simpleUnlift[In, Out](pipe: Pipe[In, Out], in: In): Result[Out]
+    final def unlift[In, Out](pipe: Pipe[In, Out], in: In, ctx: Context): Result[Out] = simpleUnlift(pipe, in)
 
     final def updateContext(context: Context, path: Path): Context = context
   }
@@ -69,9 +71,9 @@ object PipeDerivation extends PipeDerivationPlatform {
 
     final def pureResult[A](a: A): Result[A] = a
 
-    final def mergeResults[A, B, C](ra: Result[A], rb: => Result[B])(f: (A, B) => C): Result[C] = f(ra, rb)
+    final def mergeResults[A, B, C](ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C] = f(ra, rb)
   }
 
-  /** Specialization for `Pipe`s which are interchangeable to `In => Out`` */
+  /** Specialization for `Pipe`s which are interchangeable to `In => Out` */
   trait Simple[Pipe[_, _]] extends NoContext[Pipe] with NoParsing[Pipe]
 }

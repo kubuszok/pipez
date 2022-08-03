@@ -56,8 +56,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       params: List[ListMap[String, ConstructorParam[_]]]
     ) extends ProductOutData {
       override def toString: String = s"CaseClass${params.map { list =>
-        "(" + list.map { case (n, p) => s"$n : ${p.tpe}" }.mkString(", ") + ")"
-      }.mkString}"
+          "(" + list.map { case (n, p) => s"$n : ${p.tpe}" }.mkString(", ") + ")"
+        }.mkString}"
     }
 
     final case class Setter[OutField](
@@ -76,7 +76,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       defaultConstructor: CodeOf[Out],
       setters:            ListMap[String, Setter[_]]
     ) extends ProductOutData {
-      override def toString: String = s"JavaBean(${setters.map { case(n, p) => s"$n : $p" }.mkString(", ")})"
+      override def toString: String = s"JavaBean(${setters.map { case (n, p) => s"$n : $p" }.mkString(", ")})"
     }
   }
 
@@ -109,7 +109,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       import ConfigEntry._
 
       settings.resolve[OutFieldLogic[OutField]](DefaultField()) {
-        case AddField(Field(Root, `outField`), pipe, outFieldType) =>
+        case AddField(Field(Root, `outField`), outFieldType, pipe) =>
           // validate that outType <:< outFieldType is correct
           FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
         case RenameField(Field(Root, inName), inType, Field(Root, `outField`), outType) =>
@@ -147,7 +147,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       caller: Constructor,
       pipes:  List[List[ConstructorParam]]
     ) extends ProductGeneratorData {
-      override def toString: String = s"CaseClass${pipes.map( list =>"(" + list.mkString(", ") + ")").mkString}"
+      override def toString: String = s"CaseClass${pipes.map(list => "(" + list.mkString(", ") + ")").mkString}"
     }
 
     final case class JavaBean() extends ProductGeneratorData // TODO

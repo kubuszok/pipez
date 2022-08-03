@@ -22,12 +22,14 @@ trait Generators[Pipe[_, _], In, Out]
   }
 
   def diagnosticsMessage[A](result: DerivationResult[A]): String =
-    "Macro diagnostics\n" + result.diagnostic.mkString("\n")
+    "Macro diagnostics\n" + result.diagnostic.map(" - " + _.toString).mkString("\n")
 
   def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
     .map {
       case DerivationError.MissingPublicConstructor =>
         s"$outType is missing a public constructor that could be used to initiate its value"
+      case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
+        s"Couldn't find implicit of type ${pipeType(inFieldType, outFieldType)}"
       case DerivationError.MissingPublicSource(outFieldName) =>
         s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
       case DerivationError.NotSupportedConversion(inField, inFieldType, outField, outFieldType) =>

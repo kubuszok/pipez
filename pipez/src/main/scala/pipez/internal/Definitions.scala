@@ -13,6 +13,7 @@ trait Definitions[Pipe[_, _], In, Out] {
   type Argument[A]
   type CodeOf[A]
 
+  def pipeType[I, O](i: Type[I], o: Type[O]): Type[Pipe[I, O]]
   val inType:  Type[In]
   val outType: Type[Out]
 
@@ -81,6 +82,8 @@ trait Definitions[Pipe[_, _], In, Out] {
     def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
       (a, entry) => overrideWhen.applyOrElse[ConfigEntry, A](entry, _ => a)
     }
+
+    override def toString: String = s"Settings(${entries.mkString(", ")})"
   }
 
   sealed trait DerivationError extends Product with Serializable
@@ -92,11 +95,16 @@ trait Definitions[Pipe[_, _], In, Out] {
       outFieldName: String
     ) extends DerivationError
 
+    final case class RequiredImplicitNotFound[I, O](
+      inFieldType:  Type[I],
+      outFieldType: Type[O]
+    ) extends DerivationError
+
     final case class NotSupportedConversion[I, O](
-      inField:  String,
-      inType:   Type[I],
-      outField: String,
-      outType:  Type[O]
+      inField:      String,
+      inFieldType:  Type[I],
+      outField:     String,
+      outFieldType: Type[O]
     ) extends DerivationError
 
     case object NotYetSupported extends DerivationError
@@ -180,6 +188,8 @@ trait Definitions[Pipe[_, _], In, Out] {
       opt.fold[DerivationResult[A]](fail(err))(pure)
   }
 
+  def previewCode[A](code: CodeOf[A]): String
+
   def summonPipe[InField, OutField](
     inType:  Type[InField],
     outType: Type[OutField]
@@ -195,4 +205,7 @@ trait Definitions[Pipe[_, _], In, Out] {
     code
       .fold(DerivationResult.pure(new Settings(ConfigEntry.EnableDiagnostics :: Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
+      .log(s"Pipeline from $inType to $outType")
+      .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")
+      .logSuccess(config => s"Configuration used: ${config}")
 }

@@ -38,13 +38,13 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             member.name.toString -> ProductInData.Getter[Any](
               name = member.name.toString, // TODO
               tpe = member.asMethod.returnType,
-              caller = (arg: Argument[In]) => c.Expr[Any](q"$arg.${member.asMethod.name.toTermName}")
+              get = (arg: Argument[In]) => c.Expr[Any](q"$arg.${member.asMethod.name.toTermName}")
             )
         }
         .to(ListMap)
         .pipe(ProductInData(_))
         .pipe(DerivationResult.pure)
-        .logSuccess(data => s"Input getters: $data")
+        .logSuccess(data => s"Resolved inputs: $data")
 
     override def extractOutData(settings: Settings): DerivationResult[ProductOutData] =
       if (isJavaBean(outType)) {
@@ -66,7 +66,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
                 param.name.toString -> ProductOutData.Setter(
                   name = param.name.toString,
                   tpe = param.typeSignature,
-                  caller = (_: Argument[In], _: CodeOf[Any]) => c.Expr[Unit](q"()")
+                  set = (_: Argument[In], _: CodeOf[Any]) => c.Expr[Unit](q"()")
                 )
               }
           }
@@ -74,7 +74,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .to(ListMap)
           .pipe(DerivationResult.pure(_))
 
-        defaultConstructor.map2(setters)(ProductOutData.JavaBean(_, _)).logSuccess(data => s"Output setters: $data")
+        defaultConstructor.map2(setters)(ProductOutData.JavaBean(_, _)).logSuccess(data => s"Resolved Java Bean output: $data")
       } else {
         // case class case
 
@@ -98,7 +98,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           }
           .get
           .pipe(DerivationResult.pure(_))
-          .logSuccess(data => s"Output params: $data")
+          .logSuccess(data => s"Resolved case class output: $data")
       }
 
     override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
@@ -147,7 +147,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             val right = c.freshName(TermName("right"))
             val fun = c.Expr[(Array[Any], Any) => Out](
               q"""
-                (${Ident(left)}, ${Ident(right)}) => {
+                (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe}) => {
                   $left($idx) = $right
                   ${constructor(constructorParams(left))}
                 }
@@ -164,7 +164,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             val right = c.freshName(TermName("right"))
             val fun = c.Expr[(Array[Any], Any) => Array[Any]](
               q"""
-                (${Ident(left)}, ${Ident(right)}) => {
+                (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe}) => {
                   $left($idx) = $right
                   $left
                 }
@@ -186,8 +186,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
            """)
           )
         )
-        .log(s"Derivation so far: params=$outputParameterLists, pipe=$pipeDerivation")
-        .logSuccess(code => s"Generated code: ${showCode(code.tree)}")
+        .log(s"Case class derivation, constructor params: $outputParameterLists")
+        .logSuccess(code => s"Generated code: ${previewCode(code)}")
     }
 
     private def generateJavaBean() = {
@@ -201,7 +201,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
                """)
           )
         )
-        .log(s"Derivation so far: pipe=$pipeDerivation")
+        .log(s"Java Bean output derivation")
+        .logSuccess(code => s"Generated code: ${previewCode(code)}")
     }
   }
 }

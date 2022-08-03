@@ -22,8 +22,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
     inType:  Type[InField],
     outType: Type[OutField]
   ): DerivationResult[CodeOf[Pipe[InField, OutField]]] =
-    DerivationResult.fail(DerivationError.NotYetSupported)
+    DerivationResult.fail(DerivationError.NotYetImplemented("summonPipe macro"))
 
   final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
-    DerivationResult.fail(DerivationError.NotYetSupported)
+    DerivationResult.fail(DerivationError.NotYetImplemented("readConfig macro"))
 }

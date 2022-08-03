@@ -97,7 +97,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
     override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = {
       println(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")
-      DerivationResult.fail(DerivationError.NotYetSupported)
+      DerivationResult.fail(DerivationError.NotYetImplemented("Actual code generation"))
     }
   }
 }

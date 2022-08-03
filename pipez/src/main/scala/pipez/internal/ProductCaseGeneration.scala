@@ -170,7 +170,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
         case ProductOutData.JavaBean(defaultConstructor, setters) =>
           // TODO
-          DerivationResult.fail(DerivationError.NotYetSupported)
+          DerivationResult.fail(DerivationError.NotYetImplemented("JavaBean output"))
       }
 
     private def assignConstructorParamPipe(

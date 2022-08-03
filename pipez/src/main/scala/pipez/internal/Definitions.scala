@@ -96,6 +96,8 @@ trait Definitions[Pipe[_, _], In, Out] {
     ) extends DerivationError
 
     case object NotYetSupported extends DerivationError
+
+    final case class NotYetImplemented(msg: String) extends DerivationError
   }
 
   sealed trait DerivationResult[+A] extends Product with Serializable {

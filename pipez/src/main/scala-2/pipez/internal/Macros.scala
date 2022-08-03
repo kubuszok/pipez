@@ -4,6 +4,7 @@ import pipez.{ PipeDerivation, PipeDerivationConfig }
 
 import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
+import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 final class Macros[Pipe[_, _], In, Out](val c: blackbox.Context)(
@@ -21,6 +22,12 @@ final class Macros[Pipe[_, _], In, Out](val c: blackbox.Context)(
   val pipeDerivation: CodeOf[PipeDerivation[Pipe]] = pd.asInstanceOf[CodeOf[PipeDerivation[Pipe]]]
 
   import c.universe._
+
+  private def reportDiagnostics[A](result: DerivationResult[A]): Unit = {
+    val msg = "Macro diagnostics\n" + result.diagnostic.mkString("\n")
+
+    c.echo(c.enclosingPosition, msg)
+  }
 
   private def reportError(errors: List[DerivationError]): Nothing = {
     val msg = "Pipe couldn't be generated due to errors:\n" + errors
@@ -44,17 +51,8 @@ final class Macros[Pipe[_, _], In, Out](val c: blackbox.Context)(
 
   def derive(
     configurationCode: Option[c.Expr[PipeDerivationConfig[Pipe, In, Out]]]
-  )(implicit In:       WeakTypeTag[In], Out: WeakTypeTag[Out]): c.Expr[Pipe[In, Out]] = {
-    val result = for {
-      settings <- readSettingsIfGiven(configurationCode)
-      expr <- resolveConversion(settings)
-    } yield expr
-
-    println("Macro diagnostics")
-    println(result.diagnostic.mkString("\n"))
-
-    result.fold(identity)(reportError)
-  }
+  )(implicit In:       WeakTypeTag[In], Out: WeakTypeTag[Out]): c.Expr[Pipe[In, Out]] =
+    readSettingsIfGiven(configurationCode).flatMap(resolveConversion).tap(reportDiagnostics).fold(identity)(reportError)
 }
 
 final class MacroDispatcher(val c: blackbox.Context) {

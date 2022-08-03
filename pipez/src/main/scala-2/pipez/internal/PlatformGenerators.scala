@@ -9,13 +9,27 @@ trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] 
 
   final def lift[I, O](
     call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
-  ): CodeOf[Pipe[I, O]] = c.Expr[Pipe[I, O]](q"""$pipeDerivation.lift($call)""")
+  ): CodeOf[Pipe[I, O]] =
+    try
+      c.Expr[Pipe[I, O]](q"""$pipeDerivation.lift($call)""")
+    catch {
+      case e: Throwable =>
+        println("Call: " + previewCode(call))
+        throw e
+    }
 
   final def unlift[I, O](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
     ctx:  Argument[ArbitraryContext]
-  ): CodeOf[ArbitraryResult[O]] = c.Expr[ArbitraryResult[O]](q"""$pipeDerivation.unlift($pipe)($in, $ctx)""")
+  ): CodeOf[ArbitraryResult[O]] =
+    try
+      c.Expr[ArbitraryResult[O]](q"""$pipeDerivation.unlift($pipe, $in, $ctx)""")
+    catch {
+      case e: Throwable =>
+        println("Pipe: " + previewCode(pipe))
+        throw e
+    }
 
   final def updateContext(
     ctx:  Argument[ArbitraryContext],
@@ -29,5 +43,5 @@ trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] 
     ra: CodeOf[ArbitraryResult[A]],
     rb: CodeOf[ArbitraryResult[B]],
     f:  CodeOf[(A, B) => C]
-  ): CodeOf[ArbitraryResult[C]] = c.Expr[ArbitraryResult[C]](q"""$pipeDerivation.mergeResults($ra, $rb)($f)""")
+  ): CodeOf[ArbitraryResult[C]] = c.Expr[ArbitraryResult[C]](q"""$pipeDerivation.mergeResults($ra, $rb, $f)""")
 }

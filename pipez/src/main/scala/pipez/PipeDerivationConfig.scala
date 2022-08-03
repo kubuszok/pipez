@@ -3,6 +3,8 @@ package pipez
 // phantom type
 sealed trait PipeDerivationConfig[Pipe[_, _], In, Out] {
 
+  final def enableDiagnostics: this.type = this
+
   final def addField[OutField](outputField: Out => OutField, pipe: Pipe[In, OutField]): this.type = this
 
   final def renameField[InField, OutField](inputField: In => InField, outputField: Out => OutField): this.type = this

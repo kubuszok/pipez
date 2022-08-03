@@ -36,6 +36,8 @@ trait Generators[Pipe[_, _], In, Out]
         s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
       case DerivationError.NotYetSupported =>
         s"Your setup is valid, but the library doesn't support it yet; if you think it's a bug contact library authors"
+      case DerivationError.InvalidConfiguration(msg) =>
+        s"The configuration you provided was incorrect: $msg"
       case DerivationError.NotYetImplemented(msg) =>
         s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
     }

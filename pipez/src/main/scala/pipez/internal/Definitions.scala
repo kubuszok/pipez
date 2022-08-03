@@ -109,6 +109,8 @@ trait Definitions[Pipe[_, _], In, Out] {
 
     case object NotYetSupported extends DerivationError
 
+    final case class InvalidConfiguration(msg: String) extends DerivationError
+
     final case class NotYetImplemented(msg: String) extends DerivationError
   }
 
@@ -177,6 +179,13 @@ trait Definitions[Pipe[_, _], In, Out] {
     def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error), Vector.empty)
     def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors, Vector.empty)
 
+    def unsafe[A](thunk: => A)(error: Throwable => DerivationError): DerivationResult[A] =
+      try {
+        pure(thunk)
+      } catch {
+        case e: Throwable => fail(error(e))
+      }
+
     def sequence[A, Coll[A0] <: Seq[A0]](
       seq: Coll[DerivationResult[A]]
     )(implicit
@@ -186,6 +195,8 @@ trait Definitions[Pipe[_, _], In, Out] {
 
     def fromOption[A](opt: Option[A])(err: => DerivationError): DerivationResult[A] =
       opt.fold[DerivationResult[A]](fail(err))(pure)
+    def fromEither[E, A](either: Either[E, A])(err: E => DerivationError): DerivationResult[A] =
+      either.fold(e => fail(err(e)), pure)
   }
 
   def previewCode[A](code: CodeOf[A]): String
@@ -203,7 +214,7 @@ trait Definitions[Pipe[_, _], In, Out] {
     code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]
   ): DerivationResult[Settings] =
     code
-      .fold(DerivationResult.pure(new Settings(ConfigEntry.EnableDiagnostics :: Nil)))(readConfig)
+      .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
       .log(s"Pipeline from $inType to $outType")
       .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")

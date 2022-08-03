@@ -74,7 +74,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .to(ListMap)
           .pipe(DerivationResult.pure(_))
 
-        defaultConstructor.map2(setters)(ProductOutData.JavaBean(_, _)).logSuccess(data => s"Resolved Java Bean output: $data")
+        defaultConstructor
+          .map2(setters)(ProductOutData.JavaBean(_, _))
+          .logSuccess(data => s"Resolved Java Bean output: $data")
       } else {
         // case class case
 
@@ -147,10 +149,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             val right = c.freshName(TermName("right"))
             val fun = c.Expr[(Array[Any], Any) => Out](
               q"""
-                (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe}) => {
-                  $left($idx) = $right
-                  ${constructor(constructorParams(left))}
-                }
+               (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe.typeSymbol}) => {
+                 $left($idx) = $right
+                 ${constructor(constructorParams(left))}
+               }
                """
             )
 
@@ -164,7 +166,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             val right = c.freshName(TermName("right"))
             val fun = c.Expr[(Array[Any], Any) => Array[Any]](
               q"""
-                (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe}) => {
+                (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe.typeSymbol}) => {
                   $left($idx) = $right
                   $left
                 }
@@ -182,8 +184,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .pure(
           lift[In, Out](
             c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](q"""
-            (${Ident(in)}: $inType, ${Ident(ctx)}: ${pipeDerivation}.Context) => $body
-           """)
+            (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : ${pipeDerivation}.Context) => $body
+            """)
           )
         )
         .log(s"Case class derivation, constructor params: $outputParameterLists")
@@ -197,8 +199,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .pure(
           lift[In, Out](
             c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](q"""
-                (${Ident(in)}: $inType, ${Ident(ctx)}: ${pipeDerivation}.Context) => ???
-               """)
+            (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : ${pipeDerivation}.Context) => ???
+            """)
           )
         )
         .log(s"Java Bean output derivation")

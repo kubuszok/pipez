@@ -27,17 +27,17 @@ trait Generators[Pipe[_, _], In, Out]
   /** Can be used instead of pd.Context to avoid path-dependent types */
   type ArbitraryResult[Out]
 
+  /** Should generate code `pd.lift { (in, ctx) => ... }` */
+  def lift[I, O](
+    call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
+  ): CodeOf[Pipe[I, O]]
+
   /** Should generate code `pd.unlift(pipe)(in, ctx)` */
   def unlift[I, O](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
     ctx:  Argument[ArbitraryContext]
   ): CodeOf[ArbitraryResult[O]]
-
-  /** Should generate code `pd.lift { (in, ctx) => ... }` */
-  def lift[I, O](
-    call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
-  ): CodeOf[Pipe[I, O]]
 
   /** Should generate code `pd.updateContext(ctx, path)` */
   def updateContext(

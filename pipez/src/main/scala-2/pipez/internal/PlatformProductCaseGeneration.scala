@@ -2,9 +2,13 @@ package pipez.internal
 
 import pipez.PipeDerivation
 
+import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
 import scala.util.chaining._
 
+import scala.language.existentials
+
+@nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] with PlatformGenerators[Pipe, In, Out] =>
 
@@ -78,26 +82,126 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           .to(List)
           .collectFirst {
             case member if member.isPublic && member.isConstructor =>
-              member.asMethod.paramLists.map { params =>
-                params
-                  .map { param =>
-                    param.name.toString -> ProductOutData.ConstructorParam(
-                      name = param.name.toString,
-                      tpe = param.typeSignature
-                    )
-                  }
-                  .to(ListMap)
-              }
+              ProductOutData.CaseClass(
+                params => c.Expr(q"new $outType(...$params)"),
+                member.asMethod.paramLists.map { params =>
+                  params
+                    .map { param =>
+                      param.name.toString -> ProductOutData.ConstructorParam(
+                        name = param.name.toString,
+                        tpe = param.typeSignature
+                      )
+                    }
+                    .to(ListMap)
+                }
+              )
           }
           .get
-          .pipe(ProductOutData.CaseClass(_))
           .pipe(DerivationResult.pure(_))
           .logSuccess(data => s"Output params: $data")
       }
 
     override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
+      generatorData match {
+        case ProductGeneratorData.CaseClass(caller, pipes) => generateCaseClass(caller, pipes)
+        case ProductGeneratorData.JavaBean()               => generateJavaBean()
+      }
+
+    private def generateCaseClass(
+      constructor:          Constructor,
+      outputParameterLists: List[List[ProductGeneratorData.ConstructorParam]]
+    ) = {
+      val in:  Argument[In]               = c.freshName(TermName("in"))
+      val ctx: Argument[ArbitraryContext] = c.freshName(TermName("ctx"))
+
+      val paramToIdx: Map[ProductGeneratorData.ConstructorParam.Result[_], Constant] = outputParameterLists.flatten
+        .collect { case result: ProductGeneratorData.ConstructorParam.Result[_] => result }
+        .zipWithIndex
+        .map { case (result, idx) => result -> Constant(idx) }
+        .toMap
+
+      def constructorParams(arr: TermName): List[List[CodeOf[_]]] = outputParameterLists.map(
+        _.map {
+          case ProductGeneratorData.ConstructorParam.Pure(tpe, caller) =>
+            caller(in, ctx)
+          case r @ ProductGeneratorData.ConstructorParam.Result(tpe, caller) =>
+            c.Expr(q"""$arr(${paramToIdx(r)}).asInstanceOf[$tpe]""")
+        }
+      )
+
+      @scala.annotation.tailrec
+      def generateBody(
+        arr:    CodeOf[ArbitraryResult[Array[Any]]],
+        params: List[(ProductGeneratorData.ConstructorParam.Result[_], Constant)]
+      ): CodeOf[ArbitraryResult[Out]] =
+        params match {
+          // all values are taken directly from input and wrapped in Result
+          case Nil =>
+            pureResult(constructor(constructorParams(TermName("notused"))))
+
+          // last param - after adding the last value to array we extract all values from it into constructor
+          case (param, idx) :: Nil =>
+            val rightCode = param.caller(in, ctx)
+
+            val left  = c.freshName(TermName("left"))
+            val right = c.freshName(TermName("right"))
+            val fun = c.Expr[(Array[Any], Any) => Out](
+              q"""
+                (${Ident(left)}, ${Ident(right)}) => {
+                  $left($idx) = $right
+                  ${constructor(constructorParams(left))}
+                }
+               """
+            )
+
+            mergeResults(arr, rightCode, fun)
+
+          // we combine Array's Result with a param's Result, store param in array and iterate further
+          case (param, idx) :: tail =>
+            val rightCode = param.caller(in, ctx)
+
+            val left  = c.freshName(TermName("left"))
+            val right = c.freshName(TermName("right"))
+            val fun = c.Expr[(Array[Any], Any) => Array[Any]](
+              q"""
+                (${Ident(left)}, ${Ident(right)}) => {
+                  $left($idx) = $right
+                  $left
+                }
+               """
+            )
+
+            generateBody(mergeResults(arr, rightCode, fun), tail)
+        }
+
+      val arrSize = Constant(paramToIdx.size)
+      val body: c.universe.Expr[ArbitraryResult[Out]] =
+        generateBody(pureResult(c.Expr(q"scala.Array[scala.Any]($arrSize)")), paramToIdx.toList)
+
       DerivationResult
-        .fail(DerivationError.NotYetImplemented("Actual code generation"))
-        .log(s"Derivation so far: data=$generatorData, pipe=$pipeDerivation")
+        .pure(
+          lift[In, Out](
+            c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](q"""
+            (${Ident(in)}: $inType, ${Ident(ctx)}: ${pipeDerivation}.Context) => $body
+           """)
+          )
+        )
+        .log(s"Derivation so far: params=$outputParameterLists, pipe=$pipeDerivation")
+        .logSuccess(code => s"Generated code: ${showCode(code.tree)}")
+    }
+
+    private def generateJavaBean() = {
+      val in:  Argument[In]               = c.freshName(TermName("in"))
+      val ctx: Argument[ArbitraryContext] = c.freshName(TermName("ctx"))
+      DerivationResult
+        .pure(
+          lift[In, Out](
+            c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](q"""
+                (${Ident(in)}: $inType, ${Ident(ctx)}: ${pipeDerivation}.Context) => ???
+               """)
+          )
+        )
+        .log(s"Derivation so far: pipe=$pipeDerivation")
+    }
   }
 }

@@ -12,9 +12,15 @@ class CodecDerivation extends munit.FunSuite {
   case class FooOut(a: Int)
 
   test("simple derivation") {
-    assertEquals(
-      PipeDerivation.derive[NoContextCodec, FooIn, FooOut].decode(FooIn(1)),
-      Right(FooOut(1))
-    )
+    // given
+    val input = FooIn(1)
+
+    // when
+    val derived = PipeDerivation.derive[NoContextCodec, FooIn, FooOut]
+    val result = derived.decode(input)
+
+    // then
+    val expected = Right(FooOut(1))
+    assertEquals(result, expected)
   }
 }

@@ -32,6 +32,8 @@ trait Definitions[Pipe[_, _], In, Out] {
   sealed trait ConfigEntry extends Product with Serializable
   object ConfigEntry {
 
+    case object EnableDiagnostics extends ConfigEntry
+
     final case class AddField[OutField](
       outputField:  Path,
       outFieldType: Type[OutField],
@@ -71,6 +73,8 @@ trait Definitions[Pipe[_, _], In, Out] {
 
     import Path._
     import ConfigEntry._
+
+    lazy val isDiagnosticsEnabled: Boolean = entries.contains(EnableDiagnostics)
 
     lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
 
@@ -189,6 +193,6 @@ trait Definitions[Pipe[_, _], In, Out] {
     code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]
   ): DerivationResult[Settings] =
     code
-      .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
+      .fold(DerivationResult.pure(new Settings(ConfigEntry.EnableDiagnostics :: Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
 }

@@ -1,0 +1,36 @@
+# TODO
+
+ - [ ] Scala 2
+   - [ ] diagnostics - Scala 2
+   - [ ] config parsing
+   - [ ] products - Scala 2
+     - [ ] case class -> case class
+     - [ ] case class -> java beans
+     - [ ] java beans -> case class
+     - [ ] java beans -> java beans
+     - [ ] fields modifications
+     - [ ] context update
+   - [ ] sum types
+     - [ ] ADT -> ADT
+     - [ ] ADT -> enum (java, enumeration?)
+     - [ ] enum -> ADT
+     - [ ] enum -> enum
+     - [ ] subtypes modifications
+     - [ ] context update
+ - [ ] Scala 3
+   - [ ] diagnostics - Scala 2
+   - [ ] config parsing
+   - [ ] products - Scala 2
+     - [ ] case class -> case class
+     - [ ] case class -> java beans
+     - [ ] java beans -> case class
+     - [ ] java beans -> java beans
+     - [ ] fields modifications
+     - [ ] context update
+   - [ ] sum types
+     - [ ] ADT -> ADT
+     - [ ] ADT -> enum (java, enumeration?)
+     - [ ] enum -> ADT
+     - [ ] enum -> enum
+     - [ ] subtypes modifications
+     - [ ] context update

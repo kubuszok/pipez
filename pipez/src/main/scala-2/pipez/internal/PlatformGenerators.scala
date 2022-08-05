@@ -7,6 +7,11 @@ trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] 
 
   import c.universe._
 
+  def reportDiagnostics[A](result: DerivationResult[A]): Unit =
+    c.echo(c.enclosingPosition, diagnosticsMessage(result))
+
+  def reportError(errors: List[DerivationError]): Nothing = c.abort(c.enclosingPosition, errorMessage(errors))
+
   final def lift[I, O](
     call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
   ): CodeOf[Pipe[I, O]] =

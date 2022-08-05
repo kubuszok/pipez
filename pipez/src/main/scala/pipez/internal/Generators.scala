@@ -1,8 +1,9 @@
 package pipez.internal
 
-import pipez.PipeDerivation
+import pipez.{PipeDerivation, PipeDerivationConfig}
 
 import scala.annotation.nowarn
+import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait Generators[Pipe[_, _], In, Out]
@@ -24,6 +25,9 @@ trait Generators[Pipe[_, _], In, Out]
   final def diagnosticsMessage[A](result: DerivationResult[A]): String =
     "Macro diagnostics\n" + result.diagnostic.map(" - " + _.toString).mkString("\n")
 
+  /** Should use platform-specific way of reporting information from macro */
+  def reportDiagnostics[A](result: DerivationResult[A]): Unit
+
   final def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
     .map {
       case DerivationError.MissingPublicConstructor =>
@@ -43,6 +47,9 @@ trait Generators[Pipe[_, _], In, Out]
     }
     .map(" - " + _)
     .mkString("\n")
+
+  /** Should use platform-specific way of reporting errors from macro */
+  def reportError(errors: List[DerivationError]): Nothing
 
   /** Can be used instead of pd.Context to avoid path-dependent types */
   type ArbitraryContext
@@ -77,4 +84,32 @@ trait Generators[Pipe[_, _], In, Out]
     rb: CodeOf[ArbitraryResult[B]],
     f:  CodeOf[(A, B) => C]
   ): CodeOf[ArbitraryResult[C]]
+
+  final def derive(configurationCode: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): CodeOf[Pipe[In, Out]] = {
+    var isDiagnosticsEnabled = false
+    readSettingsIfGiven(configurationCode)
+      .flatMap { config =>
+        isDiagnosticsEnabled = config.isDiagnosticsEnabled
+        lazy val startTime = java.time.Instant.now()
+        if (isDiagnosticsEnabled) {
+          startTime.hashCode
+        }
+        val result = resolveConversion(config)
+        if (isDiagnosticsEnabled) {
+          val stopTime = java.time.Instant.now()
+          val duration = java.time.Duration.between(startTime, stopTime)
+          result.log(f"Derivation took ${duration.getSeconds}%d.${duration.getNano}%09d s")
+        } else result
+      }
+      .tap { result =>
+        if (isDiagnosticsEnabled) {
+          reportDiagnostics(result)
+        }
+      }
+      .fold(identity)(reportError)
+  }
+
+  final def deriveDefault: CodeOf[Pipe[In, Out]] = derive(None)
+
+  final def deriveConfigured(configurationCode: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): CodeOf[Pipe[In, Out]] = derive(Some(configurationCode))
 }

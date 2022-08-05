@@ -14,17 +14,17 @@ trait Generators[Pipe[_, _], In, Out]
     def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]]
   }
 
-  val resolveConversion: Settings => DerivationResult[CodeOf[Pipe[In, Out]]] = {
+  final val resolveConversion: Settings => DerivationResult[CodeOf[Pipe[In, Out]]] = {
     case ProductTypeConversion(generator) => generator
     case SumTypeConversion(generator)     => generator
     case _ =>
       DerivationResult.fail(DerivationError.NotYetSupported) // TODO: better error message
   }
 
-  def diagnosticsMessage[A](result: DerivationResult[A]): String =
+  final def diagnosticsMessage[A](result: DerivationResult[A]): String =
     "Macro diagnostics\n" + result.diagnostic.map(" - " + _.toString).mkString("\n")
 
-  def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
+  final def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
     .map {
       case DerivationError.MissingPublicConstructor =>
         s"$outType is missing a public constructor that could be used to initiate its value"

@@ -21,16 +21,20 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   type Constructor = List[List[CodeOf[_]]] => CodeOf[Out]
 
-  final case class ProductInData(getters: ListMap[String, ProductInData.Getter[_]], caseSensitiveSearch: Boolean) {
+  final case class ProductInData(getters: ListMap[String, ProductInData.Getter[_]]) {
 
-    def findGetter(inParamName: String, outParamName: String): DerivationResult[ProductInData.Getter[_]] =
-      if (caseSensitiveSearch)
+    def findGetter(
+      inParamName:           String,
+      outParamName:          String,
+      caseInsensitiveSearch: Boolean
+    ): DerivationResult[ProductInData.Getter[_]] =
+      if (caseInsensitiveSearch)
         DerivationResult.fromOption(getters.collectFirst {
-          case (_, getter) if getter.names.contains(inParamName) => getter
+          case (_, getter) if getter.names.exists(name => name.equalsIgnoreCase(inParamName)) => getter
         })(DerivationError.MissingPublicSource(outParamName))
       else
         DerivationResult.fromOption(getters.collectFirst {
-          case (_, getter) if getter.names.exists(name => name.equalsIgnoreCase(inParamName)) => getter
+          case (_, getter) if getter.names.contains(inParamName) => getter
         })(DerivationError.MissingPublicSource(outParamName))
   }
   object ProductInData {
@@ -213,7 +217,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             // if inField (same name as out) not found then error
             // else if inField <:< outField then (in, ctx) => in : OutField
             // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, ctx) : Result[OutField]
-            inData.findGetter(outParamName, outParamName).flatMap(fromFieldConstructorParam(_, outParamType))
+            inData.findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive).flatMap(fromFieldConstructorParam(_, outParamType))
           case OutFieldLogic.FieldAdded(pipe) =>
             // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
             DerivationResult.pure(fieldAddedConstructorParam(pipe, outParamType))
@@ -221,12 +225,12 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             // if inField (name provided) not found then error
             // else if inField <:< outField then (in, ctx) => in : OutField
             // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, ctx) : Result[OutField]
-            inData.findGetter(inFieldName, outParamName).flatMap(fromFieldConstructorParam(_, outParamType))
+            inData.findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive).flatMap(fromFieldConstructorParam(_, outParamType))
           case OutFieldLogic.PipeProvided(inFieldName, inFieldType, pipe) =>
             // if inField (name provided) not found then error
             // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
             inData
-              .findGetter(inFieldName, outParamName)
+              .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
               .map(g => pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]], pipe, outParamType))
         }
     }

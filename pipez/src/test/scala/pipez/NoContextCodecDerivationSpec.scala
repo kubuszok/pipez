@@ -138,4 +138,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   // TODO: java bean -> case class, all above
+
+  // TODO: test conversion for types with type parameters
 }

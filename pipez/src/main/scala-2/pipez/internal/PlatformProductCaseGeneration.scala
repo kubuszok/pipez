@@ -42,7 +42,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             )
         }
         .to(ListMap)
-        .pipe(ProductInData(_, !settings.isFieldCaseInsensitive))
+        .pipe(ProductInData(_))
         .pipe(DerivationResult.pure)
         .logSuccess(data => s"Resolved inputs: $data")
 
@@ -183,9 +183,11 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       DerivationResult
         .pure(
           lift[In, Out](
-            c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](q"""
+            c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](
+              q"""
             (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : ${pipeDerivation}.Context) => $body
-            """)
+            """
+            )
           )
         )
         .log(s"Case class derivation, constructor params: $outputParameterLists")
@@ -198,9 +200,11 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       DerivationResult
         .pure(
           lift[In, Out](
-            c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](q"""
+            c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](
+              q"""
             (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : ${pipeDerivation}.Context) => ???
-            """)
+            """
+            )
           )
         )
         .log(s"Java Bean output derivation")

@@ -1,14 +1,14 @@
 # TODO
 
  - [ ] Scala 2
-   - [ ] diagnostics - Scala 2
+   - [X] diagnostics - Scala 2
    - [ ] config parsing
    - [ ] products - Scala 2
-     - [ ] case class -> case class
+     - [X] case class -> case class
      - [ ] case class -> java beans
      - [ ] java beans -> case class
      - [ ] java beans -> java beans
-     - [ ] fields modifications
+     - [X] fields modifications
      - [ ] context update
    - [ ] sum types
      - [ ] ADT -> ADT

@@ -6,10 +6,13 @@ val pipez = project
   .settings(
     name := "pipez",
     scalaVersion := scala2version,
-    scalacOptions ++= Seq(
-      "-feature",
-    ),
     crossScalaVersions := Seq(scala2version, scala3version),
+    scalacOptions ++= {
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, 13)) => Seq("-deprecation", "-feature", "-Xsource:3")
+        case _             => Seq.empty
+      }
+    },
     libraryDependencies ++= {
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, 13)) => Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value)

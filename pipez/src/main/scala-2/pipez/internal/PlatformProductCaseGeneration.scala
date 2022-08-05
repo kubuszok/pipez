@@ -31,11 +31,16 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     inType.members // we fetch ALL members, even those that might have been inherited
       .to(List)
       .collect {
-        case member if member.isMethod && member.asMethod.isGetter =>
+        case member
+            if member.isMethod && (member.asMethod.isGetter || member.name.toString.startsWith(
+              "is"
+            ) || member.name.toString.startsWith("get")) =>
           member.name.toString -> ProductInData.Getter[Any](
-            name = member.name.toString, // TODO
+            name = member.name.toString,
             tpe = member.asMethod.returnType,
-            get = (arg: Argument[In]) => c.Expr[Any](q"$arg.${member.asMethod.name.toTermName}")
+            get =
+              if (member.asMethod.paramLists.isEmpty) (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
+              else (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()")
           )
       }
       .to(ListMap)
@@ -49,7 +54,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       val defaultConstructor = outType.decls.collectFirst {
         case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
-          c.Expr[Out](q"new ${outType}()")
+          c.Expr[Out](q"new ${outType.typeSymbol}()")
       } match {
         case Some(value) => DerivationResult.pure(value)
         case None        => DerivationResult.fail(DerivationError.MissingPublicConstructor)
@@ -58,16 +63,17 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       val setters = outType.decls
         .to(List)
         .collect {
-          case member if member.isPublic && member.isMethod && member.asMethod.isSetter =>
-            member.asMethod.paramLists.flatten.map { param =>
-              param.name.toString -> ProductOutData.Setter(
-                name = param.name.toString,
-                tpe = param.typeSignature,
-                set = (_: Argument[In], _: CodeOf[Any]) => c.Expr[Unit](q"()")
-              )
-            }
+          case member
+              if member.isPublic && member.isMethod && member.name.toString.startsWith(
+                "set"
+              ) && member.asMethod.paramLists.flatten.size == 1 =>
+            member.name.toString -> ProductOutData.Setter(
+              name = member.name.toString,
+              tpe = member.asMethod.paramLists.flatten.head.typeSignature,
+              set = (out: Argument[Out], value: CodeOf[Any]) =>
+                c.Expr[Unit](q"$out.${member.asMethod.name.toTermName}($value)")
+            )
         }
-        .flatten
         .to(ListMap)
         .pipe(DerivationResult.pure(_))
 

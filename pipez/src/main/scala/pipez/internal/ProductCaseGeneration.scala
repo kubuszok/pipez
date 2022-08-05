@@ -1,11 +1,11 @@
 package pipez.internal
 
 import pipez.PipeDerivation
-import pipez.internal.ProductCaseGeneration.dropGetIs
+import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
-import scala.util.chaining._
+import scala.util.chaining.*
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] with Generators[Pipe, In, Out] =>
@@ -28,14 +28,11 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       outParamName:          String,
       caseInsensitiveSearch: Boolean
     ): DerivationResult[ProductInData.Getter[_]] =
-      if (caseInsensitiveSearch)
-        DerivationResult.fromOption(getters.collectFirst {
-          case (_, getter) if getter.names.exists(name => name.equalsIgnoreCase(inParamName)) => getter
-        })(DerivationError.MissingPublicSource(outParamName))
-      else
-        DerivationResult.fromOption(getters.collectFirst {
-          case (_, getter) if getter.names.contains(inParamName) => getter
-        })(DerivationError.MissingPublicSource(outParamName))
+      DerivationResult.fromOption(
+        getters.collectFirst {
+          case (_, getter) if inputNameMatchesOutputName(getter.name, inParamName, caseInsensitiveSearch) => getter
+        }
+      )(DerivationError.MissingPublicSource(outParamName))
   }
   object ProductInData {
 
@@ -44,10 +41,6 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       tpe:  Type[InField],
       get:  Argument[In] => CodeOf[InField]
     ) {
-
-      lazy val nonJavaBeanName: String = ProductCaseGeneration.dropGetIs(name)
-
-      lazy val names: Set[String] = Set(name, nonJavaBeanName)
 
       override def toString: String = s"Getter($name : $tpe)"
     }
@@ -74,10 +67,6 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       tpe:  Type[OutField],
       set:  (Argument[Out], CodeOf[OutField]) => CodeOf[Unit]
     ) {
-
-      lazy val nonJavaBeanName: String = ProductCaseGeneration.dropSet(name)
-
-      lazy val names: Set[String] = Set(name, nonJavaBeanName)
 
       override def toString: String = s"Setter($name : $tpe)"
     }
@@ -111,20 +100,25 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
     def resolve[OutField](
       settings:     Settings,
-      outField:     String,
+      outFieldName: String,
       outFieldType: Type[OutField]
     ): OutFieldLogic[OutField] = {
       import Path._
       import ConfigEntry._
 
+      // outFieldName matches what we found as setter/constructor param
+      // outFieldGetter in matter matching, what we got from config - user might have used JavaBeans' getter!
       settings.resolve[OutFieldLogic[OutField]](DefaultField()) {
-        case AddField(Field(Root, `outField`), outFieldType, pipe) =>
+        case AddField(Field(Root, outFieldGetter), outFieldType, pipe)
+            if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // validate that outType <:< outFieldType is correct
           FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
-        case RenameField(Field(Root, inName), inType, Field(Root, `outField`), outType) =>
+        case RenameField(Field(Root, inName), inType, Field(Root, outFieldGetter), outType)
+            if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // validate that outType <:< outFieldType is correct
           FieldRenamed(inName, inType)
-        case PlugInField(Field(Root, inName), inType, Field(Root, `outField`), outType, pipe) =>
+        case PlugInField(Field(Root, inName), inType, Field(Root, outFieldGetter), outType, pipe)
+            if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // validate that outType <:< outFieldType is correct
           PipeProvided(inName, inType, pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]])
       }
@@ -305,5 +299,16 @@ object ProductCaseGeneration {
   private val dropSet: String => String = {
     case setAccessor(head, tail) => head.toLowerCase + tail
     case other                   => other
+  }
+
+  private def inputNameMatchesOutputName(
+    inFieldName:     String,
+    outFieldName:    String,
+    caseInsensitive: Boolean
+  ): Boolean = {
+    val in  = Set(inFieldName, dropGetIs(inFieldName))
+    val out = Set(outFieldName, dropSet(outFieldName))
+    if (caseInsensitive) in.exists(a => out.exists(b => a.equalsIgnoreCase(b)))
+    else in.intersect(out).nonEmpty
   }
 }

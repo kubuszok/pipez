@@ -37,10 +37,11 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
     @nowarn("cat=unused")
     def extractPath(in: Tree): Either[String, Path] = in match {
-      case Function(_, expr)             => extractPath(expr)
-      case Select(expr, TermName(field)) => extractPath(expr).map(Path.Field(_, field)) // extract .field
-      case Ident(TermName(_))            => Right(Path.Root) // drop argName from before .field
-      case els                           => Left(s"Path ${showRaw(in)} is not in format _.field1.field2")
+      case Function(_, expr)                          => extractPath(expr)
+      case Select(expr, TermName(field))              => extractPath(expr).map(Path.Field(_, field)) // extract .field
+      case Apply(Select(expr, TermName(get)), List()) => extractPath(expr).map(Path.Field(_, get)) // extract .getField
+      case Ident(TermName(_))                         => Right(Path.Root) // drop argName from before .field
+      case _                                          => Left(s"Path ${showCode(in)} is not in format _.field1.field2")
     }
 
     def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {

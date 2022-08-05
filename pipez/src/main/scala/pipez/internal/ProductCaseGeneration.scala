@@ -21,12 +21,17 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   type Constructor = List[List[CodeOf[_]]] => CodeOf[Out]
 
-  final case class ProductInData(getters: ListMap[String, ProductInData.Getter[_]]) {
+  final case class ProductInData(getters: ListMap[String, ProductInData.Getter[_]], caseSensitiveSearch: Boolean) {
 
     def findGetter(inParamName: String, outParamName: String): DerivationResult[ProductInData.Getter[_]] =
-      DerivationResult.fromOption(getters.collectFirst {
-        case (_, getter) if getter.names.contains(inParamName) => getter
-      })(DerivationError.MissingPublicSource(outParamName))
+      if (caseSensitiveSearch)
+        DerivationResult.fromOption(getters.collectFirst {
+          case (_, getter) if getter.names.contains(inParamName) => getter
+        })(DerivationError.MissingPublicSource(outParamName))
+      else
+        DerivationResult.fromOption(getters.collectFirst {
+          case (_, getter) if getter.names.exists(name => name.equalsIgnoreCase(inParamName)) => getter
+        })(DerivationError.MissingPublicSource(outParamName))
   }
   object ProductInData {
 

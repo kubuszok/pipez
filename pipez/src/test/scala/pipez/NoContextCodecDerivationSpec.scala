@@ -1,6 +1,5 @@
 package pipez
 
-// TODO: case class -> case class
 // TODO: case class -> java bean
 // TODO: java bean -> case class
 // TODO: java bean -> java bean
@@ -8,26 +7,10 @@ package pipez
 
 class NoContextCodecDerivationSpec extends munit.FunSuite {
 
-  case class CaseClassNullaryIn()
-  case class CaseClassNullaryOut()
-  case class CaseClassNullaryOutExtended(extra: String)
-
-  case class CaseClassUnaryIn(a: Int)
-  case class CaseClassUnaryOut(a: Int)
-  case class CaseClassUnaryOutModified(a: String)
-  case class CaseClassUnaryOutExtended(a: Int, extra: String)
-  case class CaseClassUnaryOutDiffCase(A: Int)
-
-  case class CaseClassMultipleIn(a: Int, b: String, c: Long)
-  case class CaseClassMultipleOut(a: Int, b: String, c: Long)
-  case class CaseClassMultipleOutModified(a: String, b: String, c: Long)
-  case class CaseClassMultipleOutExtended(a: Int, b: String, c: Long, extra: String)
-  case class CaseClassMultipleOutDiffCase(A: Int, B: String, C: Long)
-
   test("case class -> case class derivation: no config, no conversion") {
     assertEquals(
-      PipeDerivation.derive[NoContextCodec, CaseClassNullaryIn, CaseClassNullaryOut].decode(CaseClassNullaryIn()),
-      Right(CaseClassNullaryOut())
+      PipeDerivation.derive[NoContextCodec, NullaryIn, NullaryOut].decode(NullaryIn()),
+      Right(NullaryOut())
     )
     assertEquals(
       PipeDerivation.derive[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOut].decode(CaseClassUnaryIn(1)),
@@ -59,11 +42,11 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassNullaryIn, CaseClassNullaryOutExtended]
-            .addField(_.extra, (in: CaseClassNullaryIn) => Right(in.toString))
+          PipeDerivationConfig[NoContextCodec, NullaryIn, CaseClassNullaryOutExtended]
+            .addField(_.extra, (in: NullaryIn) => Right(in.toString))
         )
-        .decode(CaseClassNullaryIn()),
-      Right(CaseClassNullaryOutExtended("CaseClassNullaryIn()"))
+        .decode(NullaryIn()),
+      Right(CaseClassNullaryOutExtended("NullaryIn()"))
     )
     assertEquals(
       PipeDerivation

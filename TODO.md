@@ -7,7 +7,7 @@
      - [X] case class -> case class
      - [ ] case class -> java beans
      - [ ] java beans -> case class
-     - [ ] java beans -> java beans
+     - [X] java beans -> java beans
      - [X] fields modifications
      - [ ] context update
    - [ ] sum types

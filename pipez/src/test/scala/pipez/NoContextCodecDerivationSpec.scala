@@ -1,40 +1,40 @@
 package pipez
 
+import scala.util.chaining.scalaUtilChainingOps
+
 // TODO: case class -> java bean
 // TODO: java bean -> case class
-// TODO: java bean -> java bean
 // TODO: test backticked names like `a b`
+// TODO: test conversion for types with type parameters
 
 class NoContextCodecDerivationSpec extends munit.FunSuite {
 
+  // case class -> case class
+
   test("case class -> case class derivation: no config, no conversion") {
     assertEquals(
-      PipeDerivation.derive[NoContextCodec, NullaryIn, NullaryOut].decode(NullaryIn()),
-      Right(NullaryOut())
+      PipeDerivation.derive[NoContextCodec, ZeroIn, ZeroOut].decode(ZeroIn()),
+      Right(ZeroOut())
     )
     assertEquals(
-      PipeDerivation.derive[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOut].decode(CaseClassUnaryIn(1)),
-      Right(CaseClassUnaryOut(1))
+      PipeDerivation.derive[NoContextCodec, CaseOnesIn, CaseOnesOut].decode(CaseOnesIn(1)),
+      Right(CaseOnesOut(1))
     )
     assertEquals(
-      PipeDerivation
-        .derive[NoContextCodec, CaseClassMultipleIn, CaseClassMultipleOut]
-        .decode(CaseClassMultipleIn(1, "a", 2L)),
-      Right(CaseClassMultipleOut(1, "a", 2L))
+      PipeDerivation.derive[NoContextCodec, CaseManyIn, CaseManyOut].decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOut(1, "a", 2L))
     )
   }
 
   test("case class -> case class derivation: param conversion") {
     implicit val aCodec: NoContextCodec[Int, String] = int => Right(int.toString)
     assertEquals(
-      PipeDerivation.derive[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutModified].decode(CaseClassUnaryIn(1)),
-      Right(CaseClassUnaryOutModified("1"))
+      PipeDerivation.derive[NoContextCodec, CaseOnesIn, CaseOnesOutMod].decode(CaseOnesIn(1)),
+      Right(CaseOnesOutMod("1"))
     )
     assertEquals(
-      PipeDerivation
-        .derive[NoContextCodec, CaseClassMultipleIn, CaseClassMultipleOutModified]
-        .decode(CaseClassMultipleIn(1, "a", 2L)),
-      Right(CaseClassMultipleOutModified("1", "a", 2L))
+      PipeDerivation.derive[NoContextCodec, CaseManyIn, CaseManyOutMod].decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOutMod("1", "a", 2L))
     )
   }
 
@@ -42,29 +42,28 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, NullaryIn, CaseClassNullaryOutExtended]
-            .addField(_.extra, (in: NullaryIn) => Right(in.toString))
+          PipeDerivationConfig[NoContextCodec, ZeroIn, CaseZeroOutExt].addField(_.x, (in: ZeroIn) => Right(in.toString))
         )
-        .decode(NullaryIn()),
-      Right(CaseClassNullaryOutExtended("NullaryIn()"))
+        .decode(ZeroIn()),
+      Right(CaseZeroOutExt("ZeroIn()"))
     )
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutExtended]
-            .addField(_.extra, (in: CaseClassUnaryIn) => Right(in.toString))
+          PipeDerivationConfig[NoContextCodec, CaseOnesIn, CaseOnesOutExt]
+            .addField(_.x, (in: CaseOnesIn) => Right(in.toString))
         )
-        .decode(CaseClassUnaryIn(1)),
-      Right(CaseClassUnaryOutExtended(1, "CaseClassUnaryIn(1)"))
+        .decode(CaseOnesIn(1)),
+      Right(CaseOnesOutExt(1, "CaseOnesIn(1)"))
     )
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassMultipleIn, CaseClassMultipleOutExtended]
-            .addField(_.extra, (in: CaseClassMultipleIn) => Right(in.toString))
+          PipeDerivationConfig[NoContextCodec, CaseManyIn, CaseManyOutExt]
+            .addField(_.x, (in: CaseManyIn) => Right(in.toString))
         )
-        .decode(CaseClassMultipleIn(1, "a", 2L)),
-      Right(CaseClassMultipleOutExtended(1, "a", 2L, "CaseClassMultipleIn(1,a,2)"))
+        .decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOutExt(1, "a", 2L, "CaseManyIn(1,a,2)"))
     )
   }
 
@@ -72,20 +71,20 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutExtended]
-            .plugIn(_.a, _.extra, (a: Int) => Right(a.toString))
+          PipeDerivationConfig[NoContextCodec, CaseOnesIn, CaseOnesOutExt]
+            .plugIn(_.a, _.x, (a: Int) => Right(a.toString))
         )
-        .decode(CaseClassUnaryIn(1)),
-      Right(CaseClassUnaryOutExtended(1, "1"))
+        .decode(CaseOnesIn(1)),
+      Right(CaseOnesOutExt(1, "1"))
     )
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassMultipleIn, CaseClassMultipleOutExtended]
-            .plugIn(_.a, _.extra, (a: Int) => Right(a.toString))
+          PipeDerivationConfig[NoContextCodec, CaseManyIn, CaseManyOutExt]
+            .plugIn(_.a, _.x, (a: Int) => Right(a.toString))
         )
-        .decode(CaseClassMultipleIn(1, "a", 2L)),
-      Right(CaseClassMultipleOutExtended(1, "a", 2L, "1"))
+        .decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOutExt(1, "a", 2L, "1"))
     )
   }
 
@@ -96,20 +95,18 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutExtended].renameField(_.a, _.extra)
+          PipeDerivationConfig[NoContextCodec, CaseOnesIn, CaseOnesOutExt].renameField(_.a, _.x)
         )
-        .decode(CaseClassUnaryIn(1)),
-      Right(CaseClassUnaryOutExtended(1, "1"))
+        .decode(CaseOnesIn(1)),
+      Right(CaseOnesOutExt(1, "1"))
     )
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassMultipleIn, CaseClassMultipleOutExtended].renameField(_.a,
-                                                                                                              _.extra
-          )
+          PipeDerivationConfig[NoContextCodec, CaseManyIn, CaseManyOutExt].renameField(_.a, _.x)
         )
-        .decode(CaseClassMultipleIn(1, "a", 2L)),
-      Right(CaseClassMultipleOutExtended(1, "a", 2L, "1"))
+        .decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOutExt(1, "a", 2L, "1"))
     )
   }
 
@@ -119,25 +116,142 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec, CaseClassUnaryIn, CaseClassUnaryOutDiffCase].fieldMatchingCaseInsensitive
+          PipeDerivationConfig[NoContextCodec, CaseOnesIn, CaseOnesOutUpp].fieldMatchingCaseInsensitive
         )
-        .decode(CaseClassUnaryIn(1)),
-      Right(CaseClassUnaryOutDiffCase(1))
+        .decode(CaseOnesIn(1)),
+      Right(CaseOnesOutUpp(1))
     )
     assertEquals(
       PipeDerivation
         .derive(
-          PipeDerivationConfig[NoContextCodec,
-                               CaseClassMultipleIn,
-                               CaseClassMultipleOutDiffCase
-          ].fieldMatchingCaseInsensitive
+          PipeDerivationConfig[NoContextCodec, CaseManyIn, CaseManyOutUpp].fieldMatchingCaseInsensitive
         )
-        .decode(CaseClassMultipleIn(1, "a", 2L)),
-      Right(CaseClassMultipleOutDiffCase(1, "a", 2L))
+        .decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOutUpp(1, "a", 2L))
     )
   }
 
-  // TODO: java bean -> case class, all above
+  // Java Beans -> Java Beans
 
-  // TODO: test conversion for types with type parameters
+  test("Java Beans -> Java Beans derivation: no config, no conversion") {
+    assertEquals(
+      PipeDerivation.derive[NoContextCodec, BeanOnesIn, BeanOnesOut].decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanOnesOut().tap(_.setA(1)))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive[NoContextCodec, BeanManyIn, BeanManyOut]
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+  }
+
+  test("Java Beans -> Java Beans derivation: param conversion") {
+    implicit val aCodec: NoContextCodec[Int, String] = int => Right(int.toString)
+    assertEquals(
+      PipeDerivation.derive[NoContextCodec, BeanOnesIn, BeanOnesOutMod].decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanOnesOutMod().tap(_.setA("1")))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive[NoContextCodec, BeanManyIn, BeanManyOutMod]
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOutMod().tap(_.setA("1")).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+  }
+
+  test("Java Beans -> Java Beans derivation: addField config (create field value from whole object)") {
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, ZeroIn, BeanZeroOutExt].addField(_.getX(),
+                                                                                (in: ZeroIn) => Right(in.toString)
+          )
+        )
+        .decode(ZeroIn()),
+      Right(new BeanZeroOutExt().tap(_.setX("ZeroIn()")))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanOnesIn, BeanOnesOutExt]
+            .addField(_.getX(), (in: BeanOnesIn) => Right(in.toString))
+        )
+        .decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanOnesOutExt().tap(_.setA(1)).tap(_.setX("BeanOnesIn(1)")))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanManyIn, BeanManyOutExt]
+            .addField(_.getX(), (in: BeanManyIn) => Right(in.toString))
+        )
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("BeanManyIn(1,a,2)")))
+    )
+  }
+
+  test("Java Beans -> Java Beans derivation: plugIn config (create field value from some source field)") {
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanOnesIn, BeanOnesOutExt]
+            .plugIn(_.getA(), _.getX(), (a: Int) => Right(a.toString))
+        )
+        .decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanOnesOutExt().tap(_.setA(1)).tap(_.setX("1")))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanManyIn, BeanManyOutExt]
+            .plugIn(_.getA(), _.getX(), (a: Int) => Right(a.toString))
+        )
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("1")))
+    )
+  }
+
+  test(
+    "Java Beans -> Java Beans derivation: renameField config + conversion (should create value, converting some source field)"
+  ) {
+    implicit val aCodec: NoContextCodec[Int, String] = int => Right(int.toString)
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanOnesIn, BeanOnesOutExt].renameField(_.getA(), _.getX())
+        )
+        .decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanOnesOutExt().tap(_.setA(1)).tap(_.setX("1")))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanManyIn, BeanManyOutExt].renameField(_.getA(), _.getX())
+        )
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("1")))
+    )
+  }
+
+  test(
+    "Java Beans -> Java Beans derivation: fieldMatchingCaseInsensitive (should match fields with similar names but with different capitalisation)"
+  ) {
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanOnesIn, BeanOnesOutUpp].fieldMatchingCaseInsensitive
+        )
+        .decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanOnesOutUpp().tap(_.setA(1)))
+    )
+    assertEquals(
+      PipeDerivation
+        .derive(
+          PipeDerivationConfig[NoContextCodec, BeanManyIn, BeanManyOutUpp].fieldMatchingCaseInsensitive
+        )
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOutUpp().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+  }
 }

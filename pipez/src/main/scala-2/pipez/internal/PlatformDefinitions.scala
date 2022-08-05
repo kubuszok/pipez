@@ -31,6 +31,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
 
+  final def singleAbstractMethodExpansion[SAM](tpe: Type[SAM], code: CodeOf[SAM]): CodeOf[SAM] =
+    c.Expr(q"_root_.scala.Predef.identity[$tpe]($code)")
+
   final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
     @nowarn("cat=unused")
     def extractPath(in: Tree): Either[String, Path] = in match {
@@ -56,7 +59,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             expr,
             ConfigEntry.AddField(outFieldPath,
                                  outFieldType,
-                                 c.Expr(q"_root_.scala.Predef.identity[${pipeType(inType, outFieldType)}]($pipe)")
+                                 singleAbstractMethodExpansion(pipeType[In, Any](inType, outFieldType), c.Expr(pipe))
             ) :: acc
           )
         } yield result
@@ -86,7 +89,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
               inFieldType,
               outFieldPath,
               outFieldType,
-              c.Expr(q"_root_.scala.Predef.identity[${pipeType(inFieldType, outFieldType)}]($pipe)")
+              singleAbstractMethodExpansion(pipeType[Any, Any](inFieldType, outFieldType), c.Expr(pipe))
             ) :: acc
           )
         } yield result

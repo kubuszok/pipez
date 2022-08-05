@@ -206,6 +206,10 @@ trait Definitions[Pipe[_, _], In, Out] {
     outType: Type[OutField]
   ): DerivationResult[CodeOf[Pipe[InField, OutField]]]
 
+  /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
+   * hint */
+  def singleAbstractMethodExpansion[SAM](tpe: Type[SAM], code: CodeOf[SAM]): CodeOf[SAM]
+
   def readConfig(
     code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]
   ): DerivationResult[Settings]

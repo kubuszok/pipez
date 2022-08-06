@@ -1,11 +1,9 @@
 package pipez.internal
 
-import pipez.PipeDerivation
-
 trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] =>
 
-  import c.universe._
+  import c.universe.*
 
   def reportDiagnostics[A](result: DerivationResult[A]): Unit =
     c.echo(c.enclosingPosition, diagnosticsMessage(result))

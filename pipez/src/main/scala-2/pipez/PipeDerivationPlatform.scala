@@ -1,6 +1,5 @@
 package pipez
 
-import scala.reflect.macros.blackbox.Context
 import scala.language.experimental.macros
 
 trait PipeDerivationPlatform { self: PipeDerivation.type =>

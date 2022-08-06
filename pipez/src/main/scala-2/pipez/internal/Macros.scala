@@ -25,14 +25,14 @@ final class Macros[Pipe[_, _], In, Out](val c: blackbox.Context)(
   val inType:  Type[In]  = inTpe.asInstanceOf[Type[In]]
   val outType: Type[Out] = outTpe.asInstanceOf[Type[Out]]
 
-  import c.universe._
+  import c.universe.*
 
   val pipeDerivation: CodeOf[PipeDerivation[Pipe]] = pd.asInstanceOf[CodeOf[PipeDerivation[Pipe]]]
 }
 
 final class MacroDispatcher(val c: blackbox.Context) {
 
-  import c.universe._
+  import c.universe.*
 
   type ConstructorWeakTypeTag[F[_, _]] = WeakTypeTag[F[Any, Nothing]]
 

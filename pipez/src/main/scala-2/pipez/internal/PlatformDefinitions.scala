@@ -2,18 +2,18 @@ package pipez.internal
 
 import pipez.PipeDerivationConfig
 
-import scala.annotation.nowarn
+import scala.annotation.{nowarn, unused}
 import scala.reflect.macros.blackbox
 
 trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
 
   val c: blackbox.Context
 
-  import c.universe._
+  import c.universe.*
 
-  override type Type[A] = c.Type
+  override type Type[@unused A] = c.Type
 
-  override type Argument[A] = TermName
+  override type Argument[@unused A] = TermName
   override type CodeOf[A]   = Expr[A]
 
   final val inCode: Argument[In] => CodeOf[In] =
@@ -98,7 +98,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       // TODO: removeSubtype
       // TODO: renameSubtype
       // TODO: enumMatchingCaseInsensitive
-      case els =>
+      case _ =>
         Left(s"${previewCode(code)} is not a right PipeDerivationConfig")
     }
 

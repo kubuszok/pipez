@@ -12,9 +12,6 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   import c.universe.*
 
-  final def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean =
-    lower <:< higher
-
   final def isCaseClass[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isClass &&
       tpe.typeSymbol.asClass.isCaseClass
@@ -25,7 +22,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   final def isInstantiable[A](tpe: Type[A]): Boolean =
     !tpe.typeSymbol.isAbstract && tpe.members.exists(m => m.isPublic && m.isConstructor)
 
-  override def extractInData(settings: Settings): DerivationResult[ProductInData] =
+  override def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
     inType.members // we fetch ALL members, even those that might have been inherited
       .to(List)
       .collect {
@@ -46,7 +43,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       .pipe(DerivationResult.pure)
       .logSuccess(data => s"Resolved inputs: $data")
 
-  override def extractOutData(settings: Settings): DerivationResult[ProductOutData] =
+  override def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean(outType)) {
       // Java Bean case
 
@@ -104,7 +101,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .logSuccess(data => s"Resolved case class output: $data")
     }
 
-  override def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
+  override def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
     generatorData match {
       case ProductGeneratorData.CaseClass(caller, results)            => generateCaseClass(caller, results)
       case ProductGeneratorData.JavaBean(defaultConstructor, results) => generateJavaBean(defaultConstructor, results)

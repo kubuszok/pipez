@@ -13,19 +13,20 @@ final case class CaseOnesIn(a: Int)
 final case class CaseOnesOut(a: Int)
 final case class CaseOnesOutMod(a: String)
 final case class CaseOnesOutExt(a: Int, x: String)
-final case class CaseOnesOutUpp(A: Int)
 
 final case class CaseManyIn(a: Int, b: String, c: Long)
 final case class CaseManyOut(a: Int, b: String, c: Long)
 final case class CaseManyOutMod(a: String, b: String, c: Long)
 final case class CaseManyOutExt(a: Int, b: String, c: Long, x: String)
-final case class CaseManyOutUpp(A: Int, B: String, C: Long)
+
+final case class CaseLower(aaa: Int, bbb: String, ccc: Long)
+final case class CaseUpper(AAA: Int, BBB: String, CCC: Long)
 
 // Java Beans (as inputs, we rely on their getters, as output, we rely on their default constructor and setters)
 
 import scala.beans.BeanProperty
 
-final case class BeanZeroOutExt private(
+final case class BeanZeroOutExt private (
   @BeanProperty var x: String
 ) { def this() = this("") }
 
@@ -67,8 +68,14 @@ final case class BeanManyOutExt private (
   @BeanProperty var c: Long,
   @BeanProperty var x: String
 ) { def this() = this(0, "", 0L, "") }
-final case class BeanManyOutUpp private (
-  @BeanProperty var A: Int,
-  @BeanProperty var B: String,
-  @BeanProperty var C: Long
+
+final case class BeanLower private (
+  @BeanProperty var aaa: Int,
+  @BeanProperty var bbb: String,
+  @BeanProperty var ccc: Long
+) { def this() = this(0, "", 0L) }
+final case class BeanUpper private (
+  @BeanProperty var AAA: Int,
+  @BeanProperty var BBB: String,
+  @BeanProperty var CCC: Long
 ) { def this() = this(0, "", 0L) }

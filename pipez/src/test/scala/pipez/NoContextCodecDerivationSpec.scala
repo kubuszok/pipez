@@ -203,7 +203,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, CaseOnesIn, CaseOnesOutExt]
-            .plugIn(_.a, _.x, (a: Int) => Right(a.toString))
+            .plugInField(_.a, _.x, (a: Int) => Right(a.toString))
         )
         .decode(CaseOnesIn(1)),
       Right(CaseOnesOutExt(1, "1"))
@@ -212,7 +212,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, CaseManyIn, CaseManyOutExt]
-            .plugIn(_.a, _.x, (a: Int) => Right(a.toString))
+            .plugInField(_.a, _.x, (a: Int) => Right(a.toString))
         )
         .decode(CaseManyIn(1, "a", 2L)),
       Right(CaseManyOutExt(1, "a", 2L, "1"))
@@ -222,7 +222,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, CaseOnesIn, BeanOnesOutExt]
-            .plugIn(_.a, _.getX(), (a: Int) => Right(a.toString))
+            .plugInField(_.a, _.getX(), (a: Int) => Right(a.toString))
         )
         .decode(CaseOnesIn(1)),
       Right(new BeanOnesOutExt().tap(_.setA(1)).tap(_.setX("1")))
@@ -231,7 +231,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, CaseManyIn, BeanManyOutExt]
-            .plugIn(_.a, _.getX(), (a: Int) => Right(a.toString))
+            .plugInField(_.a, _.getX(), (a: Int) => Right(a.toString))
         )
         .decode(CaseManyIn(1, "a", 2L)),
       Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("1")))
@@ -241,7 +241,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, BeanOnesIn, CaseOnesOutExt]
-            .plugIn(_.getA(), _.x, (a: Int) => Right(a.toString))
+            .plugInField(_.getA(), _.x, (a: Int) => Right(a.toString))
         )
         .decode(new BeanOnesIn().tap(_.setA(1))),
       Right(CaseOnesOutExt(1, "1"))
@@ -250,7 +250,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, BeanManyIn, CaseManyOutExt]
-            .plugIn(_.getA(), _.x, (a: Int) => Right(a.toString))
+            .plugInField(_.getA(), _.x, (a: Int) => Right(a.toString))
         )
         .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
       Right(CaseManyOutExt(1, "a", 2L, "1"))
@@ -260,7 +260,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, BeanOnesIn, BeanOnesOutExt]
-            .plugIn(_.getA(), _.getX(), (a: Int) => Right(a.toString))
+            .plugInField(_.getA(), _.getX(), (a: Int) => Right(a.toString))
         )
         .decode(new BeanOnesIn().tap(_.setA(1))),
       Right(new BeanOnesOutExt().tap(_.setA(1)).tap(_.setX("1")))
@@ -269,7 +269,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       PipeDerivation
         .derive(
           PipeDerivationConfig[NoContextCodec, BeanManyIn, BeanManyOutExt]
-            .plugIn(_.getA(), _.getX(), (a: Int) => Right(a.toString))
+            .plugInField(_.getA(), _.getX(), (a: Int) => Right(a.toString))
         )
         .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
       Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("1")))

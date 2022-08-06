@@ -5,8 +5,8 @@
    - [ ] config parsing
    - [ ] products - Scala 2
      - [X] case class -> case class
-     - [ ] case class -> java beans
-     - [ ] java beans -> case class
+     - [X] case class -> java beans
+     - [X] java beans -> case class
      - [X] java beans -> java beans
      - [X] fields modifications
      - [ ] context update

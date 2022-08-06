@@ -9,8 +9,6 @@ import scala.util.chaining.*
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
-  def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean
-
   def isCaseClass[A](tpe:    Type[A]): Boolean
   def isJavaBean[A](tpe:     Type[A]): Boolean
   def isInstantiable[A](tpe: Type[A]): Boolean
@@ -198,18 +196,18 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       else None
   }
 
-  def extractInData(settings: Settings): DerivationResult[ProductInData]
+  def extractProductInData(settings: Settings): DerivationResult[ProductInData]
 
-  def extractOutData(settings: Settings): DerivationResult[ProductOutData]
+  def extractProductOutData(settings: Settings): DerivationResult[ProductOutData]
 
-  def generateCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]]
+  def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]]
 
   private def attemptProductRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
     for {
-      data <- extractInData(settings) zip extractOutData(settings)
+      data <- extractProductInData(settings) zip extractProductOutData(settings)
       (inData, outData) = data
       generatorData <- matchFields(inData, outData, settings)
-      code <- generateCode(generatorData)
+      code <- generateProductCode(generatorData)
     } yield code
 
   private def matchFields(

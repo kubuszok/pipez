@@ -10,6 +10,8 @@ trait Generators[Pipe[_, _], In, Out]
     extends ProductCaseGeneration[Pipe, In, Out]
     with SumCaseGeneration[Pipe, In, Out] { self: Definitions[Pipe, In, Out] =>
 
+  def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean
+
   trait CodeGeneratorExtractor {
 
     def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]]

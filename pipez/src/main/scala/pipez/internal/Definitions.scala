@@ -47,17 +47,6 @@ trait Definitions[Pipe[_, _], In, Out] {
       outFieldType:   Type[OutField]
     ) extends ConfigEntry
 
-    final case class RemoveSubtype[InSubtype](
-      inputSubtype:  Path,
-      inSubtypeType: Type[InSubtype],
-      pipe:          CodeOf[Pipe[InSubtype, Out]]
-    ) extends ConfigEntry
-
-    final case class RenameSubtype(
-      inputSubtype:  Path,
-      outputSubtype: Path
-    ) extends ConfigEntry
-
     final case class PlugInField[InField, OutField](
       inputField:     Path,
       inputFieldType: Type[InField],
@@ -67,6 +56,29 @@ trait Definitions[Pipe[_, _], In, Out] {
     ) extends ConfigEntry
 
     case object FieldCaseInsensitive extends ConfigEntry
+
+    final case class RemoveSubtype[InSubtype <: In](
+      inputSubtype:     Path,
+      inputSubtypeType: Type[InSubtype],
+      pipe:             CodeOf[Pipe[InSubtype, Out]]
+    ) extends ConfigEntry
+
+    final case class RenameSubtype[InSubtype <: In, OutSubtype <: Out](
+      inputSubtype:      Path,
+      inputSubtypeType:  Type[InSubtype],
+      outputSubtype:     Path,
+      outputSubtypeType: Type[OutSubtype]
+    ) extends ConfigEntry
+
+    final case class PlugInSubtype[InSubtype <: In, OutSubtype <: Out](
+      inputSubtype:      Path,
+      inputSubtypeType:  Type[InSubtype],
+      outputSubtype:     Path,
+      outputSubtypeType: Type[OutSubtype],
+      pipe:              CodeOf[Pipe[InSubtype, OutSubtype]]
+    ) extends ConfigEntry
+
+    case object EnumCaseInsensitive extends ConfigEntry
   }
 
   final class Settings(entries: List[ConfigEntry]) {
@@ -76,6 +88,8 @@ trait Definitions[Pipe[_, _], In, Out] {
     lazy val isDiagnosticsEnabled: Boolean = entries.contains(EnableDiagnostics)
 
     lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
+
+    lazy val isEnumCaseInsensitive: Boolean = entries.contains(EnumCaseInsensitive)
 
     def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
       (a, entry) => overrideWhen.applyOrElse[ConfigEntry, A](entry, _ => a)
@@ -178,9 +192,9 @@ trait Definitions[Pipe[_, _], In, Out] {
     def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors, Vector.empty)
 
     def unsafe[A](thunk: => A)(error: Throwable => DerivationError): DerivationResult[A] =
-      try {
+      try
         pure(thunk)
-      } catch {
+      catch {
         case e: Throwable => fail(error(e))
       }
 
@@ -205,7 +219,8 @@ trait Definitions[Pipe[_, _], In, Out] {
   ): DerivationResult[CodeOf[Pipe[InField, OutField]]]
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
-   * hint */
+    * hint
+    */
   def singleAbstractMethodExpansion[SAM](tpe: Type[SAM], code: CodeOf[SAM]): CodeOf[SAM]
 
   def readConfig(

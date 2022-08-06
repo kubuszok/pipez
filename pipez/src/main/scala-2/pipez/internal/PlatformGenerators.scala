@@ -5,6 +5,9 @@ trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] 
 
   import c.universe.*
 
+  final def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean =
+    lower <:< higher
+
   def reportDiagnostics[A](result: DerivationResult[A]): Unit =
     c.echo(c.enclosingPosition, diagnosticsMessage(result))
 

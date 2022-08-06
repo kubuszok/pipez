@@ -74,10 +74,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             ConfigEntry.RenameField(inPath, inputField.tpe.resultType, outPath, outputField.tpe.resultType) :: acc
           )
         } yield result
-      // TODO: removeSubtype
-      // TODO: renameSubtype
       // matches {cfg}.plugIn(in, out)
-      case Apply(TypeApply(Select(expr, TermName("plugIn")), _), List(inputField, outputField, pipe)) =>
+      case Apply(TypeApply(Select(expr, TermName("plugInField")), _), List(inputField, outputField, pipe)) =>
         for {
           inFieldPath <- extractPath(inputField)
           outFieldPath <- extractPath(outputField)
@@ -97,6 +95,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       // matches {cfg}.fieldMatchingCaseInsensitive
       case Select(expr, TermName("fieldMatchingCaseInsensitive")) =>
         extract(expr, ConfigEntry.FieldCaseInsensitive :: acc)
+      // TODO: removeSubtype
+      // TODO: renameSubtype
+      // TODO: enumMatchingCaseInsensitive
       case els =>
         Left(s"${previewCode(code)} is not a right PipeDerivationConfig")
     }

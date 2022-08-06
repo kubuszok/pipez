@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.{PipeDerivation, PipeDerivationConfig}
+import pipez.PipeDerivationConfig
 
 import scala.annotation.nowarn
 import scala.util.chaining.scalaUtilChainingOps
@@ -23,7 +23,7 @@ trait Generators[Pipe[_, _], In, Out]
   }
 
   final def diagnosticsMessage[A](result: DerivationResult[A]): String =
-    "Macro diagnostics\n" + result.diagnostic.map(" - " + _.toString).mkString("\n")
+    "Macro diagnostics\n" + result.diagnostic.map(" - " + _).mkString("\n")
 
   /** Should use platform-specific way of reporting information from macro */
   def reportDiagnostics[A](result: DerivationResult[A]): Unit
@@ -55,7 +55,7 @@ trait Generators[Pipe[_, _], In, Out]
   type ArbitraryContext
 
   /** Can be used instead of pd.Context to avoid path-dependent types */
-  type ArbitraryResult[Out]
+  type ArbitraryResult[O]
 
   /** Should generate code `pd.lift { (in, ctx) => ... }` */
   def lift[I, O](

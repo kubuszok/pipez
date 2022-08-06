@@ -1,6 +1,6 @@
 package pipez.internal
 
-trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] with Generators[Pipe, In, Out] =>
+trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
   object SumTypeConversion extends CodeGeneratorExtractor {
 

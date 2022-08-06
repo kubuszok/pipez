@@ -1,7 +1,7 @@
 package pipez
 
-/** Allows derivation macro to glue Pipes for `Pipe[in.field, out.field] for each field or `Pipe[In.Subtype,
-  * Out.Subtype]` for each subtype together.
+/** Allows derivation macro to glue Pipes for `Pipe[in.field, out.field]` for each field or
+ * `Pipe[In.Subtype, Out.Subtype]` for each subtype together.
   *
   * Assumes that `Pipe[In, Out]` is interchangeable to `(in: In, ctx: Context) => Result[Out]` where:
   *   - `Context` is anything we want to thread through our calls (like in `ReaderT`)
@@ -40,13 +40,6 @@ trait PipeDerivation[Pipe[_, _]] {
   def mergeResults[A, B, C](ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C]
 }
 object PipeDerivation extends PipeDerivationPlatform {
-
-  type Aux[Pipe[_, _], Context0, Result0[_]] = PipeDerivation[Pipe] {
-    type Context     = Context0
-    type Result[Out] = Result0[Out]
-  }
-
-  @inline def eta[Pipe[_, _], In, Out](pipe: Pipe[In, Out]): Pipe[In, Out] = pipe
 
   /** Specialization for `Pipe`s which are interchangeable to `In => Result[Out]` */
   trait NoContext[Pipe[_, _]] extends PipeDerivation[Pipe] {

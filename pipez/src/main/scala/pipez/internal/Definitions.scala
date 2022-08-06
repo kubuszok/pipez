@@ -3,8 +3,7 @@ package pipez.internal
 import pipez.{ PipeDerivation, PipeDerivationConfig }
 
 import scala.annotation.nowarn
-import scala.collection.{ Factory, mutable }
-import scala.util.chaining.scalaUtilChainingOps
+import scala.collection.Factory
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait Definitions[Pipe[_, _], In, Out] {
@@ -72,8 +71,7 @@ trait Definitions[Pipe[_, _], In, Out] {
 
   final class Settings(entries: List[ConfigEntry]) {
 
-    import Path._
-    import ConfigEntry._
+    import ConfigEntry.*
 
     lazy val isDiagnosticsEnabled: Boolean = entries.contains(EnableDiagnostics)
 
@@ -116,7 +114,7 @@ trait Definitions[Pipe[_, _], In, Out] {
 
   sealed trait DerivationResult[+A] extends Product with Serializable {
 
-    import DerivationResult._
+    import DerivationResult.*
 
     final def flatMap[B](f: A => DerivationResult[B]): DerivationResult[B] = this match {
       case Success(value, diagnostic) =>
@@ -222,5 +220,5 @@ trait Definitions[Pipe[_, _], In, Out] {
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
       .log(s"Pipeline from $inType to $outType")
       .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")
-      .logSuccess(config => s"Configuration used: ${config}")
+      .logSuccess(config => s"Configuration used: $config")
 }

@@ -5,6 +5,14 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
 
   import c.universe.*
 
-  def isSumType[A](tpe: Type[A]): Boolean =
+  final def isSumType[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isSealed
+
+  final def extractEnumInData(settings: Settings): DerivationResult[EnumData[In]] =
+    DerivationResult.fail(DerivationError.NotYetImplemented("Parsing enum input data"))
+  final def extractEnumOutData(settings: Settings): DerivationResult[EnumData[Out]] =
+    DerivationResult.fail(DerivationError.NotYetImplemented("Parsing enum output data"))
+
+  final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
+    DerivationResult.fail(DerivationError.NotYetImplemented("Enum codec code"))
 }

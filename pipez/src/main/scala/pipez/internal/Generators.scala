@@ -6,9 +6,8 @@ import scala.annotation.nowarn
 import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Generators[Pipe[_, _], In, Out]
-    extends ProductCaseGeneration[Pipe, In, Out]
-    with SumCaseGeneration[Pipe, In, Out] { self: Definitions[Pipe, In, Out] =>
+trait Generators[Pipe[_, _], In, Out] {
+  self: Definitions[Pipe, In, Out] & ProductCaseGeneration[Pipe, In, Out] & SumCaseGeneration[Pipe, In, Out] =>
 
   def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean
 
@@ -38,8 +37,12 @@ trait Generators[Pipe[_, _], In, Out]
         s"Couldn't find implicit of type ${pipeType(inFieldType, outFieldType)}"
       case DerivationError.MissingPublicSource(outFieldName) =>
         s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
-      case DerivationError.NotSupportedConversion(inField, inFieldType, outField, outFieldType) =>
+      case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
         s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
+      case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
+        s"Couldn't convert $inType (${if (isInSumType) "sum type" else "value enumeration"}) into ${outType} (${
+            if (isOutSumType) "sum type" else "value enumeration"
+          })"
       case DerivationError.NotYetSupported =>
         s"Your setup is valid, but the library doesn't support it yet; if you think it's a bug contact library authors"
       case DerivationError.InvalidConfiguration(msg) =>
@@ -113,5 +116,6 @@ trait Generators[Pipe[_, _], In, Out]
 
   final def deriveDefault: CodeOf[Pipe[In, Out]] = derive(None)
 
-  final def deriveConfigured(configurationCode: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): CodeOf[Pipe[In, Out]] = derive(Some(configurationCode))
+  final def deriveConfigured(configurationCode: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): CodeOf[Pipe[In, Out]] =
+    derive(Some(configurationCode))
 }

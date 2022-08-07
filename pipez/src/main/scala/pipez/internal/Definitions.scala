@@ -112,11 +112,16 @@ trait Definitions[Pipe[_, _], In, Out] {
       outFieldType: Type[O]
     ) extends DerivationError
 
-    final case class NotSupportedConversion[I, O](
+    final case class NotSupportedFieldConversion[I, O](
       inField:      String,
       inFieldType:  Type[I],
       outField:     String,
       outFieldType: Type[O]
+    ) extends DerivationError
+
+    final case class NotSupportedEnumConversion(
+      isInSumType:  Boolean,
+      isOutSumType: Boolean
     ) extends DerivationError
 
     case object NotYetSupported extends DerivationError

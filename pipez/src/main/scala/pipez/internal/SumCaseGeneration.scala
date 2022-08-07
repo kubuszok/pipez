@@ -2,13 +2,16 @@ package pipez.internal
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
+import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait SumCaseGeneration[Pipe[_, _], In, Out] {
-  self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
+trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
-  def isSumType[A](tpe: Type[A]): Boolean
+  def isADT[A](tpe:      Type[A]): Boolean
+  def isJavaEnum[A](tpe: Type[A]): Boolean
 
+  final def isSumType[A](tpe: Type[A]): Boolean =
+    isADT(tpe) || isJavaEnum(tpe)
   final def isUsableAsSumTypeConversion: Boolean =
     isSumType(inType) && isSumType(outType)
 
@@ -141,7 +144,34 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] {
 
   private def matchEnums(
     inData:   EnumData[In],
-    enumData: EnumData[Out],
+    outData:  EnumData[Out],
     settings: Settings
-  ): DerivationResult[EnumGeneratorData] = DerivationResult.fail(DerivationError.NotYetImplemented("Enum matching"))
+  ): DerivationResult[EnumGeneratorData] = (inData, outData) match {
+    case (EnumData.SumType(inSubtypes), EnumData.SumType(outSubtype)) =>
+      inSubtypes
+        .map[DerivationResult[(String, EnumGeneratorData.InputSubtype)]] {
+          case EnumData.SumType.Case(inSubtypeName, inSubtypeType, isCaseObject) =>
+            // TODO: resolve and match types by names
+            DerivationResult.fail(DerivationError.NotYetImplemented("SumType matching"))
+        }
+        .pipe(DerivationResult.sequence(_))
+        .map(_.to(ListMap))
+        .map(EnumGeneratorData.Subtypes(_))
+    case (EnumData.Enumeration(inValues), EnumData.Enumeration(outValues)) =>
+      inValues
+        .map[DerivationResult[(String, EnumGeneratorData.InputSubtype)]] {
+          case EnumData.Enumeration.Value(name, path) =>
+            // TODO: resolve and match values by names
+            DerivationResult.fail(DerivationError.NotYetImplemented("SumType matching"))
+        }
+        .pipe(DerivationResult.sequence(_))
+        .map(_.to(ListMap))
+        .map(EnumGeneratorData.Subtypes(_))
+    case (EnumData.SumType(_), EnumData.Enumeration(_)) =>
+      // TODO: case when all sum types are case objects
+      DerivationResult.fail(DerivationError.NotSupportedEnumConversion(isInSumType = true, isOutSumType = false))
+    case (EnumData.Enumeration(_), EnumData.SumType(_)) =>
+      // TODO: case when all sum types are case objects
+      DerivationResult.fail(DerivationError.NotSupportedEnumConversion(isInSumType = false, isOutSumType = true))
+  }
 }

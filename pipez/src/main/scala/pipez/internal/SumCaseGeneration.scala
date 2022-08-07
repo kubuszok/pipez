@@ -1,26 +1,23 @@
 package pipez.internal
 
 import scala.annotation.nowarn
+import scala.collection.immutable.ListMap
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
+trait SumCaseGeneration[Pipe[_, _], In, Out] {
+  self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
   def isSumType[A](tpe: Type[A]): Boolean
 
   final def isUsableAsSumTypeConversion: Boolean =
     isSumType(inType) && isSumType(outType)
 
-  object SumTypeConversion extends CodeGeneratorExtractor {
-
-    final def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] =
-      if (isUsableAsSumTypeConversion) Some(DerivationResult.fail(DerivationError.NotYetImplemented("Sum Types")))
-      else None
-  }
-
   sealed trait EnumData[A] extends Product with Serializable
+
   object EnumData {
 
     final case class SumType[A](elements: List[SumType.Case[? <: A]]) extends EnumData[A]
+
     object SumType {
 
       final case class Case[A](name: String, tpe: Type[A], isCaseObject: Boolean) {
@@ -29,6 +26,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     }
 
     final case class Enumeration[A](values: List[Enumeration.Value[A]]) extends EnumData[A]
+
     object Enumeration {
 
       final case class Value[A](name: String, path: CodeOf[A]) {
@@ -38,6 +36,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
   }
 
   sealed trait InSubtypeLogic[InSubtype <: In] extends Product with Serializable
+
   object InSubtypeLogic {
 
     final case class DefaultSubtype[InSubtype <: In]() extends InSubtypeLogic[InSubtype]
@@ -94,4 +93,41 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
         ???
     }
   }
+
+  sealed trait SumTypeGeneratorData extends Product with Serializable
+  object SumTypeGeneratorData {
+
+    sealed trait InputSubtype extends Product with Serializable
+
+    object InputSubtype {
+
+      final case class Convert[InSubtype <: In, OutSubtype <: Out](
+        inSubtype:  Type[InSubtype],
+        outSubtype: Type[OutSubtype],
+        pipe:       CodeOf[Pipe[InSubtype, OutSubtype]]
+      ) extends InputSubtype
+
+      final case class Handle[InSubtype <: In](
+        inSubtype: Type[InSubtype],
+        pipe:      CodeOf[Pipe[InSubtype, Out]]
+      ) extends InputSubtype
+    }
+
+    final case class Subtypes(subtypes: ListMap[String, InputSubtype]) extends SumTypeGeneratorData
+
+    // TODO: Values for enum-values -> enum-values handling
+  }
+
+  object SumTypeConversion extends CodeGeneratorExtractor {
+
+    final def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] =
+      if (isUsableAsSumTypeConversion) Some(DerivationResult.fail(DerivationError.NotYetImplemented("Sum Types")))
+      else None
+  }
+
+  def extractEnumInData(settings: Settings): DerivationResult[EnumData[In]] = ???
+
+  def extractEnumOutData(settings: Settings): DerivationResult[EnumData[Out]] = ???
+
+  def generateEnumCode(generatorData: SumTypeGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = ???
 }

@@ -94,8 +94,8 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] {
     }
   }
 
-  sealed trait SumTypeGeneratorData extends Product with Serializable
-  object SumTypeGeneratorData {
+  sealed trait EnumGeneratorData extends Product with Serializable
+  object EnumGeneratorData {
 
     sealed trait InputSubtype extends Product with Serializable
 
@@ -113,7 +113,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] {
       ) extends InputSubtype
     }
 
-    final case class Subtypes(subtypes: ListMap[String, InputSubtype]) extends SumTypeGeneratorData
+    final case class Subtypes(subtypes: ListMap[String, InputSubtype]) extends EnumGeneratorData
 
     // TODO: Values for enum-values -> enum-values handling
   }
@@ -125,9 +125,23 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] {
       else None
   }
 
-  def extractEnumInData(settings: Settings): DerivationResult[EnumData[In]] = ???
+  def extractEnumInData(settings: Settings): DerivationResult[EnumData[In]]
 
-  def extractEnumOutData(settings: Settings): DerivationResult[EnumData[Out]] = ???
+  def extractEnumOutData(settings: Settings): DerivationResult[EnumData[Out]]
 
-  def generateEnumCode(generatorData: SumTypeGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = ???
+  def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]]
+
+  private def attemptEnumRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
+    for {
+      data <- extractEnumInData(settings) zip extractEnumOutData(settings)
+      (inData, outData) = data
+      generatorData <- matchEnums(inData, outData, settings)
+      code <- generateEnumCode(generatorData)
+    } yield code
+
+  private def matchEnums(
+    inData:   EnumData[In],
+    enumData: EnumData[Out],
+    settings: Settings
+  ): DerivationResult[EnumGeneratorData] = DerivationResult.fail(DerivationError.NotYetImplemented("Enum matching"))
 }

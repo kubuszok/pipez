@@ -2,7 +2,7 @@ package pipez.internal
 
 import pipez.PipeDerivationConfig
 
-import scala.annotation.{nowarn, unused}
+import scala.annotation.{ nowarn, unused }
 import scala.reflect.macros.blackbox
 
 trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
@@ -14,20 +14,20 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   override type Type[@unused A] = c.Type
 
   override type Argument[@unused A] = TermName
-  override type CodeOf[A]   = Expr[A]
+  override type CodeOf[A]           = Expr[A]
 
   final val inCode: Argument[In] => CodeOf[In] =
     id => c.Expr[In](q"$id")
 
   final def previewCode[A](code: c.universe.Expr[A]): String = showCode(code.tree)
 
-  final def summonPipe[InField, OutField](
-    inType:  Type[InField],
-    outType: Type[OutField]
-  ): DerivationResult[CodeOf[Pipe[InField, OutField]]] =
+  final def summonPipe[Input, Output](
+    inputType:  Type[Input],
+    outputType: Type[Output]
+  ): DerivationResult[CodeOf[Pipe[Input, Output]]] =
     DerivationResult
-      .unsafe(c.Expr[Pipe[InField, OutField]](c.inferImplicitValue(pipeType(inType, outType), silent = false)))(_ =>
-        DerivationError.RequiredImplicitNotFound(inType, outType)
+      .unsafe(c.Expr[Pipe[Input, Output]](c.inferImplicitValue(pipeType(inputType, outputType), silent = false)))(_ =>
+        DerivationError.RequiredImplicitNotFound(inputType, outputType)
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
 

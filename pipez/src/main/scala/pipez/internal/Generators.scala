@@ -37,6 +37,8 @@ trait Generators[Pipe[_, _], In, Out] {
         s"Couldn't find implicit of type ${pipeType(inFieldType, outFieldType)}"
       case DerivationError.MissingPublicSource(outFieldName) =>
         s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
+      case DerivationError.MissingPublicSubType(inSubtypeType) =>
+        s"Couldn't find corresponding subtype for $inSubtypeType"
       case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
         s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
       case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>

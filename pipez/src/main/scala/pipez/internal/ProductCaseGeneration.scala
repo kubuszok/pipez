@@ -210,6 +210,10 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       code <- generateProductCode(generatorData)
     } yield code
 
+  // In the product derivation, the logic is driven by Out type:
+  // - every field of Out should have an assigned value
+  // - so we are iterating over the list of fields in Out and check the configuration for them
+  // - additional fields in In can be safely ignored
   private def matchFields(
     inData:   ProductInData,
     outData:  ProductOutData,

@@ -1,5 +1,8 @@
 package pipez.internal
 
+import scala.annotation.{nowarn, unused}
+
+@nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
@@ -10,11 +13,9 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
   final def isJavaEnum[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isJavaEnum
 
-  final def extractEnumInData(settings: Settings): DerivationResult[EnumData[In]] =
-    DerivationResult.fail(DerivationError.NotYetImplemented("Parsing enum input data"))
+  final def extractEnumInData: DerivationResult[EnumData[In]] = extractEnumData(inType)
 
-  final def extractEnumOutData(settings: Settings): DerivationResult[EnumData[Out]] =
-    DerivationResult.fail(DerivationError.NotYetImplemented("Parsing enum output data"))
+  final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData(outType)
 
   private def extractEnumData[A](tpe: Type[A]): DerivationResult[EnumData[A]] =
     if (isADT(tpe)) {
@@ -34,5 +35,42 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     } else DerivationResult.fail(DerivationError.NotYetImplemented("Java Enum parsing"))
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
-    DerivationResult.fail(DerivationError.NotYetImplemented("Enum codec code"))
+    generatorData match {
+      case EnumGeneratorData.Subtypes(subtypes) => generateSubtypes(subtypes.values.toList)
+      case EnumGeneratorData.Values(values)     => generateEnumeration(values.values.toList)
+    }
+
+  private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
+    val in:  Argument[In]               = c.freshName(TermName("in"))
+    val ctx: Argument[ArbitraryContext] = c.freshName(TermName("ctx"))
+
+    val cases = subtypes.map {
+      case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe) =>
+        val arg: Argument[In] = c.freshName(TermName("arg"))
+        val code = unlift(pipe, inCode(arg), ctx)
+        cq"""$arg : ${inSubtype.typeSymbol} => $code.asInstanceOf[$pipeDerivation.Result[${outType.typeSymbol}]]""" // TODO: upcast to Result[Out]?
+      case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe) =>
+        val arg: Argument[In] = c.freshName(TermName("arg"))
+        val code = unlift(pipe, inCode(arg), ctx)
+        cq"""$arg : ${inSubtype.typeSymbol} => $code"""
+    }
+
+    val body = c.Expr[ArbitraryResult[Out]](q"""$in match { case ..$cases }""")
+
+    DerivationResult
+      .pure(
+        lift[In, Out](
+          c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](
+            q"""
+            ($in : ${inType.typeSymbol}, $ctx : $pipeDerivation.Context) => $body
+            """
+          )
+        )
+      )
+      .log(s"Sum types derivation, subtypes: $subtypes")
+      .logSuccess(code => s"Generated code: ${previewCode(code)}")
+  }
+
+  private def generateEnumeration(@unused values: List[EnumGeneratorData.Pairing]) =
+    DerivationResult.fail(DerivationError.NotYetImplemented("Enumeration code emission"))
 }

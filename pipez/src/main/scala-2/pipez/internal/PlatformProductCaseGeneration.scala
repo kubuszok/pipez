@@ -34,7 +34,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             name = member.name.toString,
             tpe = member.asMethod.returnType,
             get =
-              if (member.asMethod.paramLists.isEmpty) (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
+              if (member.asMethod.paramLists.isEmpty)
+                (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
               else (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()")
           )
       }
@@ -251,15 +252,15 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(mergeResults(outResult, rightCode, fun), tail)
       }
 
-    val body: c.universe.Expr[ArbitraryResult[Out]] = generateBody(initialValue, resultValues)
+    val body: c.Expr[ArbitraryResult[Out]] = generateBody(initialValue, resultValues)
 
     DerivationResult
       .pure(
         lift[In, Out](
           c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](
             q"""
-         (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
-         """
+            (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
+            """
           )
         )
       )

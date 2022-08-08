@@ -107,6 +107,10 @@ trait Definitions[Pipe[_, _], In, Out] {
       outFieldName: String
     ) extends DerivationError
 
+    final case class MissingPublicSubType(
+      subtypeName: String
+    ) extends DerivationError
+
     final case class RequiredImplicitNotFound[I, O](
       inFieldType:  Type[I],
       outFieldType: Type[O]
@@ -218,10 +222,10 @@ trait Definitions[Pipe[_, _], In, Out] {
 
   def previewCode[A](code: CodeOf[A]): String
 
-  def summonPipe[InField, OutField](
-    inType:  Type[InField],
-    outType: Type[OutField]
-  ): DerivationResult[CodeOf[Pipe[InField, OutField]]]
+  def summonPipe[Input, Output](
+    inputType:  Type[Input],
+    outputType: Type[Output]
+  ): DerivationResult[CodeOf[Pipe[Input, Output]]]
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
     * hint

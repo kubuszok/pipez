@@ -107,8 +107,12 @@ trait Definitions[Pipe[_, _], In, Out] {
       outFieldName: String
     ) extends DerivationError
 
-    final case class MissingPublicSubType(
+    final case class MissingMatchingSubType(
       subtypeName: String
+    ) extends DerivationError
+
+    final case class MissingMatchingValue(
+      valueName: String
     ) extends DerivationError
 
     final case class RequiredImplicitNotFound[I, O](

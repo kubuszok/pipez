@@ -95,7 +95,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       pipe:        CodeOf[Pipe[InField, OutField]]
     ) extends OutFieldLogic[OutField]
 
-    def resolve[OutField](
+    private def resolve[OutField](
       settings:     Settings,
       outFieldName: String,
       outFieldType: Type[OutField]
@@ -127,24 +127,24 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       outParamName: String,
       outParamType: Type[OutField]
     ): DerivationResult[ProductGeneratorData.OutputValue] = resolve(settings, outParamName, outParamType) match {
-      case OutFieldLogic.DefaultField() =>
+      case DefaultField() =>
         // if inField (same name as out) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
         // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, ctx) : Result[OutField]
         inData
           .findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive)
           .flatMap(fromFieldConstructorParam(_, outParamType))
-      case OutFieldLogic.FieldAdded(pipe) =>
+      case FieldAdded(pipe) =>
         // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
         DerivationResult.pure(fieldAddedConstructorParam(pipe, outParamType))
-      case OutFieldLogic.FieldRenamed(inFieldName, _) =>
+      case FieldRenamed(inFieldName, _) =>
         // if inField (name provided) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
         // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, ctx) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .flatMap(fromFieldConstructorParam(_, outParamType))
-      case OutFieldLogic.PipeProvided(inFieldName, _, pipe) =>
+      case PipeProvided(inFieldName, _, pipe) =>
         // if inField (name provided) not found then error
         // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
         inData

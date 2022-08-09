@@ -15,7 +15,7 @@
      - [ ] ADT -> enum (java, enumeration?)
      - [ ] enum -> ADT
      - [ ] enum -> enum
-     - [ ] subtypes modifications
+     - [X] subtypes modifications
      - [ ] context update
  - [ ] Scala 3
    - [ ] diagnostics - Scala 2

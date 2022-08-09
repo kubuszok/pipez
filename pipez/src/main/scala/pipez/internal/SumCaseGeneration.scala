@@ -12,6 +12,8 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
   def isADT[A](tpe:      Type[A]): Boolean
   def isJavaEnum[A](tpe: Type[A]): Boolean
 
+  def areSubtypesEqual[A, B](typeA: Type[A], typeB: Type[B]): Boolean
+
   final def isSumType[A](tpe: Type[A]): Boolean =
     isADT(tpe) || isJavaEnum(tpe)
   final def isUsableAsSumTypeConversion: Boolean =
@@ -85,11 +87,11 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
       import ConfigEntry.*
 
       settings.resolve[InSubtypeLogic[InSubtype]](DefaultSubtype()) {
-        case RemoveSubtype(_, `inSubtypeType`, pipe) =>
+        case RemoveSubtype(_, tpe, pipe) if areSubtypesEqual(tpe, inSubtypeType) =>
           SubtypeRemoved(pipe.asInstanceOf[CodeOf[Pipe[InSubtype, Out]]])
-        case RenameSubtype(_, `inSubtypeType`, _, outSubtypeType) =>
+        case RenameSubtype(_, tpe, _, outSubtypeType) if areSubtypesEqual(tpe, inSubtypeType) =>
           SubtypeRenamed(outSubtypeType)
-        case PlugInSubtype(_, `inSubtypeType`, _, outSubtypeType, pipe) =>
+        case PlugInSubtype(_, tpe, _, outSubtypeType, pipe) if areSubtypesEqual(tpe, inSubtypeType) =>
           PipeProvided[InSubtype, Out](outSubtypeType, pipe.asInstanceOf[CodeOf[Pipe[InSubtype, Out]]])
       }
     }
@@ -106,17 +108,24 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
         outData
           .findSubtype(inSubtypeName, settings.isEnumCaseInsensitive)
           .flatMap(outSubtype => fromOutputSubtype(inSubtypeType, outSubtype.tpe))
+          .log(s"Subtype $inSubtypeType uses default resolution (matching output name, summoning)")
       case SubtypeRemoved(pipe) =>
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[Out] }
-        fromMissingPipe(inSubtypeType, pipe)
+        fromMissingPipe(inSubtypeType, pipe).log(
+          s"Subtype $inSubtypeType considered removed from input, uses provided pipe"
+        )
       case SubtypeRenamed(outSubtypeType) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
-        fromOutputSubtype(inSubtypeType, outSubtypeType)
+        fromOutputSubtype(inSubtypeType, outSubtypeType).log(
+          s"Subtype $inSubtypeType considered renamed to $outSubtypeType, uses summoning"
+        )
       case PipeProvided(outSubtypeType, pipe) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[OutSubtype] }
-        fromOutputPipe(inSubtypeType, outSubtypeType, pipe)
+        fromOutputPipe(inSubtypeType, outSubtypeType, pipe).log(
+          s"Subtype $inSubtypeType converted to $outSubtypeType using provided pipe"
+        )
     }
   }
 

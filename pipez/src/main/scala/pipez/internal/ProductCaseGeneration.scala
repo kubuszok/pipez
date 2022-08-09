@@ -10,11 +10,12 @@ import scala.util.chaining.*
 trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
   def isCaseClass[A](tpe:    Type[A]): Boolean
+  def isCaseObject[A](tpe:   Type[A]): Boolean
   def isJavaBean[A](tpe:     Type[A]): Boolean
   def isInstantiable[A](tpe: Type[A]): Boolean
 
   final def isUsableAsProductOutput: Boolean =
-    (isCaseClass(outType) || isJavaBean(outType)) && isInstantiable(outType)
+    (isCaseClass(outType) || isCaseObject(outType) || isJavaBean(outType)) && isInstantiable(outType)
 
   type Constructor = List[List[CodeOf[?]]] => CodeOf[Out]
 

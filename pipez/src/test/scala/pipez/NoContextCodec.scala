@@ -5,7 +5,7 @@ trait NoContextCodec[In, Out] {
   def decode(in: In): Either[List[String], Out]
 }
 
-object NoContextCodec extends PipeSupport[NoContextCodec] {
+object NoContextCodec extends PipeSemiautoSupport[NoContextCodec] with PipeSemiautoConfiguredSupport[NoContextCodec] {
 
   implicit val pipeDerivation = new PipeDerivation.NoContext[NoContextCodec] {
 
@@ -29,4 +29,6 @@ object NoContextCodec extends PipeSupport[NoContextCodec] {
       case (_, Left(e))         => Left(e)
     }
   }
+
+  object Auto extends PipeAutoSupport[NoContextCodec]
 }

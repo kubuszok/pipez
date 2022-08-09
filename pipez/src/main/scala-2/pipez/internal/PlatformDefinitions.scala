@@ -48,6 +48,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       // matches PipeDerivationConfig[Pipe, In, Out]
       case TypeApply(Select(Ident(cfg), TermName("apply")), _) if cfg.decodedName.toString == "PipeDerivationConfig" =>
         Right(new Settings(acc))
+      // matches PipeCompanion.Config[In, Out]
+      case TypeApply(Select(Select(Ident(_), cfg), TermName("apply")), _) if cfg.decodedName.toString == "Config" =>
+        Right(new Settings(acc))
       // matches {cfg}.fieldMatchingCaseInsensitive
       case Select(expr, TermName("enableDiagnostics")) =>
         extract(expr, ConfigEntry.EnableDiagnostics :: acc)
@@ -98,8 +101,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       // TODO: removeSubtype
       // TODO: renameSubtype
       // TODO: enumMatchingCaseInsensitive
-      case _ =>
-        Left(s"${previewCode(code)} is not a right PipeDerivationConfig")
+      case els =>
+        Left(s"${previewCode(code)} is not a right PipeDerivationConfig ${showRaw(els)}")
     }
 
     DerivationResult.fromEither(extract(code.tree, Nil))(DerivationError.InvalidConfiguration(_))

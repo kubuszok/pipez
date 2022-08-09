@@ -11,7 +11,7 @@
      - [X] fields modifications
      - [ ] context update
    - [ ] sum types
-     - [ ] ADT -> ADT
+     - [X] ADT -> ADT
      - [ ] ADT -> enum (java, enumeration?)
      - [ ] enum -> ADT
      - [ ] enum -> enum

@@ -330,7 +330,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("no config, no implicits -> use matching subtypes") {
-    import NoContextCodec.Auto.*
+    import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       NoContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B),
@@ -342,6 +342,12 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTClassesOut.B(1))
     )
     // smaller -> bigger
-    // TODO
+    // TODO: enum A, B -> enum A, B, C
   }
+
+  // TODO: enums with subtype removed
+
+  // TODO: enums with pipe provided
+
+  // TODO: enums with case insensitive matching
 }

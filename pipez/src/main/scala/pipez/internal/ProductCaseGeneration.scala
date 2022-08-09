@@ -135,9 +135,12 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         inData
           .findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive)
           .flatMap(fromFieldConstructorParam(_, outParamType))
+          .log(s"Field $outParamName uses default resolution (matching input name, summoning)")
       case FieldAdded(pipe) =>
         // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
-        DerivationResult.pure(fieldAddedConstructorParam(pipe, outParamType))
+        DerivationResult
+          .pure(fieldAddedConstructorParam(pipe, outParamType))
+          .log(s"Field $outParamName considered added to output, uses provided pipe")
       case FieldRenamed(inFieldName, _) =>
         // if inField (name provided) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
@@ -145,12 +148,14 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .flatMap(fromFieldConstructorParam(_, outParamType))
+          .log(s"Field $outParamName is considered renamed from $inFieldName, uses summoning if types differ")
       case PipeProvided(inFieldName, _, pipe) =>
         // if inField (name provided) not found then error
         // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(g => pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]], pipe, outParamType))
+          .log(s"Field $outParamName converted from $inFieldName using provided pipe")
     }
   }
 

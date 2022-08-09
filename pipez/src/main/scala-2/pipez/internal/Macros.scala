@@ -60,14 +60,4 @@ final class MacroDispatcher(val c: blackbox.Context) {
     val m = macros[Pipe, In, Out](pd)
     m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]])
   }.asInstanceOf[c.Expr[Pipe[In, Out]]]
-
-  def stubConfig[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag]: c.Expr[
-    PipeDerivationConfig[Pipe, In, Out]
-  ] = {
-    val PipeDerivationConfig = weakTypeOf[PipeDerivationConfig[Pipe, In, Out]].typeConstructor.typeSymbol
-    val Pipe = weakTypeOf[Pipe[Any, Nothing]].typeConstructor.typeSymbol
-    val In = weakTypeOf[In].typeSymbol
-    val Out = weakTypeOf[Out].typeSymbol
-    c.Expr[PipeDerivationConfig[Pipe, In, Out]](q"$PipeDerivationConfig[$Pipe, $In, $Out]")
-  }
 }

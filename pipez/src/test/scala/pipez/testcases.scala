@@ -93,6 +93,7 @@ object ADTObjectsOut {
 
   final case object A extends ADTObjectsOut
   final case object B extends ADTObjectsOut
+  final case object C extends ADTObjectsOut
 }
 
 sealed trait ADTClassesIn extends Product with Serializable
@@ -106,17 +107,49 @@ object ADTClassesOut {
 
   final case class A(a: Int) extends ADTClassesOut
   final case class B(b: Int) extends ADTClassesOut
+  final case class C(c: Int) extends ADTClassesOut
 }
 
-sealed trait ADTLowerIn extends Product with Serializable
-object ADTLowerIn {
+sealed trait ADTObjectsRemovedIn extends Product with Serializable
 
-  final case class Aaa(a: Int) extends ADTLowerIn
-  final case class Bbb(b: Int) extends ADTLowerIn
+object ADTObjectsRemovedIn {
+
+  final case object A extends ADTObjectsRemovedIn
+  final case object B extends ADTObjectsRemovedIn
+  final case object C extends ADTObjectsRemovedIn
 }
-sealed trait ADTUpperOut extends Product with Serializable
-object ADTUpperOut {
+sealed trait ADTObjectsRemovedOut extends Product with Serializable
+object ADTObjectsRemovedOut {
 
-  final case class AAA(a: Int) extends ADTUpperOut
-  final case class BBB(b: Int) extends ADTUpperOut
+  case object A extends ADTObjectsRemovedOut
+  case object B extends ADTObjectsRemovedOut
+}
+
+sealed trait ADTClassesRemovedIn extends Product with Serializable
+object ADTClassesRemovedIn {
+
+  final case class A(a: Int) extends ADTClassesRemovedIn
+  final case class B(b: Int) extends ADTClassesRemovedIn
+  final case class C(c: Int) extends ADTClassesRemovedIn
+}
+sealed trait ADTClassesRemovedOut extends Product with Serializable
+object ADTClassesRemovedOut {
+
+  final case class A(a: Int) extends ADTClassesRemovedOut
+  final case class B(b: Int) extends ADTClassesRemovedOut
+}
+
+sealed trait ADTLower extends Product with Serializable
+object ADTLower {
+
+  final case class Aaa(a: Int) extends ADTLower
+  final case class Bbb(b: Int) extends ADTLower
+  final case class Ccc(c: Int) extends ADTLower
+}
+sealed trait ADTUpper extends Product with Serializable
+object ADTUpper {
+
+  final case class AAA(a: Int) extends ADTUpper
+  final case class BBB(b: Int) extends ADTUpper
+  final case class CCC(c: Int) extends ADTUpper
 }

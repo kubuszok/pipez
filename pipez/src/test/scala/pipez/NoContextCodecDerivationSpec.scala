@@ -329,7 +329,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  test("no config, no implicits -> use matching subtypes") {
+  test("no config, auto summon elements -> use matching subtypes") {
     import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
@@ -341,13 +341,96 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       NoContextCodec.derive[ADTClassesIn, ADTClassesOut].decode(ADTClassesIn.B(1)),
       Right(ADTClassesOut.B(1))
     )
-    // smaller -> bigger
-    // TODO: enum A, B -> enum A, B, C
   }
 
-  // TODO: enums with subtype removed
+  test("removeSubtype, auto summon elements -> for removed use pipe, for others use matching subtypes") {
+    import NoContextCodec.Auto.* // for recursive derivation
+    // case object only in ADT
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[ADTObjectsRemovedIn, ADTObjectsRemovedOut]
+            .removeSubtype[ADTObjectsRemovedIn.C.type](_ => Right(ADTObjectsRemovedOut.A))
+        )
+        .decode(ADTObjectsRemovedIn.C),
+      Right(ADTObjectsRemovedOut.A)
+    )
+    // case classes in ADT
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[ADTClassesRemovedIn, ADTClassesRemovedOut]
+            .removeSubtype[ADTClassesRemovedIn.C](c => Right(ADTClassesRemovedOut.A(c.c)))
+        )
+        .decode(ADTClassesRemovedIn.C(1)),
+      Right(ADTClassesRemovedOut.A(1))
+    )
+  }
 
-  // TODO: enums with pipe provided
+  test("renameSubtype, auto summon elements -> for renamed summon by new name, for others use matching subtypes") {
+    import NoContextCodec.Auto.* // for recursive derivation
+    // case object only in ADT
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[ADTObjectsRemovedIn, ADTObjectsRemovedOut]
+            .renameSubtype[ADTObjectsRemovedIn.C.type, ADTObjectsRemovedOut.A.type]
+        )
+        .decode(ADTObjectsRemovedIn.C),
+      Right(ADTObjectsRemovedOut.A)
+    )
+    // case classes in ADT
+    implicit val aCodec = NoContextCodec.derive(
+      NoContextCodec.Config[ADTClassesRemovedIn.C, ADTClassesRemovedOut.A].renameField(_.c, _.a)
+    )
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[ADTClassesRemovedIn, ADTClassesRemovedOut]
+            .renameSubtype[ADTClassesRemovedIn.C, ADTClassesRemovedOut.A]
+        )
+        .decode(ADTClassesRemovedIn.C(1)),
+      Right(ADTClassesRemovedOut.A(1))
+    )
+  }
 
-  // TODO: enums with case insensitive matching
+  test("plugInSubtype, auto summon elements -> for selected use pipe, for others use matching subtypes") {
+    import NoContextCodec.Auto.* // for recursive derivation
+    // case object only in ADT
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[ADTObjectsRemovedIn, ADTObjectsRemovedOut]
+            .plugInSubtype[ADTObjectsRemovedIn.C.type, ADTObjectsRemovedOut.A.type](_ => Right(ADTObjectsRemovedOut.A))
+        )
+        .decode(ADTObjectsRemovedIn.C),
+      Right(ADTObjectsRemovedOut.A)
+    )
+    // case classes in ADT
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[ADTClassesRemovedIn, ADTClassesRemovedOut]
+            .plugInSubtype[ADTClassesRemovedIn.C, ADTClassesRemovedOut.A](c => Right(ADTClassesRemovedOut.A(c.c)))
+        )
+        .decode(ADTClassesRemovedIn.C(1)),
+      Right(ADTClassesRemovedOut.A(1))
+    )
+  }
+
+  test("enumMatchingCaseInsensitive, auto summon elements -> match subtypes by name ignoring cases") {
+    import NoContextCodec.Auto.* // for recursive derivation
+    assertEquals(
+      NoContextCodec
+        .derive(NoContextCodec.Config[ADTLower, ADTUpper].enumMatchingCaseInsensitive)
+        .decode(ADTLower.Ccc(1)),
+      Right(ADTUpper.CCC(1))
+    )
+  }
 }

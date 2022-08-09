@@ -13,8 +13,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   import c.universe.*
 
   final def isCaseClass[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isClass &&
-      tpe.typeSymbol.asClass.isCaseClass
+    tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isCaseClass
+  final def isCaseObject[A](tpe: Type[A]): Boolean =
+    tpe.typeSymbol.isModuleClass && tpe.typeSymbol.asClass.isCaseClass
   final def isJavaBean[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isClass &&
       tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
@@ -76,6 +77,15 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       defaultConstructor
         .map2(setters)(ProductOutData.JavaBean(_, _))
         .logSuccess(data => s"Resolved Java Bean output: $data")
+    } else if (isCaseObject(outType)) {
+      // case object case
+      ProductOutData
+        .CaseClass(
+          params => c.Expr(q"${outType.typeSymbol.asClass.module}"),
+          List.empty
+        )
+        .pipe(DerivationResult.pure(_))
+        .logSuccess(data => s"Resolved case object output: $data")
     } else {
       // case class case
 

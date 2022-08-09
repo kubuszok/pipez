@@ -79,3 +79,44 @@ final case class BeanUpper private (
   @BeanProperty var BBB: String,
   @BeanProperty var CCC: Long
 ) { def this() = this(0, "", 0L) }
+
+// ADT
+
+sealed trait ADTObjectsIn extends Product with Serializable
+object ADTObjectsIn {
+
+  case object A extends ADTObjectsIn
+  case object B extends ADTObjectsIn
+}
+sealed trait ADTObjectsOut extends Product with Serializable
+object ADTObjectsOut {
+
+  final case object A extends ADTObjectsOut
+  final case object B extends ADTObjectsOut
+}
+
+sealed trait ADTClassesIn extends Product with Serializable
+object ADTClassesIn {
+
+  final case class A(a: Int) extends ADTClassesIn
+  final case class B(b: Int) extends ADTClassesIn
+}
+sealed trait ADTClassesOut extends Product with Serializable
+object ADTClassesOut {
+
+  final case class A(a: Int) extends ADTClassesOut
+  final case class B(b: Int) extends ADTClassesOut
+}
+
+sealed trait ADTLowerIn extends Product with Serializable
+object ADTLowerIn {
+
+  final case class Aaa(a: Int) extends ADTLowerIn
+  final case class Bbb(b: Int) extends ADTLowerIn
+}
+sealed trait ADTUpperOut extends Product with Serializable
+object ADTUpperOut {
+
+  final case class AAA(a: Int) extends ADTUpperOut
+  final case class BBB(b: Int) extends ADTUpperOut
+}

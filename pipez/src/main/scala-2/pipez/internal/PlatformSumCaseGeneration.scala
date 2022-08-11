@@ -13,7 +13,7 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
   final def isJavaEnum[A](tpe: Type[A]): Boolean =
     tpe.typeSymbol.isJavaEnum
 
-  def areSubtypesEqual[A, B](typeA: Type[A], typeB: Type[B]): Boolean = typeA =:= typeB
+  final def areSubtypesEqual[A, B](typeA: Type[A], typeB: Type[B]): Boolean = typeA =:= typeB
 
   final def extractEnumInData: DerivationResult[EnumData[In]] = extractEnumData(inType)
 

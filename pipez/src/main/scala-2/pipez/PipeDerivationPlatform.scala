@@ -12,5 +12,5 @@ trait PipeDerivationPlatform { self: PipeDerivation.type =>
     config: PipeDerivationConfig[Pipe, In, Out]
   )(implicit
     pd: PipeDerivation[Pipe]
-  ): Pipe[In, Out] = macro pipez.internal.MacroDispatcher.deriveConfigured[Pipe, In, Out]
+  ): Pipe[In, Out] = macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]
 }

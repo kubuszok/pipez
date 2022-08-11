@@ -5,11 +5,12 @@ val pipez = project
   .in(file("pipez"))
   .settings(
     name := "pipez",
-    scalaVersion := scala2version,
+    scalaVersion := scala3version,
     crossScalaVersions := Seq(scala2version, scala3version),
     scalacOptions ++= {
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, 13)) => Seq("-deprecation", "-feature", "-Xsource:3")
+        case Some((3, 1))  => Seq("-explain")
         case _             => Seq.empty
       }
     },

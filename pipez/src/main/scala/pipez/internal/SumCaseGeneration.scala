@@ -92,7 +92,9 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
         case RenameSubtype(_, tpe, _, outSubtypeType) if areSubtypesEqual(tpe, inSubtypeType) =>
           SubtypeRenamed(outSubtypeType)
         case PlugInSubtype(_, tpe, _, outSubtypeType, pipe) if areSubtypesEqual(tpe, inSubtypeType) =>
-          PipeProvided[InSubtype, Out](outSubtypeType, pipe.asInstanceOf[CodeOf[Pipe[InSubtype, Out]]])
+          PipeProvided[InSubtype, Out](outSubtypeType.asInstanceOf[Type[Out]],
+                                       pipe.asInstanceOf[CodeOf[Pipe[InSubtype, Out]]]
+          )
       }
     }
 

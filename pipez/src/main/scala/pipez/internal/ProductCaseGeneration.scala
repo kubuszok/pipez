@@ -17,7 +17,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   final def isUsableAsProductOutput: Boolean =
     (isCaseClass(outType) || isCaseObject(outType) || isJavaBean(outType)) && isInstantiable(outType)
 
-  type Constructor = List[List[CodeOf[?]]] => CodeOf[Out]
+  type Constructor = List[List[CodeOf[Any]]] => CodeOf[Out]
 
   final case class ProductInData(getters: ListMap[String, ProductInData.Getter[?]]) {
 
@@ -118,7 +118,10 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         case PlugInField(Field(Root, inName), inType, Field(Root, outFieldGetter), outType, pipe)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that outType <:< outFieldType is correct
-          PipeProvided(inName, inType, pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]])
+          PipeProvided[Any, OutField](inName,
+                                      inType.asInstanceOf[Type[Any]],
+                                      pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]]
+          )
       }
     }
 
@@ -154,7 +157,12 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
-          .map(g => pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]], pipe, outParamType))
+          .map(g =>
+            pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]],
+                                         pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]],
+                                         outParamType
+            )
+          )
           .log(s"Field $outParamName converted from $inFieldName using provided pipe")
     }
   }
@@ -263,7 +271,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         )
       )
     } else {
-      summonPipe(inFieldType, outFieldType).map { pipe: CodeOf[Pipe[InField, OutField]] =>
+      summonPipe(inFieldType, outFieldType).map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
           outFieldType,
           (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)

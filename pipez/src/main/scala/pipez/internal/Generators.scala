@@ -6,8 +6,8 @@ import scala.annotation.nowarn
 import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Generators[Pipe[_, _], In, Out] {
-  self: Definitions[Pipe, In, Out] & ProductCaseGeneration[Pipe, In, Out] & SumCaseGeneration[Pipe, In, Out] =>
+trait Generators[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] with SumCaseGeneration[Pipe, In, Out]{
+  self: Definitions[Pipe, In, Out]  =>
 
   def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean
 

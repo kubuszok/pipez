@@ -1,7 +1,10 @@
 package pipez.internal
 
-trait PlatformGenerators[Pipe[_, _], In, Out] extends Generators[Pipe, In, Out] {
-  self: PlatformDefinitions[Pipe, In, Out] & ProductCaseGeneration[Pipe, In, Out] & SumCaseGeneration[Pipe, In, Out] =>
+trait PlatformGenerators[Pipe[_, _], In, Out]
+    extends Generators[Pipe, In, Out]
+    with ProductCaseGeneration[Pipe, In, Out]
+    with SumCaseGeneration[Pipe, In, Out] {
+  self: PlatformDefinitions[Pipe, In, Out] =>
 
   import c.universe.*
 

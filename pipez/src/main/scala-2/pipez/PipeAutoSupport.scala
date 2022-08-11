@@ -7,5 +7,5 @@ trait PipeAutoSupport[Pipe[_, _]] {
 
   implicit def derive[In, Out](implicit
     pd: PipeDerivation[Pipe]
-  ): Pipe[In, Out] = macro pipez.internal.MacroDispatcher.deriveDefault[Pipe, In, Out]
+  ): Pipe[In, Out] = macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]
 }

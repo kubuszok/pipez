@@ -1,19 +1,36 @@
 package pipez.internal
 
-trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] {
+import scala.quoted.{Type as _, *}
+
+trait PlatformProductCaseGeneration[Pipe[_, _], In, Out](using Quotes) extends ProductCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
-  final def isCaseClass[A](tpe: Type[A]): Boolean = ???
+  import quotes.*
+  import quotes.reflect.*
 
-  final def isCaseObject[A](tpe: Type[A]): Boolean = ???
+  final def isCaseClass[A: Type]: Boolean =
+    val sym = TypeRepr.of[A].typeSymbol
+    sym.isClassDef && sym.flags.is(Flags.Case)
+  final def isCaseObject[A: Type]: Boolean =
+    TypeRepr.of[A].typeSymbol.flags.is(Flags.Module) && isCaseClass[A]
+  final def isJavaBean[A: Type]: Boolean =
+    val sym = TypeRepr.of[A].typeSymbol
+    sym.isClassDef &&
+    sym.declaredMethods.exists(m => m.name.toString.startsWith("set")) &&
+    sym.declarations.exists(m => m.isClassConstructor && m.paramSymss.flatten.isEmpty) // TODO: check for public?
+  final def isInstantiable[A: Type]: Boolean =
+    val sym = TypeRepr.of[A].typeSymbol
+    !sym.flags.is(Flags.Abstract) && sym.declarations.exists(m => m.isClassConstructor) // TODO: check for public?
 
-  final def isJavaBean[A](tpe: Type[A]): Boolean = ???
+  final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
+    ???
+  }
 
-  final def isInstantiable[A](tpe: Type[A]): Boolean = ???
+  final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] = {
+    ???
+  }
 
-  final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = ???
-
-  final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] = ???
-
-  final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = ???
+  final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] = {
+    ???
+  }
 }

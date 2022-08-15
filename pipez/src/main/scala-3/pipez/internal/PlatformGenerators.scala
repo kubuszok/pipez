@@ -1,6 +1,8 @@
 package pipez.internal
 
-trait PlatformGenerators[Pipe[_, _], In, Out](using quotes: scala.quoted.Quotes)
+import scala.quoted.{Type as _, *}
+
+trait PlatformGenerators[Pipe[_, _], In, Out](using Quotes)
     extends Generators[Pipe, In, Out]
     with PlatformProductCaseGeneration[Pipe, In, Out]
     with PlatformSumCaseGeneration[Pipe, In, Out] {

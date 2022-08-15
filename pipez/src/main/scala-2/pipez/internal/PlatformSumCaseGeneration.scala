@@ -1,6 +1,6 @@
 package pipez.internal
 
-import scala.annotation.{nowarn, unused}
+import scala.annotation.{ nowarn, unused }
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
@@ -8,25 +8,27 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
 
   import c.universe.*
 
-  final def isADT[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isSealed
-  final def isJavaEnum[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isJavaEnum
+  final def isADT[A: Type]: Boolean = {
+    val sym = typeOf[A].typeSymbol
+    sym.isClass && sym.asClass.isSealed
+  }
+  final def isJavaEnum[A: Type]: Boolean =
+    typeOf[A].typeSymbol.isJavaEnum
 
-  final def areSubtypesEqual[A, B](typeA: Type[A], typeB: Type[B]): Boolean = typeA =:= typeB
+  final def areSubtypesEqual[A: Type, B: Type]: Boolean = typeOf[A] =:= typeOf[B]
 
-  final def extractEnumInData: DerivationResult[EnumData[In]] = extractEnumData(inType)
+  final def extractEnumInData: DerivationResult[EnumData[In]] = extractEnumData[In]
 
-  final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData(outType)
+  final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData[Out]
 
-  private def extractEnumData[A](tpe: Type[A]): DerivationResult[EnumData[A]] =
-    if (isADT(tpe)) {
+  private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
+    if (isADT[A]) {
       def extractSubclasses(t: TypeSymbol): List[TypeSymbol] =
         if (t.asClass.isSealed) t.asClass.knownDirectSubclasses.toList.map(_.asType).flatMap(extractSubclasses)
         else List(t)
       DerivationResult.unsafe[EnumData[A]](
         EnumData.SumType(
-          extractSubclasses(tpe.typeSymbol.asType).map { subtypeType =>
+          extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType =>
             EnumData.SumType.Case(subtypeType.name.toString,
                                   subtypeType.toType,
                                   isCaseObject = subtypeType.asClass.isModule

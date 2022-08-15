@@ -9,13 +9,13 @@ import scala.util.chaining.*
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
-  def isCaseClass[A](tpe:    Type[A]): Boolean
-  def isCaseObject[A](tpe:   Type[A]): Boolean
-  def isJavaBean[A](tpe:     Type[A]): Boolean
-  def isInstantiable[A](tpe: Type[A]): Boolean
+  def isCaseClass[A:    Type]: Boolean
+  def isCaseObject[A:   Type]: Boolean
+  def isJavaBean[A:     Type]: Boolean
+  def isInstantiable[A: Type]: Boolean
 
   final def isUsableAsProductOutput: Boolean =
-    (isCaseClass(outType) || isCaseObject(outType) || isJavaBean(outType)) && isInstantiable(outType)
+    (isCaseClass[Out] || isCaseObject[Out] || isJavaBean[Out]) && isInstantiable[Out]
 
   type Constructor = List[List[CodeOf[Any]]] => CodeOf[Out]
 
@@ -96,10 +96,9 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       pipe:        CodeOf[Pipe[InField, OutField]]
     ) extends OutFieldLogic[OutField]
 
-    private def resolve[OutField](
+    private def resolve[OutField: Type](
       settings:     Settings,
-      outFieldName: String,
-      outFieldType: Type[OutField]
+      outFieldName: String
     ): OutFieldLogic[OutField] = {
       import Path.*
       import ConfigEntry.*
@@ -129,7 +128,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       settings:     Settings,
       inData:       ProductInData,
       outParamName: String
-    ): DerivationResult[ProductGeneratorData.OutputValue] = resolve(settings, outParamName, implicitly[Type[OutField]]) match {
+    ): DerivationResult[ProductGeneratorData.OutputValue] = resolve(settings, outParamName) match {
       case DefaultField() =>
         // if inField (same name as out) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
@@ -273,14 +272,14 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     if (isSubtype[InField, OutField]) {
       DerivationResult.pure(
         ProductGeneratorData.OutputValue.Pure(
-          implicitly[Type[InField]],
+          typeOf[InField],
           (in, _) => getter.get(in)
         )
       )
     } else {
       summonPipe[InField, OutField].map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
-          implicitly[Type[OutField]],
+          typeOf[OutField],
           (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
         )
       }
@@ -288,19 +287,19 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
   private def fieldAddedConstructorParam[OutField: Type](
-    pipe:         CodeOf[Pipe[In, OutField]]
+    pipe: CodeOf[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
-    implicitly[Type[OutField]],
+    typeOf[OutField],
     (in, ctx) => unlift[In, OutField](pipe, inCode(in), ctx)
   )
 
   // (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
   private def pipeProvidedConstructorParam[InField: Type, OutField: Type](
-    getter:       ProductInData.Getter[InField],
-    pipe:         CodeOf[Pipe[InField, OutField]]
+    getter: ProductInData.Getter[InField],
+    pipe:   CodeOf[Pipe[InField, OutField]]
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
-      implicitly[Type[OutField]],
+      typeOf[OutField],
       (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
     )
 }

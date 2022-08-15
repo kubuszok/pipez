@@ -12,6 +12,8 @@ trait Definitions[Pipe[_, _], In, Out] {
   type Argument[A]
   type CodeOf[A]
 
+  def typeOf[A](implicit tpe: Type[A]): Type[A] = tpe
+
   implicit def pipeType[I: Type, O: Type]: Type[Pipe[I, O]]
   implicit val inType:  Type[In]
   implicit val outType: Type[Out]
@@ -22,8 +24,10 @@ trait Definitions[Pipe[_, _], In, Out] {
   /** Can be used instead of pd.Context to avoid path-dependent types */
   type ArbitraryResult[O]
 
-  val inCode:         Argument[In] => CodeOf[In]
-  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }]
+  val inCode: Argument[In] => CodeOf[In]
+  val pipeDerivation: CodeOf[
+    PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }
+  ]
 
   sealed trait Path extends Product with Serializable
   object Path {
@@ -237,15 +241,11 @@ trait Definitions[Pipe[_, _], In, Out] {
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
     * hint
     */
-  def singleAbstractMethodExpansion[SAM](tpe: Type[SAM], code: CodeOf[SAM]): CodeOf[SAM]
+  def singleAbstractMethodExpansion[SAM: Type](code: CodeOf[SAM]): CodeOf[SAM]
 
-  def readConfig(
-    code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]
-  ): DerivationResult[Settings]
+  def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings]
 
-  final def readSettingsIfGiven(
-    code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]
-  ): DerivationResult[Settings] =
+  final def readSettingsIfGiven(code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): DerivationResult[Settings] =
     code
       .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")

@@ -12,12 +12,18 @@ trait Definitions[Pipe[_, _], In, Out] {
   type Argument[A]
   type CodeOf[A]
 
-  def pipeType[I, O](i: Type[I], o: Type[O]): Type[Pipe[I, O]]
-  val inType:  Type[In]
-  val outType: Type[Out]
+  implicit def pipeType[I: Type, O: Type]: Type[Pipe[I, O]]
+  implicit val inType:  Type[In]
+  implicit val outType: Type[Out]
+
+  /** Can be used instead of pd.Context to avoid path-dependent types */
+  type ArbitraryContext
+
+  /** Can be used instead of pd.Context to avoid path-dependent types */
+  type ArbitraryResult[O]
 
   val inCode:         Argument[In] => CodeOf[In]
-  val pipeDerivation: CodeOf[PipeDerivation[Pipe]]
+  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }]
 
   sealed trait Path extends Product with Serializable
   object Path {
@@ -226,10 +232,7 @@ trait Definitions[Pipe[_, _], In, Out] {
 
   def previewCode[A](code: CodeOf[A]): String
 
-  def summonPipe[Input, Output](
-    inputType:  Type[Input],
-    outputType: Type[Output]
-  ): DerivationResult[CodeOf[Pipe[Input, Output]]]
+  def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]]
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
     * hint

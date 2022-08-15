@@ -14,35 +14,22 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
   def reportDiagnostics[A](result: DerivationResult[A]): Unit =
     c.echo(c.enclosingPosition, diagnosticsMessage(result))
 
-  def reportError(errors: List[DerivationError]): Nothing = c.abort(c.enclosingPosition, errorMessage(errors))
+  def reportError(errors: List[DerivationError]): Nothing =
+    c.abort(c.enclosingPosition, errorMessage(errors))
 
   final def lift[I, O](
     call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
-  ): CodeOf[Pipe[I, O]] =
-    try
-      c.Expr[Pipe[I, O]](q"""$pipeDerivation.lift($call)""")
-    catch {
-      case e: Throwable =>
-        println("Call: " + previewCode(call))
-        throw e
-    }
+  ): CodeOf[Pipe[I, O]] = c.Expr[Pipe[I, O]](q"""$pipeDerivation.lift($call)""")
 
   final def unlift[I, O](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
     ctx:  Argument[ArbitraryContext]
-  ): CodeOf[ArbitraryResult[O]] =
-    try
-      c.Expr[ArbitraryResult[O]](q"""$pipeDerivation.unlift($pipe, $in, $ctx)""")
-    catch {
-      case e: Throwable =>
-        println("Pipe: " + previewCode(pipe))
-        throw e
-    }
+  ): CodeOf[ArbitraryResult[O]] = c.Expr[ArbitraryResult[O]](q"""$pipeDerivation.unlift($pipe, $in, $ctx)""")
 
   final def updateContext(
     ctx:  Argument[ArbitraryContext],
-    path: CodeOf[Path]
+    path: CodeOf[pipez.Path]
   ): CodeOf[ArbitraryContext] = c.Expr[ArbitraryContext](q"""$pipeDerivation.updateContext($ctx, $path)""")
 
   final def pureResult[A](a: CodeOf[A]): CodeOf[ArbitraryResult[A]] =

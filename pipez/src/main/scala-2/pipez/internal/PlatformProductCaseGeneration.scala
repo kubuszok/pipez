@@ -12,16 +12,20 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   import c.universe.*
 
-  final def isCaseClass[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isCaseClass
-  final def isCaseObject[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isModuleClass && tpe.typeSymbol.asClass.isCaseClass
-  final def isJavaBean[A](tpe: Type[A]): Boolean =
-    tpe.typeSymbol.isClass &&
+  final def isCaseClass[A: Type]: Boolean = {
+    val sym = typeOf[A].typeSymbol
+    sym.isClass && sym.asClass.isCaseClass
+  }
+  final def isCaseObject[A: Type](tpe: Type[A]): Boolean = {
+    val sym = typeOf[A].typeSymbol
+    sym.isModuleClass && sym.asClass.isCaseClass
+  }
+  final def isJavaBean[A: Type](tpe: Type[A]): Boolean =
+    typeOf[A].typeSymbol.isClass &&
       tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
       tpe.members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
-  final def isInstantiable[A](tpe: Type[A]): Boolean =
-    !tpe.typeSymbol.isAbstract && tpe.members.exists(m => m.isPublic && m.isConstructor)
+  final def isInstantiable[A: Type](tpe: Type[A]): Boolean =
+    !typeOf[A].typeSymbol.isAbstract && tpe.members.exists(m => m.isPublic && m.isConstructor)
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
     inType.members // we fetch ALL members, even those that might have been inherited
@@ -61,7 +65,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .to(List)
         .collect {
           case member
-              if member.isPublic && member.isMethod && member.name.toString.startsWith(
+              if member.isPublic && member.isMethod && member.name.toString.toLowerCase.startsWith(
                 "set"
               ) && member.asMethod.paramLists.flatten.size == 1 =>
             member.name.toString -> ProductOutData.Setter(

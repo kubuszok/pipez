@@ -4,25 +4,47 @@ import pipez.{ PipeDerivation, PipeDerivationConfig }
 
 import scala.quoted.*
 
-class MacrosImpl[Pipe[_, _], In, Out](using Quotes)
+class MacrosImpl[Pipe[_, _], In, Out](
+  pd:                       Expr[PipeDerivation[Pipe]]
+)(using Quotes)(using Pipe: Type[Pipe], In: Type[In], Out: Type[Out])
     extends PlatformDefinitions[Pipe, In, Out]
     with PlatformGenerators[Pipe, In, Out] {
 
-  def pipeType[I, O](i: Type[I], o: Type[O]): Type[Pipe[I, O]] = ???
-  val inType:                                 Type[In]         = ???
-  val outType:                                Type[Out]        = ???
+  import quotes.*
+  import quotes.reflect.*
 
-  val pipeDerivation: CodeOf[PipeDerivation[Pipe]] = ???
+  def pipeType[I: Type, O: Type]: Type[Pipe[I, O]] =
+    TypeRepr.of[Pipe].appliedTo(List(TypeRepr.of[I], TypeRepr.of[O])).asType.asInstanceOf[Type[Pipe[I, O]]]
+  val inType:  Type[In]  = In
+  val outType: Type[Out] = Out
+
+  val pipeDerivation: CodeOf[
+    PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }
+  ] = pd.asInstanceOf[CodeOf[
+    PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }
+  ]]
+
+  // Scala 3 specific definitions
+  val pipeTypeConstructor = Pipe
+  val contextType         = Type.of[Any].asInstanceOf[scala.quoted.Type[ArbitraryContext]]
+  val resultType          = Type.of[Any].asInstanceOf[scala.quoted.Type[ArbitraryResult]]
 }
 
 object Macros {
 
-  private def macros[Pipe[_, _], In, Out](using Quotes): MacrosImpl[Pipe, In, Out] =
-    new MacrosImpl[Pipe, In, Out]
+  private def macros[Pipe[_, _], In, Out](
+    pd: Expr[PipeDerivation[Pipe]]
+  )(using Quotes, Type[Pipe], Type[In], Type[Out]): MacrosImpl[Pipe, In, Out] =
+    new MacrosImpl[Pipe, In, Out](pd)
 
-  def deriveDefault[Pipe[_, _], In, Out](using Quotes): Expr[Pipe[In, Out]] = macros[Pipe, In, Out].deriveDefault
+  def deriveDefault[Pipe[_, _], In, Out](
+    pd: Expr[PipeDerivation[Pipe]]
+  )(using Quotes, Type[Pipe], Type[In], Type[Out]): Expr[Pipe[In, Out]] = macros[Pipe, In, Out](pd).deriveDefault
 
   def deriveConfigured[Pipe[_, _], In, Out](
     config: Expr[PipeDerivationConfig[Pipe, In, Out]]
-  )(using Quotes): Expr[Pipe[In, Out]] = macros[Pipe, In, Out].deriveConfigured(config)
+  )(
+    pd: Expr[PipeDerivation[Pipe]]
+  )(using Quotes, Type[Pipe], Type[In], Type[Out]): Expr[Pipe[In, Out]] =
+    macros[Pipe, In, Out](pd).deriveConfigured(config)
 }

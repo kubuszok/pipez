@@ -125,44 +125,53 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       }
     }
 
-    def resolveField[OutField](
+    def resolveField[OutField: Type](
       settings:     Settings,
       inData:       ProductInData,
-      outParamName: String,
-      outParamType: Type[OutField]
-    ): DerivationResult[ProductGeneratorData.OutputValue] = resolve(settings, outParamName, outParamType) match {
+      outParamName: String
+    ): DerivationResult[ProductGeneratorData.OutputValue] = resolve(settings, outParamName, implicitly[Type[OutField]]) match {
       case DefaultField() =>
         // if inField (same name as out) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
         // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, ctx) : Result[OutField]
+        type InField
         inData
           .findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive)
-          .flatMap(fromFieldConstructorParam(_, outParamType))
+          .map(_.asInstanceOf[ProductInData.Getter[InField]])
+          .flatMap { getter =>
+            implicit val tpe: Type[InField] = getter.tpe
+            fromFieldConstructorParam[InField, OutField](getter)
+          }
           .log(s"Field $outParamName uses default resolution (matching input name, summoning)")
       case FieldAdded(pipe) =>
         // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
         DerivationResult
-          .pure(fieldAddedConstructorParam(pipe, outParamType))
+          .pure(fieldAddedConstructorParam[OutField](pipe))
           .log(s"Field $outParamName considered added to output, uses provided pipe")
       case FieldRenamed(inFieldName, _) =>
         // if inField (name provided) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
         // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, ctx) : Result[OutField]
+        type InField
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
-          .flatMap(fromFieldConstructorParam(_, outParamType))
+          .map(_.asInstanceOf[ProductInData.Getter[InField]])
+          .flatMap { getter =>
+            implicit val tpe: Type[InField] = getter.tpe
+            fromFieldConstructorParam[InField, OutField](getter)
+          }
           .log(s"Field $outParamName is considered renamed from $inFieldName, uses summoning if types differ")
       case PipeProvided(inFieldName, _, pipe) =>
         // if inField (name provided) not found then error
         // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
+        type InField
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
-          .map(g =>
-            pipeProvidedConstructorParam(g.asInstanceOf[ProductInData.Getter[Any]],
-                                         pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]],
-                                         outParamType
-            )
-          )
+          .map(_.asInstanceOf[ProductInData.Getter[InField]])
+          .map { getter =>
+            implicit val tpe: Type[InField] = getter.tpe
+            pipeProvidedConstructorParam[InField, OutField](getter, pipe.asInstanceOf[CodeOf[Pipe[InField, OutField]]])
+          }
           .log(s"Field $outParamName converted from $inFieldName using provided pipe")
     }
   }
@@ -238,7 +247,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         .map(
           _.values
             .map { case ProductOutData.ConstructorParam(outParamName, outParamType) =>
-              OutFieldLogic.resolveField(settings, inData, outParamName, outParamType)
+              OutFieldLogic.resolveField(settings, inData, outParamName)(outParamType)
             }
             .toList
             .pipe(DerivationResult.sequence(_))
@@ -249,7 +258,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     case ProductOutData.JavaBean(defaultConstructor, setters) =>
       setters.values
         .map { case setter @ ProductOutData.Setter(outSetterName, outSetterType, _) =>
-          OutFieldLogic.resolveField(settings, inData, outSetterName, outSetterType).map(_ -> setter)
+          OutFieldLogic.resolveField(settings, inData, outSetterName)(outSetterType).map(_ -> setter)
         }
         .toList
         .pipe(DerivationResult.sequence(_))
@@ -258,45 +267,40 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   // if inField <:< outField then (in, ctx) => in : OutField
   // else (in, ctx) => unlift(summon[InField, OutField])(in.inField, ctx) : Result[OutField]
-  private def fromFieldConstructorParam[InField, OutField](
-    getter:       ProductInData.Getter[InField],
-    outFieldType: Type[OutField]
-  ): DerivationResult[ProductGeneratorData.OutputValue] = {
-    val inFieldType = getter.tpe
-    if (isSubtype(inFieldType, outFieldType)) {
+  private def fromFieldConstructorParam[InField: Type, OutField: Type](
+    getter: ProductInData.Getter[InField]
+  ): DerivationResult[ProductGeneratorData.OutputValue] =
+    if (isSubtype[InField, OutField]) {
       DerivationResult.pure(
         ProductGeneratorData.OutputValue.Pure(
-          outFieldType.asInstanceOf[Type[InField]],
+          implicitly[Type[InField]],
           (in, _) => getter.get(in)
         )
       )
     } else {
-      summonPipe(inFieldType, outFieldType).map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
+      summonPipe[InField, OutField].map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
-          outFieldType,
+          implicitly[Type[OutField]],
           (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
         )
       }
     }
-  }
 
   // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
-  private def fieldAddedConstructorParam[OutField](
-    pipe:         CodeOf[Pipe[In, OutField]],
-    outFieldType: Type[OutField]
+  private def fieldAddedConstructorParam[OutField: Type](
+    pipe:         CodeOf[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
-    outFieldType,
+    implicitly[Type[OutField]],
     (in, ctx) => unlift[In, OutField](pipe, inCode(in), ctx)
   )
 
   // (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
-  private def pipeProvidedConstructorParam[InField, OutField](
+  private def pipeProvidedConstructorParam[InField: Type, OutField: Type](
     getter:       ProductInData.Getter[InField],
-    pipe:         CodeOf[Pipe[InField, OutField]],
-    outFieldType: Type[OutField]
+    pipe:         CodeOf[Pipe[InField, OutField]]
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
-      outFieldType,
+      implicitly[Type[OutField]],
       (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
     )
 }

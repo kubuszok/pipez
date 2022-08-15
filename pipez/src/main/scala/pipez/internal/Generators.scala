@@ -6,10 +6,12 @@ import scala.annotation.nowarn
 import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Generators[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] with SumCaseGeneration[Pipe, In, Out]{
-  self: Definitions[Pipe, In, Out]  =>
+trait Generators[Pipe[_, _], In, Out]
+    extends ProductCaseGeneration[Pipe, In, Out]
+    with SumCaseGeneration[Pipe, In, Out] {
+  self: Definitions[Pipe, In, Out] =>
 
-  def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean
+  def isSubtype[A: Type, B: Type]: Boolean
 
   trait CodeGeneratorExtractor {
 
@@ -60,19 +62,13 @@ trait Generators[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Ou
   /** Should use platform-specific way of reporting errors from macro */
   def reportError(errors: List[DerivationError]): Nothing
 
-  /** Can be used instead of pd.Context to avoid path-dependent types */
-  type ArbitraryContext
-
-  /** Can be used instead of pd.Context to avoid path-dependent types */
-  type ArbitraryResult[O]
-
   /** Should generate code `pd.lift { (in, ctx) => ... }` */
-  def lift[I, O](
+  def lift[I: Type, O: Type](
     call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
   ): CodeOf[Pipe[I, O]]
 
   /** Should generate code `pd.unlift(pipe)(in, ctx)` */
-  def unlift[I, O](
+  def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
     ctx:  Argument[ArbitraryContext]
@@ -81,14 +77,14 @@ trait Generators[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Ou
   /** Should generate code `pd.updateContext(ctx, path)` */
   def updateContext(
     context: Argument[ArbitraryContext],
-    path:    CodeOf[Path]
+    path:    CodeOf[pipez.Path]
   ): CodeOf[ArbitraryContext]
 
   /** Should generate code `pd.pureResult(a)` */
-  def pureResult[A](a: CodeOf[A]): CodeOf[ArbitraryResult[A]]
+  def pureResult[A: Type](a: CodeOf[A]): CodeOf[ArbitraryResult[A]]
 
   /** Should generate code `pd.mergeResults(ra, rb) { (a, b) => ... }` */
-  def mergeResults[A, B, C](
+  def mergeResults[A: Type, B: Type, C: Type](
     ra: CodeOf[ArbitraryResult[A]],
     rb: CodeOf[ArbitraryResult[B]],
     f:  CodeOf[(A, B) => C]

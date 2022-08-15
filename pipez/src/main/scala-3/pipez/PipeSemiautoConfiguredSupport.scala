@@ -1,14 +1,15 @@
 package pipez
 
-trait PipeDerivationPlatform { self: PipeDerivation.type =>
-
-  inline def derive[Pipe[_, _], In, Out](using
-    inline pd: PipeDerivation[Pipe]
-  ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveDefault[Pipe, In, Out]('{ pd }) }
+trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
 
   inline def derive[Pipe[_, _], In, Out](
     inline config: PipeDerivationConfig[Pipe, In, Out]
   )(using
     inline pd: PipeDerivation[Pipe]
   ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveConfigured[Pipe, In, Out]('{ config })('{ pd }) }
+
+  object Config {
+
+    def apply[In, Out]: PipeDerivationConfig[Pipe, In, Out] = ???
+  }
 }

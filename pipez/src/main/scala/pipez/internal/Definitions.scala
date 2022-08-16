@@ -25,6 +25,7 @@ trait Definitions[Pipe[_, _], In, Out] {
   type ArbitraryResult[O]
 
   val inCode: Argument[In] => CodeOf[In]
+  val ctxCode: Argument[ArbitraryContext] => CodeOf[ArbitraryContext]
   val pipeDerivation: CodeOf[
     PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }
   ]

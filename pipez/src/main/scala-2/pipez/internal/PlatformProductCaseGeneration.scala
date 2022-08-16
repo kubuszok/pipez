@@ -36,7 +36,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               "is"
             ) || member.name.toString.startsWith("get")) =>
           member.name.toString -> ProductInData.Getter[Any](
-            name = member.name.toString,
+            name = member.name.toStrg,
             tpe = member.asMethod.returnType,
             get =
               if (member.asMethod.paramLists.isEmpty)

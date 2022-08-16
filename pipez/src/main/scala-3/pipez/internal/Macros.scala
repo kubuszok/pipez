@@ -4,6 +4,7 @@ import pipez.{ PipeDerivation, PipeDerivationConfig }
 
 import scala.quoted.*
 
+@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 class MacrosImpl[Pipe[_, _], In, Out](
   pd:                       Expr[PipeDerivation[Pipe]]
 )(using Quotes)(using Pipe: Type[Pipe], In: Type[In], Out: Type[Out])
@@ -30,12 +31,12 @@ class MacrosImpl[Pipe[_, _], In, Out](
   val resultType          = Type.of[Any].asInstanceOf[scala.quoted.Type[ArbitraryResult]]
 }
 
+@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 object Macros {
 
   private def macros[Pipe[_, _], In, Out](
     pd: Expr[PipeDerivation[Pipe]]
-  )(using Quotes, Type[Pipe], Type[In], Type[Out]): MacrosImpl[Pipe, In, Out] =
-    new MacrosImpl[Pipe, In, Out](pd)
+  )(using Quotes, Type[Pipe], Type[In], Type[Out]): MacrosImpl[Pipe, In, Out] = new MacrosImpl[Pipe, In, Out](pd)
 
   def deriveDefault[Pipe[_, _], In, Out](
     pd: Expr[PipeDerivation[Pipe]]

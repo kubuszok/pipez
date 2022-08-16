@@ -16,7 +16,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   override type Argument[@unused A] = TermName
   override type CodeOf[A]           = Expr[A]
 
-  final val inCode: Argument[In] => CodeOf[In] = id => c.Expr[In](q"$id")
+  final val inCode:  Argument[In] => CodeOf[In]                             = id => c.Expr[In](q"$id")
+  final val ctxCode: Argument[ArbitraryContext] => CodeOf[ArbitraryContext] = id => c.Expr[ArbitraryContext](q"$id")
 
   final def previewCode[A](code: CodeOf[A]): String = showCode(code.tree)
 

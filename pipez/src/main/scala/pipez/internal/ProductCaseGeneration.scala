@@ -280,7 +280,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       summonPipe[InField, OutField].map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
           typeOf[OutField],
-          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
+          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctxCode(ctx))
         )
       }
     }
@@ -290,7 +290,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     pipe: CodeOf[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
     typeOf[OutField],
-    (in, ctx) => unlift[In, OutField](pipe, inCode(in), ctx)
+    (in, ctx) => unlift[In, OutField](pipe, inCode(in), ctxCode(ctx))
   )
 
   // (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
@@ -300,7 +300,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
       typeOf[OutField],
-      (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
+      (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctxCode(ctx))
     )
 }
 object ProductCaseGeneration {

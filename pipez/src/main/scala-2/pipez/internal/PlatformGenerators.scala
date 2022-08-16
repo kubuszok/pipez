@@ -24,11 +24,11 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
   final def unlift[I, O](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
-    ctx:  Argument[ArbitraryContext]
+    ctx:  CodeOf[ArbitraryContext]
   ): CodeOf[ArbitraryResult[O]] = c.Expr[ArbitraryResult[O]](q"""$pipeDerivation.unlift($pipe, $in, $ctx)""")
 
   final def updateContext(
-    ctx:  Argument[ArbitraryContext],
+    ctx:  CodeOf[ArbitraryContext],
     path: CodeOf[pipez.Path]
   ): CodeOf[ArbitraryContext] = c.Expr[ArbitraryContext](q"""$pipeDerivation.updateContext($ctx, $path)""")
 

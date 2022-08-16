@@ -8,7 +8,7 @@ trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
   def derive[In, Out](
     config: PipeDerivationConfig[Pipe, In, Out]
   )(implicit
-    pd: PipeDerivation[Pipe]
+    pipeDerivation: PipeDerivation[Pipe]
   ): Pipe[In, Out] = macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]
 
   object Config {

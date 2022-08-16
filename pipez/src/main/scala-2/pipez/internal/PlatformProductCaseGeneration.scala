@@ -16,25 +16,25 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val sym = typeOf[A].typeSymbol
     sym.isClass && sym.asClass.isCaseClass
   }
-  final def isCaseObject[A: Type](tpe: Type[A]): Boolean = {
+  final def isCaseObject[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
     sym.isModuleClass && sym.asClass.isCaseClass
   }
-  final def isJavaBean[A: Type](tpe: Type[A]): Boolean =
+  final def isJavaBean[A: Type]: Boolean =
     typeOf[A].typeSymbol.isClass &&
       tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
       tpe.members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
-  final def isInstantiable[A: Type](tpe: Type[A]): Boolean =
+  final def isInstantiable[A: Type]: Boolean =
     !typeOf[A].typeSymbol.isAbstract && tpe.members.exists(m => m.isPublic && m.isConstructor)
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
-    inType.members // we fetch ALL members, even those that might have been inherited
+    In.members // we fetch ALL members, even those that might have been inherited
       .to(List)
       .collect {
         case member
-            if member.isMethod && (member.asMethod.isGetter || member.name.toString.startsWith(
+            if member.isMethod && (member.asMethod.isGetter || member.name.toString.toLowerCase.startsWith(
               "is"
-            ) || member.name.toString.startsWith("get")) =>
+            ) || member.name.toString.toLowerCase.startsWith("get")) =>
           member.name.toString -> ProductInData.Getter[Any](
             name = member.name.toStrg,
             tpe = member.asMethod.returnType,
@@ -53,15 +53,15 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     if (isJavaBean[Out]) {
       // Java Bean case
 
-      val defaultConstructor = outType.decls.collectFirst {
+      val defaultConstructor = Out.decls.collectFirst {
         case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
-          c.Expr[Out](q"new ${outType.typeSymbol}()")
+          c.Expr[Out](q"new ${Out.typeSymbol}()")
       } match {
         case Some(value) => DerivationResult.pure(value)
         case None        => DerivationResult.fail(DerivationError.MissingPublicConstructor)
       }
 
-      val setters = outType.decls
+      val setters = Out.decls
         .to(List)
         .collect {
           case member
@@ -85,7 +85,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       // case object case
       ProductOutData
         .CaseClass(
-          params => c.Expr(q"${outType.typeSymbol.asClass.module}"),
+          params => c.Expr(q"${Out.typeSymbol.asClass.module}"),
           List.empty
         )
         .pipe(DerivationResult.pure(_))
@@ -93,12 +93,12 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     } else {
       // case class case
 
-      outType.decls
+      Out.decls
         .to(List)
         .collectFirst {
           case member if member.isPublic && member.isConstructor =>
             ProductOutData.CaseClass(
-              params => c.Expr(q"new $outType(...$params)"),
+              params => c.Expr(q"new $Out(...$params)"),
               member.asMethod.paramLists.map { params =>
                 params
                   .map { param =>
@@ -126,8 +126,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
   ) = {
-    val in:  Argument[In]               = c.freshName(TermName("in"))
-    val ctx: Argument[ArbitraryContext] = c.freshName(TermName("ctx"))
+    val in:  Argument[In]      = c.freshName(TermName("in"))
+    val ctx: Argument[Context] = c.freshName(TermName("ctx"))
 
     val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Constant] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
@@ -145,13 +145,13 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     )
 
     val arrSize = Constant(paramToIdx.size)
-    val initialValue: CodeOf[ArbitraryResult[Array[Any]]] = pureResult(c.Expr(q"scala.Array[scala.Any]($arrSize)"))
+    val initialValue: CodeOf[Result[Array[Any]]] = pureResult(c.Expr(q"scala.Array[scala.Any]($arrSize)"))
 
     @scala.annotation.tailrec
     def generateBody(
-      arrayResult: CodeOf[ArbitraryResult[Array[Any]]],
+      arrayResult: CodeOf[Result[Array[Any]]],
       params:      List[(ProductGeneratorData.OutputValue.Result[?], Constant)]
-    ): CodeOf[ArbitraryResult[Out]] =
+    ): CodeOf[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
         case Nil =>
@@ -192,14 +192,14 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(mergeResults(arrayResult, rightCode, fun), tail)
       }
 
-    val body: c.universe.Expr[ArbitraryResult[Out]] = generateBody(initialValue, paramToIdx.toList)
+    val body: c.universe.Expr[Result[Out]] = generateBody(initialValue, paramToIdx.toList)
 
     DerivationResult
       .pure(
         lift[In, Out](
-          c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](
+          c.Expr[(In, Context) => Result[Out]](
             q"""
-            (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
+            (${Ident(in)} : ${In.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
             """
           )
         )
@@ -212,8 +212,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     defaultConstructor: CodeOf[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
   ) = {
-    val in:  Argument[In]               = c.freshName(TermName("in"))
-    val ctx: Argument[ArbitraryContext] = c.freshName(TermName("ctx"))
+    val in:  Argument[In]      = c.freshName(TermName("in"))
+    val ctx: Argument[Context] = c.freshName(TermName("ctx"))
 
     val result: Argument[Out] = c.freshName(TermName("result"))
     val pureValues: List[CodeOf[Unit]] = outputSettersList.collect {
@@ -226,7 +226,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         r -> s
       }
 
-    val initialValue: CodeOf[ArbitraryResult[Out]] = pureResult(
+    val initialValue: CodeOf[Result[Out]] = pureResult(
       c.Expr[Out](
         q"""
         {
@@ -240,9 +240,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
     @scala.annotation.tailrec
     def generateBody(
-      outResult: CodeOf[ArbitraryResult[Out]],
+      outResult: CodeOf[Result[Out]],
       params:    List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])]
-    ): CodeOf[ArbitraryResult[Out]] =
+    ): CodeOf[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
         case Nil =>
@@ -256,7 +256,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Out, Any) => Out](
             q"""
-            (${Ident(left)} : ${outType.typeSymbol}, ${Ident(right)} : ${param.tpe.typeSymbol}) => {
+            (${Ident(left)} : ${Out.typeSymbol}, ${Ident(right)} : ${param.tpe.typeSymbol}) => {
               ${setter.asInstanceOf[ProductOutData.Setter[Any]].set(left, c.Expr(q"$right"))}
               $left
             }
@@ -266,14 +266,14 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(mergeResults(outResult, rightCode, fun), tail)
       }
 
-    val body: c.Expr[ArbitraryResult[Out]] = generateBody(initialValue, resultValues)
+    val body: c.Expr[Result[Out]] = generateBody(initialValue, resultValues)
 
     DerivationResult
       .pure(
         lift[In, Out](
-          c.Expr[(In, ArbitraryContext) => ArbitraryResult[Out]](
+          c.Expr[(In, Context) => Result[Out]](
             q"""
-            (${Ident(in)} : ${inType.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
+            (${Ident(in)} : ${In.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
             """
           )
         )

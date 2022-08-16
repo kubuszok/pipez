@@ -17,13 +17,13 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   override type CodeOf[A]           = Expr[A]
 
   final val inCode:  Argument[In] => CodeOf[In]                             = id => c.Expr[In](q"$id")
-  final val ctxCode: Argument[ArbitraryContext] => CodeOf[ArbitraryContext] = id => c.Expr[ArbitraryContext](q"$id")
+  final val ctxCode: Argument[Context] => CodeOf[Context] = id => c.Expr[Context](q"$id")
 
   final def previewCode[A](code: CodeOf[A]): String = showCode(code.tree)
 
   final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
     DerivationResult
-      .unsafe(c.Expr[Pipe[Input, Output]](c.inferImplicitValue(pipeType[Input, Output], silent = false)))(_ =>
+      .unsafe(c.Expr[Pipe[Input, Output]](c.inferImplicitValue(PipeOf[Input, Output], silent = false)))(_ =>
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
@@ -61,7 +61,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             expr,
             ConfigEntry.AddField(outFieldPath,
                                  outFieldType,
-                                 singleAbstractMethodExpansion(c.Expr(pipe))(pipeType[In, Any](inType, outFieldType))
+                                 singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[In, Any](In, outFieldType))
             ) :: acc
           )
         } yield result
@@ -89,7 +89,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
               inFieldType,
               outFieldPath,
               outFieldType,
-              singleAbstractMethodExpansion(c.Expr(pipe))(pipeType[Any, Any](inFieldType, outFieldType))
+              singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[Any, Any](inFieldType, outFieldType))
             ) :: acc
           )
         } yield result
@@ -106,7 +106,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             ConfigEntry.RemoveSubtype(
               inputSubtypePath,
               inputSubtypeType,
-              singleAbstractMethodExpansion(c.Expr(pipe))(pipeType[In, Out](inputSubtypeType, outType))
+              singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[In, Out](inputSubtypeType, Out))
             ) :: acc
           )
         } yield result
@@ -141,7 +141,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
               inputSubtypeType,
               outputSubtypePath,
               outputSubtypeType,
-              singleAbstractMethodExpansion(c.Expr(pipe))(pipeType[In, Out](inputSubtypeType, outputSubtypeType))
+              singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[In, Out](inputSubtypeType, outputSubtypeType))
             ) :: acc
           )
         } yield result

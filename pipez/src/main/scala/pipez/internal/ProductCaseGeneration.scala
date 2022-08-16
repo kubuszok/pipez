@@ -9,16 +9,26 @@ import scala.util.chaining.*
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
-  def isCaseClass[A:    Type]: Boolean
-  def isCaseObject[A:   Type]: Boolean
-  def isJavaBean[A:     Type]: Boolean
+  /** True iff `A` is defined as `case class` */
+  def isCaseClass[A: Type]: Boolean
+
+  /** True iff `A` is defined as `case object` */
+  def isCaseObject[A: Type]: Boolean
+
+  /** True iff `A` has a (public) default constructor and at least one (public) method starting with `set` */
+  def isJavaBean[A: Type]: Boolean
+
+  /** True iff `A` is not abstract */
   def isInstantiable[A: Type]: Boolean
 
+  /** Whether `Out` type could be constructed as "product case" */
   final def isUsableAsProductOutput: Boolean =
     (isCaseClass[Out] || isCaseObject[Out] || isJavaBean[Out]) && isInstantiable[Out]
 
+  /** Should create `Out` expression from the constructor arguments grouped in parameter lists */
   type Constructor = List[List[CodeOf[Any]]] => CodeOf[Out]
 
+  /** Stores information how each attribute/getter could be extracted from `In` value */
   final case class ProductInData(getters: ListMap[String, ProductInData.Getter[?]]) {
 
     def findGetter(
@@ -44,6 +54,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
   }
 
+  /** Stores information how `Out` value could be constructed from values of constructor parameters/passed to setters */
   sealed trait ProductOutData extends Product with Serializable
   object ProductOutData {
 
@@ -76,6 +87,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
   }
 
+  /** Value generation strategy for a particular output parameter/setter */
   sealed trait OutFieldLogic[OutField] extends Product with Serializable
   object OutFieldLogic {
 
@@ -108,17 +120,17 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       settings.resolve[OutFieldLogic[OutField]](DefaultField()) {
         case AddField(Field(Root, outFieldGetter), outFieldType, pipe)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
-          // TODO: validate that outType <:< outFieldType is correct
+          // TODO: validate that Out <:< outFieldType is correct
           FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
-        case RenameField(Field(Root, inName), inType, Field(Root, outFieldGetter), outType)
+        case RenameField(Field(Root, inName), In, Field(Root, outFieldGetter), Out)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
-          // TODO: validate that outType <:< outFieldType is correct
-          FieldRenamed(inName, inType)
-        case PlugInField(Field(Root, inName), inType, Field(Root, outFieldGetter), outType, pipe)
+          // TODO: validate that Out <:< outFieldType is correct
+          FieldRenamed(inName, In)
+        case PlugInField(Field(Root, inName), In, Field(Root, outFieldGetter), Out, pipe)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
-          // TODO: validate that outType <:< outFieldType is correct
+          // TODO: validate that Out <:< outFieldType is correct
           PipeProvided[Any, OutField](inName,
-                                      inType.asInstanceOf[Type[Any]],
+                                      In.asInstanceOf[Type[Any]],
                                       pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]]
           )
       }
@@ -175,6 +187,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
   }
 
+  /** Final platform-independent result of matching inputs with outputs using resolved strategies */
   sealed trait ProductGeneratorData extends Product with Serializable
   object ProductGeneratorData {
 
@@ -183,16 +196,16 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
       final case class Pure[A](
         tpe:    Type[A],
-        caller: (Argument[In], Argument[ArbitraryContext]) => CodeOf[A]
+        caller: (Argument[In], Argument[Context]) => CodeOf[A]
       ) extends OutputValue {
-        override def toString: String = s"Pure { ($inType, Context) => $tpe }"
+        override def toString: String = s"Pure { ($In, Context) => $tpe }"
       }
 
       final case class Result[A](
         tpe:    Type[A],
-        caller: (Argument[In], Argument[ArbitraryContext]) => CodeOf[ArbitraryResult[A]]
+        caller: (Argument[In], Argument[Context]) => CodeOf[self.Result[A]]
       ) extends OutputValue {
-        override def toString: String = s"Result { ($inType, Context) => $tpe }"
+        override def toString: String = s"Result { ($In, Context) => $tpe }"
       }
     }
 
@@ -211,17 +224,92 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
   }
 
-  object ProductTypeConversion extends CodeGeneratorExtractor {
+  object ProductTypeConversion {
 
     final def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] =
-      if (isUsableAsProductOutput) Some(attemptProductRendering(settings))
-      else None
+      if (isUsableAsProductOutput) Some(attemptProductRendering(settings)) else None
   }
 
+  /** Platform-specific way of parsing `In` data
+    *
+    * Should:
+    *   - obtain all methods which are Scala's getters (vals, nullary defs)
+    *   - obtain all methods which are Java Bean getters (starting with is- or get-)
+    *   - for each create an `InField` factory which takes `In` argument and returns `InField` expression
+    *   - form obtained collection into `ProductInData`
+    */
   def extractProductInData(settings: Settings): DerivationResult[ProductInData]
 
+  /** Platform-specific way of parsing `Out` data
+    *
+    * Should:
+    *   - verify whether output is a case class, a case object or a Java Bean
+    *   - obtain respectively:
+    *     - a constructor taking all arguments
+    *     - expression containing case object value
+    *     - a default constructor and collection of setters respectively
+    *   - form obtained data into `ProductOutData`
+    */
   def extractProductOutData(settings: Settings): DerivationResult[ProductOutData]
 
+  /** Platform-specific way of generating code from resolved information
+    *
+    * TODO: update after implementing Paths: ctx -> updateContext(ctx, path)
+    *
+    * For case class output should generate code like:
+    *
+    * {{{
+    * pipeDerivation.lift { (in: In, ctx: pipeDerivation.Context) =>
+    *   pipeDerivation.mergeResult(
+    *     pipeDerivation.mergeResult(
+    *       pipeDerivation.pure(Array[Any](2)),
+    *       pipeDerivation.unlift(fooPipe, in.foo, ctx)
+    *     ) { (left, right) =>
+    *       left(0) = right
+    *       left
+    *     },
+    *     pipeDerivation.unlift(barPipe, in.bar, ctx)
+    *   ) { (left, right) =>
+    *     left(1) = right
+    *     new Out(
+    *       foo = left(0).asInstanceOf[Foo2],
+    *       bar = left(1).asInstanceOf[Bar2],
+    *     )
+    *   }
+    * }
+    * }}}
+    *
+    * For case object output should generate code like:
+    *
+    * {{{
+    * pipeDerivation.lift { (in: In, ctx: pipeDerivation.Context) =>
+    *   pipeDerivation.pure(CaseObject)
+    * }
+    * }}}
+    *
+    * For Java Bean should generate code like:
+    *
+    * {{{
+    * pipeDerivation.lift { (in: In, ctx: pipeDerivation.Context) =>
+    *   pipeDerivation.mergeResult(
+    *     pipeDerivation.mergeResult(
+    *       pipeDerivation.pure {
+    *         val result = new Out()
+    *         result
+    *       },
+    *       pipeDerivation.unlift(fooPipe, in.foo, ctx)
+    *     ) { (left, right) =>
+    *       left.setFoo(right)
+    *       left
+    *     },
+    *     pipeDerivation.unlift(barPipe, in.bar, ctx)
+    *   ) { (left, right) =>
+    *     left.setBar(right)
+    *     left
+    *   }
+    * }
+    * }}}
+    */
   def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]]
 
   private def attemptProductRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
@@ -232,7 +320,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       code <- generateProductCode(generatorData)
     } yield code
 
-  // In the product derivation, the logic is driven by Out type:
+  // In the product derivation, the logic is driven by `Out` type:
   // - every field of Out should have an assigned value
   // - so we are iterating over the list of fields in Out and check the configuration for them
   // - additional fields in In can be safely ignored

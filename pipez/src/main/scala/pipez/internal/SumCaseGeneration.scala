@@ -9,16 +9,23 @@ import scala.util.chaining.scalaUtilChainingOps
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
-  def isADT[A:      Type]: Boolean
+  /** True iff `A` is `sealed` */
+  def isADT[A: Type]: Boolean
+
+  /** True if `A extends java.lang.Enum[A]` */
   def isJavaEnum[A: Type]: Boolean
 
+  /** Check is `A =:= B` in a platform-independent code */
   def areSubtypesEqual[A: Type, B: Type]: Boolean
 
   final def isSumType[A: Type]: Boolean =
     isADT[A] || isJavaEnum[A]
+
+  /** Whether both `In` and `Out` are ADTs/Java Enums */
   final def isUsableAsSumTypeConversion: Boolean =
     isSumType[In] && isSumType[Out]
 
+  /** Stores information from what pieces `Out` is made */
   sealed trait EnumData[A] extends Product with Serializable
   object EnumData {
 
@@ -61,6 +68,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     }
   }
 
+  /** Translation strategy for a particular input subtype */
   sealed trait InSubtypeLogic[InSubtype <: In] extends Product with Serializable
   object InSubtypeLogic {
 
@@ -127,6 +135,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     }
   }
 
+  /** Translation strategy for a particular input value */
   sealed trait InValueLogic extends Product with Serializable
   object InValueLogic {
 
@@ -151,6 +160,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     }
   }
 
+  /** Final platform-independent result of matching inputs with outputs using resolved strategies */
   sealed trait EnumGeneratorData extends Product with Serializable
   object EnumGeneratorData {
 
@@ -176,16 +186,43 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     final case class Values(values: ListMap[String, Pairing]) extends EnumGeneratorData
   }
 
-  object SumTypeConversion extends CodeGeneratorExtractor {
+  object SumTypeConversion {
 
     final def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] =
       if (isUsableAsSumTypeConversion) Some(attemptEnumRendering(settings)) else None
   }
 
+  /** Platform-specific way of parsing `In` data
+    *
+    * Should:
+    *   - obtain a lift of subtypes OR enumeration values
+    *   - form it into `EnumData[In]`
+    */
   def extractEnumInData: DerivationResult[EnumData[In]]
 
+  /** Platform-specific way of parsing `Out` data
+    *
+    * Should:
+    *   - obtain a lift of subtypes OR enumeration values
+    *   - form it into `EnumData[In]`
+    */
   def extractEnumOutData: DerivationResult[EnumData[Out]]
 
+  /** Platform-specific way of generating code from resolved information
+    *
+    * TODO: update after implementing Paths: ctx -> updateContext(ctx, path)
+    *
+    * For subtype input should generate code like:
+    *
+    * {{{
+    * pipeDerivation.lift { (in: In, ctx: pipeDerivation.Context) =>
+    *   in match {
+    *     case inSubtype: In.Foo => pipeDerivation.unlift(fooPipe, inSubtype, ctx)
+    *     case inSubtype: In.Bar => pipeDerivation.unlift(barPipe, inSubtype, ctx)
+    *   }
+    * }
+    * }}}
+    */
   def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]]
 
   private def attemptEnumRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =

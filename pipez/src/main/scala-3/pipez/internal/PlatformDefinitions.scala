@@ -15,13 +15,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
   override type Argument[@unused A] = Term
   override type CodeOf[A]           = Expr[A]
 
-  // Scala 3 macro specific
-  implicit val pipeTypeConstructor: scala.quoted.Type[Pipe]
-  implicit val contextType:         scala.quoted.Type[ArbitraryContext]
-  implicit val resultType:          scala.quoted.Type[ArbitraryResult]
-
-  final val inCode:  Argument[In] => CodeOf[In]                             = _.asExpr.asExprOf[In]
-  final val ctxCode: Argument[ArbitraryContext] => CodeOf[ArbitraryContext] = _.asExpr.asExprOf[ArbitraryContext]
+  final val inCode:  Argument[In] => CodeOf[In]           = _.asExpr.asExprOf[In]
+  final val ctxCode: Argument[Context] => CodeOf[Context] = _.asExpr.asExprOf[Context]
 
   final def previewCode[A](code: CodeOf[A]): String = code.show
 
@@ -38,4 +33,10 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
 
   final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] =
     DerivationResult.fail(DerivationError.NotYetImplemented("read config"))
+
+  // Scala 3-macro specific instances, required because code-generation needs these types
+
+  implicit val Pipe: scala.quoted.Type[Pipe]
+  implicit val Context: scala.quoted.Type[Context] = typeOf[Any].asInstanceOf[scala.quoted.Type[Context]]
+  implicit val Result:  scala.quoted.Type[Result]  = typeOf[Any].asInstanceOf[scala.quoted.Type[Result]]
 }

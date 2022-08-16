@@ -6,6 +6,6 @@ import scala.language.experimental.macros
 trait PipeSemiautoSupport[Pipe[_, _]] {
 
   def derive[In, Out](implicit
-    pd: PipeDerivation[Pipe]
+    pipeDerivation: PipeDerivation[Pipe]
   ): Pipe[In, Out] = macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]
 }

@@ -21,25 +21,25 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
     report.errorAndAbort(errorMessage(errors))
 
   final def lift[I: Type, O: Type](
-    call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
+    call: CodeOf[(I, Context) => Result[O]]
   ): CodeOf[Pipe[I, O]] = '{ $pipeDerivation.lift($call) }
 
   final def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
-    ctx:  CodeOf[ArbitraryContext]
-  ): CodeOf[ArbitraryResult[O]] = '{ $pipeDerivation.unlift($pipe, $in, $ctx) }
+    ctx:  CodeOf[Context]
+  ): CodeOf[Result[O]] = '{ $pipeDerivation.unlift($pipe, $in, $ctx) }
 
   final def updateContext(
-    ctx:  CodeOf[ArbitraryContext],
+    ctx:  CodeOf[Context],
     path: CodeOf[pipez.Path]
-  ): CodeOf[ArbitraryContext] = '{ $pipeDerivation.updateContext($ctx, $path) }
+  ): CodeOf[Context] = '{ $pipeDerivation.updateContext($ctx, $path) }
 
-  final def pureResult[A: Type](a: CodeOf[A]): CodeOf[ArbitraryResult[A]] = '{ $pipeDerivation.pureResult($a) }
+  final def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]] = '{ $pipeDerivation.pureResult($a) }
 
   final def mergeResults[A: Type, B: Type, C: Type](
-    ra: CodeOf[ArbitraryResult[A]],
-    rb: CodeOf[ArbitraryResult[B]],
+    ra: CodeOf[Result[A]],
+    rb: CodeOf[Result[B]],
     f:  CodeOf[(A, B) => C]
-  ): CodeOf[ArbitraryResult[C]] = '{ $pipeDerivation.mergeResults($ra, $rb, $f) }
+  ): CodeOf[Result[C]] = '{ $pipeDerivation.mergeResults($ra, $rb, $f) }
 }

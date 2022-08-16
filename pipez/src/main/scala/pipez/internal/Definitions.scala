@@ -5,31 +5,59 @@ import pipez.{ PipeDerivation, PipeDerivationConfig }
 import scala.annotation.nowarn
 import scala.collection.Factory
 
+/** Contains definitions that could be shared between Scala 2 and Scala 3 implementation of the derivation logic, which
+  * aren't strictly related to code parsing and generation.
+  *
+  * @tparam Pipe
+  *   the type class that we are deriving for
+  * @tparam In
+  *   input type of the type class we are deriving
+  * @tparam Out
+  *   output type of the type class we are deriving
+  */
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Definitions[Pipe[_, _], In, Out] {
+trait Definitions[Pipe[_, _], In, Out] { self =>
 
+  /** Platform-specific type representation (c.universe.Type in 2, scala.quoted.Type[A] in 3) */
   type Type[A]
+
+  /** Platform-specific argument representation (c.universe.TermName in 2, quotes.Term in 3)
+    *
+    * Exists because we might need to generate the name for the argument and use it in `($in: In, $ctx: Ctx) => ...`.
+    */
   type Argument[A]
+
+  /** Platform-specific expression representation (c.universe.Expr[A] in 2, quotes.Expr[A] in 3 */
   type CodeOf[A]
 
+  /** Summons Type independently of the platform */
   def typeOf[A](implicit tpe: Type[A]): Type[A] = tpe
 
-  implicit def pipeType[I: Type, O: Type]: Type[Pipe[I, O]]
-  implicit val inType:  Type[In]
-  implicit val outType: Type[Out]
+  /** Provides `Type` instance for `Pipe[I, O]` */
+  implicit def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]]
 
-  /** Can be used instead of pd.Context to avoid path-dependent types */
-  type ArbitraryContext
+  /** Provides `Type` instance for `In` */
+  implicit val In: Type[In]
 
-  /** Can be used instead of pd.Context to avoid path-dependent types */
-  type ArbitraryResult[O]
+  /** Provides `Type` instance for `Out` */
+  implicit val Out: Type[Out]
 
+  /** Can be used instead of pipeDerivation.Context to avoid path-dependent types */
+  type Context
+
+  /** Can be used instead of pipeDerivation.Result[O] to avoid path-dependent types */
+  type Result[O]
+
+  /** Adapt In argument from `(in: In, ctx: Context) =>` to expression */
   val inCode: Argument[In] => CodeOf[In]
-  val ctxCode: Argument[ArbitraryContext] => CodeOf[ArbitraryContext]
-  val pipeDerivation: CodeOf[
-    PipeDerivation[Pipe] { type Context = ArbitraryContext; type Result[O] = ArbitraryResult[O] }
-  ]
 
+  /** Adapt Context argument from `(in: In, ctx: Context) =>` to expression */
+  val ctxCode: Argument[Context] => CodeOf[Context]
+
+  /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
+  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }]
+
+  /** Type representing how we got the specific value from the `in: In` argument */
   sealed trait Path extends Product with Serializable
   object Path {
 
@@ -40,6 +68,7 @@ trait Definitions[Pipe[_, _], In, Out] {
     final case class AtKey(from: Path, key: String) extends Path // might not be needed
   }
 
+  /** Possible configuration options that we can work with inside a macro. Parsed from `pipez.PipeDerivationConfig` */
   sealed trait ConfigEntry extends Product with Serializable
   object ConfigEntry {
 
@@ -92,6 +121,7 @@ trait Definitions[Pipe[_, _], In, Out] {
     case object EnumCaseInsensitive extends ConfigEntry
   }
 
+  /** Collection of config options obtained after parsing `pipez.PipeDerivationConfig` */
   final class Settings(entries: List[ConfigEntry]) {
 
     import ConfigEntry.*
@@ -109,6 +139,7 @@ trait Definitions[Pipe[_, _], In, Out] {
     override def toString: String = s"Settings(${entries.mkString(", ")})"
   }
 
+  /** Possible errors that can happen during derivation */
   sealed trait DerivationError extends Product with Serializable
   object DerivationError {
 
@@ -150,6 +181,7 @@ trait Definitions[Pipe[_, _], In, Out] {
     final case class NotYetImplemented(msg: String) extends DerivationError
   }
 
+  /** Helper which allows: use of for-comprehension, parallel error composition, logging */
   sealed trait DerivationResult[+A] extends Product with Serializable {
 
     import DerivationResult.*
@@ -235,8 +267,10 @@ trait Definitions[Pipe[_, _], In, Out] {
       either.fold(e => fail(err(e)), pure)
   }
 
+  /** Allows displaying the generated code in platform-independent way */
   def previewCode[A](code: CodeOf[A]): String
 
+  /** Allows summoning the type class in platform-independent way */
   def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]]
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
@@ -244,13 +278,18 @@ trait Definitions[Pipe[_, _], In, Out] {
     */
   def singleAbstractMethodExpansion[SAM: Type](code: CodeOf[SAM]): CodeOf[SAM]
 
+  /** Turns the code defining `PipeDerivationConfig[Pipe, In, Out]` into `Settings`.
+    *
+    * Requires that config is created as one chain while passing the parameter.
+    */
   def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings]
 
+  /** Reads configs if passed, or fallback to defaults (empty `Settings`) otherwise */
   final def readSettingsIfGiven(code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): DerivationResult[Settings] =
     code
       .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
-      .log(s"Pipeline from $inType to $outType")
+      .log(s"Pipeline from $In to $Out")
       .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")
       .logSuccess(config => s"Configuration used: $config")
 }

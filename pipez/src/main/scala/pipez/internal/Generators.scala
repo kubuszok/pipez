@@ -11,42 +11,41 @@ trait Generators[Pipe[_, _], In, Out]
     with SumCaseGeneration[Pipe, In, Out] {
   self: Definitions[Pipe, In, Out] =>
 
+  /** Check is `A <:< B` in a platform-independent code */
   def isSubtype[A: Type, B: Type]: Boolean
 
-  trait CodeGeneratorExtractor {
-
-    def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]]
-  }
-
+  /** Takes `Settings` and passes them to generators, the first which decides it's their case, attempt generation */
   final val resolveConversion: Settings => DerivationResult[CodeOf[Pipe[In, Out]]] = {
-    case ProductTypeConversion(generator) => generator
-    case SumTypeConversion(generator)     => generator
+    case ProductTypeConversion(generatedCode) => generatedCode
+    case SumTypeConversion(generatedCode)     => generatedCode
     case _ =>
       DerivationResult.fail(DerivationError.NotYetSupported) // TODO: better error message
   }
 
+  /** Generate message to be displayed by macro on INFO level (if requested by config) */
   final def diagnosticsMessage[A](result: DerivationResult[A]): String =
-    "Macro diagnostics\n" + result.diagnostic.map(" - " + _).mkString("\n")
+    "Macro diagnostics:\n" + result.diagnostic.map(" - " + _).mkString("\n")
 
-  /** Should use platform-specific way of reporting information from macro */
+  /** Should use platform-specific way of reporting information from macro on INFO level */
   def reportDiagnostics[A](result: DerivationResult[A]): Unit
 
+  /** Generates error message to be returned from macro on ERROR level */
   final def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
     .map {
       case DerivationError.MissingPublicConstructor =>
-        s"$outType is missing a public constructor that could be used to initiate its value"
+        s"$Out is missing a public constructor that could be used to initiate its value"
       case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
-        s"Couldn't find implicit of type ${pipeType(inFieldType, outFieldType)}"
+        s"Couldn't find implicit of type ${PipeOf(inFieldType, outFieldType)}"
       case DerivationError.MissingPublicSource(outFieldName) =>
-        s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
+        s"Couldn't find a field/method which could be used as a source for $outFieldName from $Out; use config to provide it manually"
       case DerivationError.MissingMatchingSubType(inSubtypeType) =>
         s"Couldn't find corresponding subtype for $inSubtypeType"
       case DerivationError.MissingMatchingValue(inValue) =>
         s"Couldn't find corresponding value for $inValue"
       case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
-        s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
+        s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $In.$inField to $Out.$outField conversion; provide the right implicit or configuration"
       case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
-        s"Couldn't convert $inType (${if (isInSumType) "sum type" else "value enumeration"}) into ${outType} (${
+        s"Couldn't convert $In (${if (isInSumType) "sum type" else "value enumeration"}) into ${Out} (${
             if (isOutSumType) "sum type" else "value enumeration"
           })"
       case DerivationError.NotYetSupported =>
@@ -62,35 +61,35 @@ trait Generators[Pipe[_, _], In, Out]
   /** Should use platform-specific way of reporting errors from macro */
   def reportError(errors: List[DerivationError]): Nothing
 
-  /** Should generate code `pd.lift { (in, ctx) => ... }` */
+  /** Should generate code `pipeDerivation.lift { (in, ctx) => ... }` */
   def lift[I: Type, O: Type](
-    call: CodeOf[(I, ArbitraryContext) => ArbitraryResult[O]]
+    call: CodeOf[(I, Context) => Result[O]]
   ): CodeOf[Pipe[I, O]]
 
-  /** Should generate code `pd.unlift(pipe)(in, ctx)` */
+  /** Should generate code `pipeDerivation.unlift(pipe)(in, ctx)` */
   def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
-    ctx:  CodeOf[ArbitraryContext]
-  ): CodeOf[ArbitraryResult[O]]
+    ctx:  CodeOf[Context]
+  ): CodeOf[Result[O]]
 
-  /** Should generate code `pd.updateContext(ctx, path)` */
+  /** Should generate code `pipeDerivation.updateContext(ctx, path)` */
   def updateContext(
-    context: CodeOf[ArbitraryContext],
+    context: CodeOf[Context],
     path:    CodeOf[pipez.Path]
-  ): CodeOf[ArbitraryContext]
+  ): CodeOf[Context]
 
-  /** Should generate code `pd.pureResult(a)` */
-  def pureResult[A: Type](a: CodeOf[A]): CodeOf[ArbitraryResult[A]]
+  /** Should generate code `pipeDerivation.pureResult(a)` */
+  def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]]
 
-  /** Should generate code `pd.mergeResults(ra, rb) { (a, b) => ... }` */
+  /** Should generate code `pipeDerivation.mergeResults(ra, rb) { (a, b) => ... }` */
   def mergeResults[A: Type, B: Type, C: Type](
-    ra: CodeOf[ArbitraryResult[A]],
-    rb: CodeOf[ArbitraryResult[B]],
+    ra: CodeOf[Result[A]],
+    rb: CodeOf[Result[B]],
     f:  CodeOf[(A, B) => C]
-  ): CodeOf[ArbitraryResult[C]]
+  ): CodeOf[Result[C]]
 
-  final def derive(configurationCode: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): CodeOf[Pipe[In, Out]] = {
+  private def derive(configurationCode: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): CodeOf[Pipe[In, Out]] = {
     var isDiagnosticsEnabled = false
     readSettingsIfGiven(configurationCode)
       .flatMap { config =>
@@ -114,8 +113,10 @@ trait Generators[Pipe[_, _], In, Out]
       .fold(identity)(reportError)
   }
 
+  /** Derives using default `Settings` */
   final def deriveDefault: CodeOf[Pipe[In, Out]] = derive(None)
 
+  /** Derives using `Settings` parsed from `PipeDerivationConfig[Pipe, In, Out]` expression */
   final def deriveConfigured(configurationCode: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): CodeOf[Pipe[In, Out]] =
     derive(Some(configurationCode))
 }

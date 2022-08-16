@@ -1,12 +1,12 @@
 package pipez.internal
 
-import scala.quoted.{Type as _, *}
+import scala.quoted.{ Type as _, * }
 
-trait PlatformGenerators[Pipe[_, _], In, Out](using Quotes)
+@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
+trait PlatformGenerators[Pipe[_, _], In, Out]
     extends Generators[Pipe, In, Out]
     with PlatformProductCaseGeneration[Pipe, In, Out]
-    with PlatformSumCaseGeneration[Pipe, In, Out] {
-  self: PlatformDefinitions[Pipe, In, Out] =>
+    with PlatformSumCaseGeneration[Pipe, In, Out] { self: PlatformDefinitions[Pipe, In, Out] =>
 
   import quotes.*
   import quotes.reflect.*
@@ -27,11 +27,11 @@ trait PlatformGenerators[Pipe[_, _], In, Out](using Quotes)
   final def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
-    ctx:  Argument[ArbitraryContext]
+    ctx:  CodeOf[ArbitraryContext]
   ): CodeOf[ArbitraryResult[O]] = '{ $pipeDerivation.unlift($pipe, $in, $ctx) }
 
   final def updateContext(
-    ctx:  Argument[ArbitraryContext],
+    ctx:  CodeOf[ArbitraryContext],
     path: CodeOf[pipez.Path]
   ): CodeOf[ArbitraryContext] = '{ $pipeDerivation.updateContext($ctx, $path) }
 

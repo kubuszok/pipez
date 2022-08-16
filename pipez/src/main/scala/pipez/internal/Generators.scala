@@ -71,12 +71,12 @@ trait Generators[Pipe[_, _], In, Out]
   def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
-    ctx:  Argument[ArbitraryContext]
+    ctx:  CodeOf[ArbitraryContext]
   ): CodeOf[ArbitraryResult[O]]
 
   /** Should generate code `pd.updateContext(ctx, path)` */
   def updateContext(
-    context: Argument[ArbitraryContext],
+    context: CodeOf[ArbitraryContext],
     path:    CodeOf[pipez.Path]
   ): CodeOf[ArbitraryContext]
 

@@ -2,7 +2,8 @@ package pipez.internal
 
 import scala.quoted.{ Type as _, * }
 
-trait PlatformSumCaseGeneration[Pipe[_, _], In, Out](using Quotes) extends SumCaseGeneration[Pipe, In, Out] {
+@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
+trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
   import quotes.*

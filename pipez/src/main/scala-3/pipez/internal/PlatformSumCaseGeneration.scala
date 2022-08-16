@@ -1,6 +1,7 @@
 package pipez.internal
 
 import scala.quoted.{ Type as _, * }
+import scala.annotation.unused
 
 @scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
@@ -18,12 +19,24 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
 
   final def areSubtypesEqual[A: Type, B: Type]: Boolean = TypeRepr.of[A] =:= TypeRepr.of[B]
 
-  final def extractEnumInData: DerivationResult[EnumData[In]] =
-    ???
+  final def extractEnumInData: DerivationResult[EnumData[In]] = extractEnumData[In]
 
-  final def extractEnumOutData: DerivationResult[EnumData[Out]] =
-    ???
+  final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData[Out]
+
+  private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
+    if (isADT[In]) {
+      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Case Class Out"))
+    } else DerivationResult.fail(DerivationError.NotYetImplemented("Java Enum parsing"))
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
-    ???
+    generatorData match {
+      case EnumGeneratorData.Subtypes(subtypes) => generateSubtypes(subtypes.values.toList)
+      case EnumGeneratorData.Values(values)     => generateEnumeration(values.values.toList)
+    }
+
+  private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) =
+    DerivationResult.fail(DerivationError.NotYetImplemented("Subtypes code emission"))
+
+  private def generateEnumeration(@unused values: List[EnumGeneratorData.Pairing]) =
+    DerivationResult.fail(DerivationError.NotYetImplemented("Enumeration code emission"))
 }

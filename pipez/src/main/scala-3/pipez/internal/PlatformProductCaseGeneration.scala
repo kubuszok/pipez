@@ -2,7 +2,6 @@ package pipez.internal
 
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
-
 import scala.quoted.{ Type as _, * }
 
 @scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
@@ -47,8 +46,33 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   }
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
-    ???
+    if (isJavaBean[Out]) {
+      // Java Bean case
+
+      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Java Bean Out"))
+    } else if (isCaseObject[Out]) {
+      // case object case
+
+      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Case Object Out"))
+    } else {
+      // case class case
+
+      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Case Class Out"))
+    }
 
   final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
-    ???
+    generatorData match {
+      case ProductGeneratorData.CaseClass(caller, results)            => generateCaseClass(caller, results)
+      case ProductGeneratorData.JavaBean(defaultConstructor, results) => generateJavaBean(defaultConstructor, results)
+    }
+
+  private def generateCaseClass(
+    constructor:          Constructor,
+    outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
+  ) = DerivationResult.fail(DerivationError.NotYetImplemented("Generate Case Class"))
+
+  private def generateJavaBean(
+    defaultConstructor: CodeOf[Out],
+    outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
+  ) = DerivationResult.fail(DerivationError.NotYetImplemented("Generate Java Bean"))
 }

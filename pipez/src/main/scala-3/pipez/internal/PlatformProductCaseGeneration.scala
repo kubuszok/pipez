@@ -19,7 +19,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   final def isJavaBean[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
     sym.isClassDef &&
-    sym.declaredMethods.exists(m => m.name.startsWith("set")) &&
+    sym.declaredMethods.exists(m => m.name.toLowerCase.startsWith("set")) &&
     sym.declarations.exists(m => m.isClassConstructor && m.paramSymss.flatten.isEmpty) // TODO: check for public?
   final def isInstantiable[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
@@ -49,15 +49,66 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     if (isJavaBean[Out]) {
       // Java Bean case
 
-      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Java Bean Out"))
+      val sym = TypeRepr.of[Out].typeSymbol
+
+      val defaultConstructor = DerivationResult.fromOption(
+        sym.declarations.collectFirst {
+          case member if member.isClassConstructor && member.paramSymss.flatten.isEmpty =>
+            New(TypeTree.of[Out]).appliedToNone.asExpr.asExprOf[Out]
+        }
+      )(DerivationError.MissingPublicConstructor)
+
+      val setters = sym.declaredMethods
+        .collect {
+          case method if method.name.toLowerCase.startsWith("set") && method.paramSymss.flatten.size == 1 =>
+            method.name -> ProductOutData.Setter[Any](
+              name = method.name.toString,
+              tpe = method.typeRef.qualifier.asType.asInstanceOf[Type[Any]],
+              set = (out: Argument[Out], value: CodeOf[Any]) =>
+                out.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
+            )
+        }
+        .to(ListMap)
+        .pipe(DerivationResult.pure(_))
+
+      defaultConstructor
+        .map2(setters)(ProductOutData.JavaBean(_, _))
+        .logSuccess(data => s"Resolved Java Bean output: $data")
     } else if (isCaseObject[Out]) {
       // case object case
 
-      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Case Object Out"))
+      ProductOutData
+        .CaseClass(
+          params => Ref(TypeRepr.of[Out].typeSymbol).asExpr.asExprOf[Out],
+          List.empty
+        )
+        .pipe(DerivationResult.pure(_))
+        .logSuccess(data => s"Resolved case object output: $data")
     } else {
       // case class case
 
-      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Case Class Out"))
+      val sym = TypeRepr.of[Out].typeSymbol
+
+      sym.declaredMethods
+        .collectFirst {
+          case method if method.isClassConstructor =>
+            ProductOutData.CaseClass(
+              params => New(TypeTree.of[Out]).appliedToArgss(params.map(_.map(_.asTerm))).asExpr.asExprOf[Out],
+              method.paramSymss.map { params =>
+                params
+                  .map { param =>
+                    param.name.toString -> ProductOutData.ConstructorParam(
+                      name = param.name,
+                      tpe = param.typeRef.qualifier.asType.asInstanceOf[Type[Any]]
+                    )
+                  }
+                  .to(ListMap)
+              }
+            )
+        }
+        .get
+        .pipe(DerivationResult.pure(_))
+        .logSuccess(data => s"Resolved case class output: $data")
     }
 
   final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =

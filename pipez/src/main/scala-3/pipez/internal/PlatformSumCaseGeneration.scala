@@ -24,8 +24,22 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
   final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData[Out]
 
   private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
-    if (isADT[In]) {
-      DerivationResult.fail(DerivationError.NotYetImplemented("Extract Case Class Out"))
+    if (isADT[A]) {
+      def extractSubclasses(sym: Symbol): List[Symbol] =
+        if (sym.flags.is(Flags.Sealed)) sym.children.flatMap(extractSubclasses)
+        else List(sym)
+
+      DerivationResult.unsafe[EnumData[A]](
+        EnumData.SumType(
+          extractSubclasses(TypeRepr.of[A].typeSymbol).map { subtypeType =>
+            EnumData.SumType.Case(
+              subtypeType.name,
+              subtypeType.typeRef.qualifier.asType.asInstanceOf[Type[A]],
+              isCaseObject = subtypeType.flags.is(Flags.Module)
+            )
+          }
+        )
+      )(_ => DerivationError.InvalidConfiguration(s"${typeOf[A]} seem like an ADT but cannot extract its subtypes"))
     } else DerivationResult.fail(DerivationError.NotYetImplemented("Java Enum parsing"))
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =

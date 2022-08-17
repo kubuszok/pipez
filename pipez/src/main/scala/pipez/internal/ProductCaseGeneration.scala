@@ -314,7 +314,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   private def attemptProductRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
     for {
-      data <- extractProductInData(settings) zip extractProductOutData(settings)
+      data <- extractProductInData(settings) zip extractProductOutData(settings).logSuccess(data => s"Resolved Java Bean output: $data")
       (inData, outData) = data
       generatorData <- matchFields(inData, outData, settings)
       code <- generateProductCode(generatorData)

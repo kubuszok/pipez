@@ -53,26 +53,25 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     if (isJavaBean[Out]) {
       // Java Bean case
 
-      val defaultConstructor = Out.decls.collectFirst {
-        case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
-          c.Expr[Out](q"new ${Out.typeSymbol}()")
-      } match {
-        case Some(value) => DerivationResult.pure(value)
-        case None        => DerivationResult.fail(DerivationError.MissingPublicConstructor)
-      }
+      val defaultConstructor = DerivationResult.fromOption(
+        Out.decls.collectFirst {
+          case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
+            c.Expr[Out](q"new ${Out.typeSymbol}()")
+        }
+      )(DerivationError.MissingPublicConstructor)
 
       val setters = Out.decls
         .to(List)
         .collect {
-          case member
-              if member.isPublic && member.isMethod && member.name.toString.toLowerCase.startsWith(
+          case method
+              if method.isPublic && method.isMethod && method.name.toString.toLowerCase.startsWith(
                 "set"
-              ) && member.asMethod.paramLists.flatten.size == 1 =>
-            member.name.toString -> ProductOutData.Setter(
-              name = member.name.toString,
-              tpe = member.asMethod.paramLists.flatten.head.typeSignature,
+              ) && method.asMethod.paramLists.flatten.size == 1 =>
+            method.name.toString -> ProductOutData.Setter(
+              name = method.name.toString,
+              tpe = method.asMethod.paramLists.flatten.head.typeSignature,
               set = (out: Argument[Out], value: CodeOf[Any]) =>
-                c.Expr[Unit](q"$out.${member.asMethod.name.toTermName}($value)")
+                c.Expr[Unit](q"$out.${method.asMethod.name.toTermName}($value)")
             )
         }
         .to(ListMap)
@@ -83,6 +82,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .logSuccess(data => s"Resolved Java Bean output: $data")
     } else if (isCaseObject[Out]) {
       // case object case
+
       ProductOutData
         .CaseClass(
           params => c.Expr(q"${Out.typeSymbol.asClass.module}"),

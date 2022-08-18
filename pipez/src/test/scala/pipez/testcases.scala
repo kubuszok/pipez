@@ -22,6 +22,8 @@ final case class CaseManyOutExt(a: Int, b: String, c: Long, x: String)
 final case class CaseLower(aaa: Int, bbb: String, ccc: Long)
 final case class CaseUpper(AAA: Int, BBB: String, CCC: Long)
 
+/*
+
 // Java Beans (as inputs, we rely on their getters, as output, we rely on their default constructor and setters)
 
 import scala.beans.BeanProperty
@@ -153,3 +155,5 @@ object ADTUpper {
   final case class BBB(b: Int) extends ADTUpper
   final case class CCC(c: Int) extends ADTUpper
 }
+
+ */

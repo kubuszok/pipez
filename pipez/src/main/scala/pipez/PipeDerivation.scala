@@ -1,7 +1,7 @@
 package pipez
 
-/** Allows derivation macro to glue Pipes for `Pipe[in.field, out.field]` for each field or
- * `Pipe[In.Subtype, Out.Subtype]` for each subtype together.
+/** Allows derivation macro to glue Pipes for `Pipe[in.field, out.field]` for each field or `Pipe[In.Subtype,
+  * Out.Subtype]` for each subtype together.
   *
   * Assumes that `Pipe[In, Out]` is interchangeable to `(in: In, ctx: Context) => Result[Out]` where:
   *   - `Context` is anything we want to thread through our calls (like in `ReaderT`)

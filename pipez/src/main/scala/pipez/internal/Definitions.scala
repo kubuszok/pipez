@@ -21,12 +21,6 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Platform-specific type representation (c.universe.Type in 2, scala.quoted.Type[A] in 3) */
   type Type[A]
 
-  /** Platform-specific argument representation (c.universe.TermName in 2, quotes.Term in 3)
-    *
-    * Exists because we might need to generate the name for the argument and use it in `($in: In, $ctx: Ctx) => ...`.
-    */
-  type Argument[A]
-
   /** Platform-specific expression representation (c.universe.Expr[A] in 2, quotes.Expr[A] in 3 */
   type CodeOf[A]
 
@@ -47,12 +41,6 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
 
   /** Can be used instead of pipeDerivation.Result[O] to avoid path-dependent types */
   type Result[O]
-
-  /** Adapt In argument from `(in: In, ctx: Context) =>` to expression */
-  val inCode: Argument[In] => CodeOf[In]
-
-  /** Adapt Context argument from `(in: In, ctx: Context) =>` to expression */
-  val ctxCode: Argument[Context] => CodeOf[Context]
 
   /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
   val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }]

@@ -22,6 +22,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       NoContextCodec.derive[CaseManyIn, CaseManyOut].decode(CaseManyIn(1, "a", 2L)),
       Right(CaseManyOut(1, "a", 2L))
     )
+    /*
     // case class -> Java Beans
     assertEquals(
       NoContextCodec.derive[CaseOnesIn, BeanOnesOut].decode(CaseOnesIn(1)),
@@ -53,8 +54,10 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
         .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
       Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
     )
+     */
   }
 
+  /*
   test("field conversion -> use implicit codec to convert field value if types differ but names match") {
     implicit val aCodec: NoContextCodec[Int, String] = int => Right(int.toString)
     // case class -> case class
@@ -433,4 +436,5 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTUpper.CCC(1))
     )
   }
+   */
 }

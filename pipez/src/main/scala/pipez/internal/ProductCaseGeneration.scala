@@ -47,7 +47,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class Getter[InField](
       name: String,
       tpe:  Type[InField],
-      get:  Argument[In] => CodeOf[InField]
+      get:  CodeOf[In] => CodeOf[InField]
     ) {
 
       override def toString: String = s"Getter($name : $tpe)"
@@ -74,7 +74,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class Setter[OutField](
       name: String,
       tpe:  Type[OutField],
-      set:  (Argument[Out], CodeOf[OutField]) => CodeOf[Unit]
+      set:  (CodeOf[Out], CodeOf[OutField]) => CodeOf[Unit]
     ) {
 
       override def toString: String = s"Setter($name : $tpe)"
@@ -196,14 +196,14 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
       final case class Pure[A](
         tpe:    Type[A],
-        caller: (Argument[In], Argument[Context]) => CodeOf[A]
+        caller: (CodeOf[In], CodeOf[Context]) => CodeOf[A]
       ) extends OutputValue {
         override def toString: String = s"Pure { ($In, Context) => $tpe }"
       }
 
       final case class Result[A](
         tpe:    Type[A],
-        caller: (Argument[In], Argument[Context]) => CodeOf[self.Result[A]]
+        caller: (CodeOf[In], CodeOf[Context]) => CodeOf[self.Result[A]]
       ) extends OutputValue {
         override def toString: String = s"Result { ($In, Context) => $tpe }"
       }
@@ -314,7 +314,9 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   private def attemptProductRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
     for {
-      data <- extractProductInData(settings) zip extractProductOutData(settings).logSuccess(data => s"Resolved Java Bean output: $data")
+      data <- extractProductInData(settings) zip extractProductOutData(settings).logSuccess(data =>
+        s"Resolved Java Bean output: $data"
+      )
       (inData, outData) = data
       generatorData <- matchFields(inData, outData, settings)
       code <- generateProductCode(generatorData)
@@ -368,7 +370,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       summonPipe[InField, OutField].map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
           typeOf[OutField],
-          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctxCode(ctx))
+          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
         )
       }
     }
@@ -378,7 +380,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     pipe: CodeOf[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
     typeOf[OutField],
-    (in, ctx) => unlift[In, OutField](pipe, inCode(in), ctxCode(ctx))
+    (in, ctx) => unlift[In, OutField](pipe, in, ctx)
   )
 
   // (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
@@ -388,7 +390,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
       typeOf[OutField],
-      (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctxCode(ctx))
+      (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
     )
 }
 object ProductCaseGeneration {

@@ -45,32 +45,32 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     }
 
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
-    val in:  Argument[In]               = c.freshName(TermName("in"))
-    val ctx: Argument[Context] = c.freshName(TermName("ctx"))
+    val in  = c.freshName(TermName("in"))
+    val ctx = c.freshName(TermName("ctx"))
+
+    val ctxE = c.Expr[Context](ctx)
 
     val cases = subtypes.map {
       case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe) =>
-        val arg: Argument[In] = c.freshName(TermName("arg"))
-        val code = unlift(pipe, inCode(arg), ctx)
+        val arg  = c.freshName(TermName("arg"))
+        val code = unlift(pipe, c.Expr[In](arg), ctxE)
         cq"""$arg : ${inSubtype.typeSymbol} => $code.asInstanceOf[$pipeDerivation.Result[${Out.typeSymbol}]]"""
       case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe) =>
-        val arg: Argument[In] = c.freshName(TermName("arg"))
-        val code = unlift(pipe, inCode(arg), ctx)
+        val arg  = c.freshName(TermName("arg"))
+        val code = unlift(pipe, c.Expr[In](arg), ctxE)
         cq"""$arg : ${inSubtype.typeSymbol} => $code"""
     }
 
-    val body = c.Expr[Result[Out]](q"""$in match { case ..$cases }""")
+    val body = lift[In, Out](
+      c.Expr[(In, Context) => Result[Out]](
+        q"""
+        ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) => $in match { case ..$cases }
+        """
+      )
+    )
 
     DerivationResult
-      .pure(
-        lift[In, Out](
-          c.Expr[(In, Context) => Result[Out]](
-            q"""
-            ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) => $body
-            """
-          )
-        )
-      )
+      .pure(body)
       .log(s"Sum types derivation, subtypes: $subtypes")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
   }

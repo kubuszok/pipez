@@ -1,9 +1,9 @@
 package pipez
 
 /** Let you customize the derivation process
- *
- * It's used as a phantom type, so it shouldn't be stored in values and only created in-place in .derive(...) macro
- */
+  *
+  * It's used as a phantom type, so it shouldn't be stored in values and only created in-place in .derive(...) macro
+  */
 sealed trait PipeDerivationConfig[Pipe[_, _], In, Out] {
 
   /** Prints additional information during compilation about the derivation process, generated code and time it took */

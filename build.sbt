@@ -20,7 +20,11 @@ val pipez = project
         case _             => Seq.empty
       }
     },
-    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test
+    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
+    scalafmtOnCompile := true,
   )
 
 val root = project.in(file(".")).settings(name := "pipez-build").aggregate(pipez)
+
+addCommandAlias("use-213", s"++ $scala2version")
+addCommandAlias("use-3", s"++ $scala3version")

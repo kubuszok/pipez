@@ -40,8 +40,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             tpe = member.asMethod.returnType,
             get =
               if (member.asMethod.paramLists.isEmpty)
-                (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
-              else (in: Argument[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()")
+                (in: CodeOf[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
+              else (in: CodeOf[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()")
           )
       }
       .to(ListMap)
@@ -70,7 +70,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             method.name.toString -> ProductOutData.Setter(
               name = method.name.toString,
               tpe = method.asMethod.paramLists.flatten.head.typeSignature,
-              set = (out: Argument[Out], value: CodeOf[Any]) =>
+              set = (out: CodeOf[Out], value: CodeOf[Any]) =>
                 c.Expr[Unit](q"$out.${method.asMethod.name.toTermName}($value)")
             )
         }
@@ -126,8 +126,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
   ) = {
-    val in:  Argument[In]      = c.freshName(TermName("in"))
-    val ctx: Argument[Context] = c.freshName(TermName("ctx"))
+    val in  = c.freshName(TermName("in"))
+    val ctx = c.freshName(TermName("ctx"))
 
     val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Constant] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
@@ -155,17 +155,17 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       params match {
         // all values are taken directly from input and wrapped in Result
         case Nil =>
-          pureResult(constructor(constructorParams(TermName("stub"))))
+          pureResult(constructor(constructorParams(null)))
 
         // last param - after adding the last value to array we extract all values from it into constructor
         case (param, idx) :: Nil =>
-          val rightCode = param.caller(in, ctx)
+          val rightCode = param.caller(caller(c.Expr[In](in), caller(c.Expr[Context](ctx))
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
-          val fun = c.Expr[(Array[Any], Any) => Out](
+          val fun: CodeOf[(Array[Any], Any) => Out] = c.Expr[(Array[Any], Any) => Out](
             q"""
-             (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe.typeSymbol}) => {
+             ($left : scala.Array[scala.Any], $right : ${param.tpe.typeSymbol}) => {
                $left($idx) = $right
                ${constructor(constructorParams(left))}
              }
@@ -182,7 +182,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Array[Any], Any) => Array[Any]](
             q"""
-            (${Ident(left)} : scala.Array[scala.Any], ${Ident(right)} : ${param.tpe.typeSymbol}) => {
+            ($left : scala.Array[scala.Any], $right : ${param.tpe.typeSymbol}) => {
               $left($idx) = $right
               $left
             }
@@ -192,18 +192,17 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(mergeResults(arrayResult, rightCode, fun), tail)
       }
 
-    val body: c.universe.Expr[Result[Out]] = generateBody(initialValue, paramToIdx.toList)
+    val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
+      c.Expr[(In, Context) => Result[Out]](
+        q"""
+        ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) =>
+          ${generateBody(initialValue, paramToIdx.toList)}
+        """
+      )
+    )
 
     DerivationResult
-      .pure(
-        lift[In, Out](
-          c.Expr[(In, Context) => Result[Out]](
-            q"""
-            (${Ident(in)} : ${In.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
-            """
-          )
-        )
-      )
+      .pure(body)
       .log(s"Case class derivation, constructor params: $outputParameterLists")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
   }
@@ -212,13 +211,13 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     defaultConstructor: CodeOf[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
   ) = {
-    val in:  Argument[In]      = c.freshName(TermName("in"))
-    val ctx: Argument[Context] = c.freshName(TermName("ctx"))
+    val in  = c.freshName(TermName("in"))
+    val ctx = c.freshName(TermName("ctx"))
 
     val result: Argument[Out] = c.freshName(TermName("result"))
     val pureValues: List[CodeOf[Unit]] = outputSettersList.collect {
       case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
-        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx))
+        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(c.Expr[In](in), caller(c.Expr[Context](ctx)))
     }
 
     val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =
@@ -256,7 +255,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Out, Any) => Out](
             q"""
-            (${Ident(left)} : ${Out.typeSymbol}, ${Ident(right)} : ${param.tpe.typeSymbol}) => {
+            ($left : ${Out.typeSymbol}, $right : ${param.tpe.typeSymbol}) => {
               ${setter.asInstanceOf[ProductOutData.Setter[Any]].set(left, c.Expr(q"$right"))}
               $left
             }
@@ -266,18 +265,17 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(mergeResults(outResult, rightCode, fun), tail)
       }
 
-    val body: c.Expr[Result[Out]] = generateBody(initialValue, resultValues)
+    val body: c.Expr[Pipe[In, Out]] = lift[In, Out](
+      c.Expr[(In, Context) => Result[Out]](
+        q"""
+        ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) =>
+          ${generateBody(initialValue, resultValues)}
+        """
+      )
+    )
 
     DerivationResult
-      .pure(
-        lift[In, Out](
-          c.Expr[(In, Context) => Result[Out]](
-            q"""
-            (${Ident(in)} : ${In.typeSymbol}, ${Ident(ctx)} : $pipeDerivation.Context) => $body
-            """
-          )
-        )
-      )
+      .pure(body)
       .log(s"Java Beans derivation, setters: $outputSettersList")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
   }

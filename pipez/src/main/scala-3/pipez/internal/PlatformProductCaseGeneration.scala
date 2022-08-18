@@ -36,8 +36,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         tpe = method.typeRef.qualifier.asType.asInstanceOf[Type[Any]],
         get =
           if (method.paramSymss.isEmpty)
-            (in: Argument[In]) => in.select(method).appliedToNone.asExpr // TODO: or Argss(Nil) ?
-          else (in: Argument[In]) => in.select(method).appliedToNone.asExpr
+            (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr // TODO: or Argss(Nil) ?
+          else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr
       )
     }.to(ListMap)
       .pipe(ProductInData(_))
@@ -64,8 +64,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             method.name -> ProductOutData.Setter[Any](
               name = method.name.toString,
               tpe = method.typeRef.qualifier.asType.asInstanceOf[Type[Any]],
-              set = (out: Argument[Out], value: CodeOf[Any]) =>
-                out.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
+              set = (out: CodeOf[Out], value: CodeOf[Any]) =>
+                out.asTerm.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
             )
         }
         .to(ListMap)
@@ -89,7 +89,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       val sym = TypeRepr.of[Out].typeSymbol
 
-      sym.declaredMethods
+      sym.declarations
         .collectFirst {
           case method if method.isClassConstructor =>
             ProductOutData.CaseClass(
@@ -120,7 +120,76 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   private def generateCaseClass(
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
-  ) = DerivationResult.fail(DerivationError.NotYetImplemented("Generate Case Class"))
+  ) = {
+    val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], CodeOf[Int]] = outputParameterLists.flatten
+      .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
+      .zipWithIndex
+      .map { case (result, idx) => result -> Literal(IntConstant(idx)).asExpr.asExprOf[Int] }
+      .toMap
+
+    def constructorParams(in: CodeOf[In], ctx: CodeOf[Context], arr: CodeOf[Array[Any]]): List[List[CodeOf[?]]] =
+      outputParameterLists.map(
+        _.map {
+          case ProductGeneratorData.OutputValue.Pure(_, caller) =>
+            caller(in, ctx)
+          case r @ ProductGeneratorData.OutputValue.Result(tpe, _) =>
+            implicit val tpee: Type[Any] = tpe.asInstanceOf[Type[Any]]
+            '{ $arr(${ paramToIdx(r) }).asInstanceOf[tpee.Underlying] }
+        }
+      )
+
+    val arrSize = Literal(IntConstant(paramToIdx.size)).asExpr.asExprOf[Int]
+    val initialValue: CodeOf[Result[Array[Any]]] = pureResult('{ scala.Array[scala.Any]($arrSize) })
+
+    @scala.annotation.tailrec
+    def generateBody(
+      in:          CodeOf[In],
+      ctx:         CodeOf[Context],
+      arrayResult: CodeOf[Result[Array[Any]]],
+      params:      List[(ProductGeneratorData.OutputValue.Result[?], CodeOf[Int])]
+    ): CodeOf[Result[Out]] =
+      params match {
+        // all values are taken directly from input and wrapped in Result
+        case Nil =>
+          pureResult(constructor(constructorParams(in, ctx, null)))
+
+        // last param - after adding the last value to array we extract all values from it into constructor
+        case (param, idx) :: Nil =>
+          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
+          implicit val rightType: Type[Any] = param.tpe.asInstanceOf[Type[Any]]
+
+          val fun: CodeOf[(Array[Any], Any) => Out] =
+            '{ (left: Array[Any], right: rightType.Underlying) =>
+              left($idx) = right
+              ${ constructor(constructorParams(in, ctx, '{ left })) }
+            }
+
+          mergeResults[Array[Any], Any, Out](arrayResult, rightCode, fun)
+
+        // we combine Array's Result with a param's Result, store param in array and iterate further
+        case (param, idx) :: tail =>
+          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
+          implicit val rightType: Type[Any] = param.tpe.asInstanceOf[Type[Any]]
+
+          val fun: CodeOf[(Array[Any], Any) => Array[Any]] =
+            '{ (left: Array[Any], right: rightType.Underlying) =>
+              left($idx) = right
+              left
+            }
+
+          generateBody(in, ctx, mergeResults[Array[Any], Any, Array[Any]](arrayResult, rightCode, fun), tail)
+      }
+
+    val body: CodeOf[Pipe[In, Out]] =
+      lift[In, Out]('{ (in: In, ctx: Context) =>
+        ${ generateBody('{ in }, '{ ctx }, initialValue, paramToIdx.toList) }
+      })
+
+    DerivationResult
+      .pure(body)
+      .log(s"Case class derivation, constructor params: $outputParameterLists")
+      .logSuccess(code => s"Generated code: ${previewCode(code)}")
+  }
 
   private def generateJavaBean(
     defaultConstructor: CodeOf[Out],

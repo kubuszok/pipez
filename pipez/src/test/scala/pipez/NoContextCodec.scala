@@ -7,7 +7,9 @@ trait NoContextCodec[In, Out] {
 
 object NoContextCodec extends PipeSemiautoSupport[NoContextCodec] with PipeSemiautoConfiguredSupport[NoContextCodec] {
 
-  implicit val pipeDerivation = new PipeDerivation.NoContext[NoContextCodec] {
+  implicit val pipeDerivation: PipeDerivation.NoContext[NoContextCodec] {
+    type Result[Out] = Either[List[String], Out]
+  } = new PipeDerivation.NoContext[NoContextCodec] {
 
     final type Result[Out] = Either[List[String], Out]
 

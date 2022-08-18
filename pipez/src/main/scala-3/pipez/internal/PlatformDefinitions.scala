@@ -10,13 +10,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
   import quotes.*
   import quotes.reflect.*
 
-  override type Type[A] = scala.quoted.Type[A]
-
-  override type Argument[@unused A] = Term
-  override type CodeOf[A]           = Expr[A]
-
-  final val inCode:  Argument[In] => CodeOf[In]           = _.asExpr.asExprOf[In]
-  final val ctxCode: Argument[Context] => CodeOf[Context] = _.asExpr.asExprOf[Context]
+  override type Type[A]   = scala.quoted.Type[A]
+  override type CodeOf[A] = Expr[A]
 
   final def previewCode[A](code: CodeOf[A]): String = code.show
 

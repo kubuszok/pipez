@@ -1,5 +1,7 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{Context, Result}
+
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }

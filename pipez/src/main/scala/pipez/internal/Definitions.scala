@@ -36,14 +36,8 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Provides `Type` instance for `Out` */
   implicit val Out: Type[Out]
 
-  /** Can be used instead of pipeDerivation.Context to avoid path-dependent types */
-  type Context
-
-  /** Can be used instead of pipeDerivation.Result[O] to avoid path-dependent types */
-  type Result[O]
-
   /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
-  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }]
+  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = Definitions.Context; type Result[O] = Definitions.Result[O] }]
 
   /** Type representing how we got the specific value from the `in: In` argument */
   sealed trait Path extends Product with Serializable
@@ -280,4 +274,12 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       .log(s"Pipeline from $In to $Out")
       .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")
       .logSuccess(config => s"Configuration used: $config")
+}
+object Definitions {
+
+  /** Can be used instead of pipeDerivation.Context to avoid path-dependent types */
+  type Context
+
+  /** Can be used instead of pipeDerivation.Result[O] to avoid path-dependent types */
+  type Result[O]
 }

@@ -1,6 +1,7 @@
 package pipez.internal
 
-import pipez.{ PipeDerivation, PipeDerivationConfig }
+import pipez.{ PipeDerivation, PipeDerivationConfig}
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.{ nowarn, unused }
 import scala.quoted.{ Type as _, * }
@@ -32,7 +33,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
 
   // Scala 3-macro specific instances, required because code-generation needs these types
 
-  implicit val Pipe:         scala.quoted.Type[Pipe]
-  implicit val Context: scala.quoted.Type[Context]
-  implicit val Result:  scala.quoted.Type[Result]
+  given Pipe:         scala.quoted.Type[Pipe]
+  given Context: scala.quoted.Type[Context]
+  given Result:  scala.quoted.Type[Result]
 }

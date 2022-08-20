@@ -1,6 +1,7 @@
 package pipez.internal
 
 import pipez.PipeDerivationConfig
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.nowarn
 import scala.util.chaining.scalaUtilChainingOps

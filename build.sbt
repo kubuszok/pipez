@@ -21,7 +21,7 @@ val pipez = project
       }
     },
     libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
-    scalafmtOnCompile := true,
+    //scalafmtOnCompile := true,
   )
 
 val root = project.in(file(".")).settings(name := "pipez-build").aggregate(pipez)

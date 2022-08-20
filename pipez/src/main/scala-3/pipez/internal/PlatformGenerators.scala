@@ -14,32 +14,32 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
   final def isSubtype[A: Type, B: Type]: Boolean =
     TypeRepr.of[A] <:< TypeRepr.of[B]
 
-  def reportDiagnostics[A](result: DerivationResult[A]): Unit =
+  final def reportDiagnostics[A](result: DerivationResult[A]): Unit =
     report.info(diagnosticsMessage(result))
 
-  def reportError(errors: List[DerivationError]): Nothing =
+  final def reportError(errors: List[DerivationError]): Nothing =
     report.errorAndAbort(errorMessage(errors))
 
   final def lift[I: Type, O: Type](
     call: CodeOf[(I, Context) => Result[O]]
-  ): CodeOf[Pipe[I, O]] = '{ $pipeDerivation.lift($call) }
+  ): CodeOf[Pipe[I, O]] = '{ ${ pipeDerivation }.lift(${ call }) }
 
   final def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
     ctx:  CodeOf[Context]
-  ): CodeOf[Result[O]] = '{ $pipeDerivation.unlift($pipe, $in, $ctx) }
+  ): CodeOf[Result[O]] = '{ ${ pipeDerivation }.unlift(${ pipe }, ${ in }, ${ ctx }) }
 
   final def updateContext(
     ctx:  CodeOf[Context],
     path: CodeOf[pipez.Path]
-  ): CodeOf[Context] = '{ $pipeDerivation.updateContext($ctx, $path) }
+  ): CodeOf[Context] = '{ ${ pipeDerivation }.updateContext(${ ctx }, ${ path }) }
 
-  final def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]] = '{ $pipeDerivation.pureResult($a) }
+  final def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]] = '{ ${ pipeDerivation }.pureResult(${ a }) }
 
   final def mergeResults[A: Type, B: Type, C: Type](
     ra: CodeOf[Result[A]],
     rb: CodeOf[Result[B]],
     f:  CodeOf[(A, B) => C]
-  ): CodeOf[Result[C]] = '{ $pipeDerivation.mergeResults($ra, $rb, $f) }
+  ): CodeOf[Result[C]] = '{ ${ pipeDerivation }.mergeResults(${ ra }, ${ rb }, ${ f }) }
 }

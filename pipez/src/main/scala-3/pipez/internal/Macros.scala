@@ -23,6 +23,49 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
 
   val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }] =
     pd.asInstanceOf[CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }]]
+
+  // Scala 3-macro specific instances, required because code-generation needs these types
+
+  implicit val Context: scala.quoted.Type[Context] = {
+    given p: scala.quoted.Type[Pipe] = Pipe
+//    println('{
+//      val ppp = ${ pd }
+//      ??? : ppp.Context
+//    }.asTerm)
+
+    import scala.util.chaining.*
+
+    println(pd.asTerm)
+
+    Select(pd.asTerm, TypeRepr.of[PipeDerivation].typeSymbol.declaredType("Context").head)
+      .tap(println)
+      .symbol
+      .tap(println)
+      .pipe(TypeTree.ref)
+      .tpe
+      .tap(println)
+      .asType
+      .asInstanceOf[scala.quoted.Type[Context]]
+      .tap(println)
+
+    // val result = TypeRepr.of[PipeDerivation].typeSymbol.declaredType("Context").head
+    // Select(pd.asTerm, result).symbol.typeRef.asType.asInstanceOf[scala.quoted.Type[Context]]
+  }
+  implicit val Result: scala.quoted.Type[Result] = {
+    // val result = TypeRepr.of[PipeDerivation].typeSymbol.declaredType("Result").head
+    // Select(pd.asTerm, result).symbol.typeRef.asType.asInstanceOf[scala.quoted.Type[Result]]
+
+    // pd.asTerm.tpe.typeSymbol.declaredType("Result").head.typeRef.asType.asInstanceOf[scala.quoted.Type[Result]]
+
+    import scala.util.chaining.*
+
+    Select(pd.asTerm, TypeRepr.of[PipeDerivation].typeSymbol.declaredType("Result").head).symbol
+      .pipe(TypeTree.ref)
+      .tpe.asType
+      .asInstanceOf[scala.quoted.Type[Result]]
+  }
+  println(TypeRepr.of[Context])
+  println(TypeRepr.of[Result])
 }
 
 @scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage

@@ -1,5 +1,6 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{Context, Result}
 import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
@@ -203,7 +204,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
       final case class Result[A](
         tpe:    Type[A],
-        caller: (CodeOf[In], CodeOf[Context]) => CodeOf[self.Result[A]]
+        caller: (CodeOf[In], CodeOf[Context]) => CodeOf[Definitions.Result[A]]
       ) extends OutputValue {
         override def toString: String = s"Result { ($In, Context) => $tpe }"
       }

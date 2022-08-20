@@ -1,5 +1,7 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{Context, Result}
+
 import scala.quoted.{ Type as _, * }
 
 @scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage

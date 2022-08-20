@@ -23,7 +23,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     sym.declarations.exists(m => m.isClassConstructor && m.paramSymss.flatten.isEmpty) // TODO: check for public?
   final def isInstantiable[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
-    !sym.flags.is(Flags.Abstract) && sym.declarations.exists(m => m.isClassConstructor) // TODO: check for public?
+    !sym.flags.is(Flags.Abstract) && sym.primaryConstructor != Symbol.noSymbol // TODO: check for public?
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
     val sym = TypeRepr.of[In].typeSymbol
@@ -54,6 +54,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       val defaultConstructor = DerivationResult.fromOption(
         sym.declarations.collectFirst {
           case member if member.isClassConstructor && member.paramSymss.flatten.isEmpty =>
+            // TODO: copy from case class
             New(TypeTree.of[Out]).appliedToNone.asExpr.asExprOf[Out]
         }
       )(DerivationError.MissingPublicConstructor)
@@ -79,7 +80,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       ProductOutData
         .CaseClass(
-          params => Ref(TypeRepr.of[Out].typeSymbol).asExpr.asExprOf[Out],
+          params => Ref(TypeRepr.of[Out].termSymbol).asExpr.asExprOf[Out],
           List.empty
         )
         .pipe(DerivationResult.pure(_))
@@ -89,24 +90,25 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       val sym = TypeRepr.of[Out].typeSymbol
 
-      sym.declarations
-        .collectFirst {
-          case method if method.isClassConstructor =>
-            ProductOutData.CaseClass(
-              params => New(TypeTree.of[Out]).appliedToArgss(params.map(_.map(_.asTerm))).asExpr.asExprOf[Out],
-              method.paramSymss.map { params =>
-                params
-                  .map { param =>
-                    param.name.toString -> ProductOutData.ConstructorParam(
-                      name = param.name,
-                      tpe = param.typeRef.qualifier.asType.asInstanceOf[Type[Any]]
-                    )
-                  }
-                  .to(ListMap)
+      ProductOutData
+        .CaseClass(
+          params =>
+            New(TypeTree.of[Out])
+              .select(sym.primaryConstructor)
+              .appliedToArgss(params.map(_.map(_.asTerm)))
+              .asExpr
+              .asExprOf[Out],
+          sym.primaryConstructor.paramSymss.map { params =>
+            params
+              .map { param =>
+                param.name.toString -> ProductOutData.ConstructorParam(
+                  name = param.name,
+                  tpe = param.typeRef.qualifier.asType.asInstanceOf[Type[Any]]
+                )
               }
-            )
-        }
-        .get
+              .to(ListMap)
+          }
+        )
         .pipe(DerivationResult.pure(_))
         .logSuccess(data => s"Resolved case class output: $data")
     }
@@ -180,10 +182,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(in, ctx, mergeResults[Array[Any], Any, Array[Any]](arrayResult, rightCode, fun), tail)
       }
 
-    val body: CodeOf[Pipe[In, Out]] =
-      lift[In, Out]('{ (in: In, ctx: Context) =>
-        ${ generateBody('{ in }, '{ ctx }, initialValue, paramToIdx.toList) }
-      })
+    val body: CodeOf[Pipe[In, Out]] = lift[In, Out]('{ (in: In, ctx: Context) =>
+      ${ generateBody('{ in }, '{ ctx }, initialValue, paramToIdx.toList) }
+    })
 
     DerivationResult
       .pure(body)

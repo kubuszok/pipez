@@ -40,7 +40,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   implicit val Out: Type[Out]
 
   /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
-  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = Definitions.Context; type Result[O] = Definitions.Result[O] }]
+  val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Definitions.Context, Definitions.Result]]
 
   /** Type representing how we got the specific value from the `in: In` argument */
   sealed trait Path extends Product with Serializable

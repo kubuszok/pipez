@@ -2,7 +2,7 @@
 
  - [ ] Scala 2
    - [X] diagnostics - Scala 2
-   - [ ] config parsing
+   - [X] config parsing
    - [ ] products - Scala 2
      - [X] case class -> case class
      - [X] case class -> java beans
@@ -18,13 +18,13 @@
      - [X] subtypes modifications
      - [ ] context update
  - [ ] Scala 3
-   - [ ] diagnostics - Scala 2
+   - [X] diagnostics - Scala 3
    - [ ] config parsing
-   - [ ] products - Scala 2
-     - [ ] case class -> case class
-     - [ ] case class -> java beans
-     - [ ] java beans -> case class
-     - [ ] java beans -> java beans
+   - [ ] products - Scala 3
+     - [X] case class -> case class
+     - [X] case class -> java beans
+     - [X] java beans -> case class
+     - [X] java beans -> java beans
      - [ ] fields modifications
      - [ ] context update
    - [ ] sum types

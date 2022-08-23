@@ -22,7 +22,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       NoContextCodec.derive[CaseManyIn, CaseManyOut].decode(CaseManyIn(1, "a", 2L)),
       Right(CaseManyOut(1, "a", 2L))
     )
-    /*
     // case class -> Java Beans
     assertEquals(
       NoContextCodec.derive[CaseOnesIn, BeanOnesOut].decode(CaseOnesIn(1)),
@@ -54,7 +53,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
         .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
       Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
     )
-     */
   }
 
   /*

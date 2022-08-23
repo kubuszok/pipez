@@ -35,7 +35,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     }).map { method =>
       method.name.toString -> ProductInData.Getter[Any](
         name = method.name.toString,
-        tpe = TypeRepr.of[In].memberType(method).asType.asInstanceOf[Type[Any]],
+        tpe = TypeRepr.of[In].memberType(method).widenByName.asType.asInstanceOf[Type[Any]],
         get =
           if (method.paramSymss.isEmpty) (in: CodeOf[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
           else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr
@@ -55,8 +55,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       val defaultConstructor = DerivationResult.fromOption(
         sym.declarations.collectFirst {
           case member if member.isClassConstructor && member.paramSymss.flatten.isEmpty =>
-            // TODO: copy from case class
-            New(TypeTree.of[Out]).appliedToNone.asExpr.asExprOf[Out]
+            if (member.paramSymss.isEmpty) New(TypeTree.of[Out]).select(member).appliedToArgss(Nil).asExpr.asExprOf[Out]
+            else New(TypeTree.of[Out]).select(member).appliedToNone.asExpr.asExprOf[Out]
         }
       )(DerivationError.MissingPublicConstructor)
 
@@ -65,7 +65,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           case method if method.name.toLowerCase.startsWith("set") && method.paramSymss.flatten.size == 1 =>
             method.name -> ProductOutData.Setter[Any](
               name = method.name.toString,
-              tpe = TypeRepr.of[Out].memberType(method).asType.asInstanceOf[Type[Any]],
+              tpe = {
+                val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(method)
+                tpe.asType.asInstanceOf[Type[Any]]
+              },
               set = (out: CodeOf[Out], value: CodeOf[Any]) =>
                 out.asTerm.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
             )
@@ -94,8 +97,6 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       ProductOutData
         .CaseClass(
           params =>
-            println(s"We are here taking $params")
-            println(New(TypeTree.of[Out]).select(sym.primaryConstructor).appliedToArgss(params.map(_.map(_.asTerm))).show)
             New(TypeTree.of[Out])
               .select(sym.primaryConstructor)
               .appliedToArgss(params.map(_.map(_.asTerm)))
@@ -200,5 +201,61 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   private def generateJavaBean(
     defaultConstructor: CodeOf[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
-  ) = DerivationResult.fail(DerivationError.NotYetImplemented("Generate Java Bean"))
+  ) = {
+    def pureValues(in: CodeOf[In], ctx: CodeOf[Context], result: CodeOf[Out]): List[CodeOf[Unit]] =
+      outputSettersList.collect { case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
+        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx).asInstanceOf[CodeOf[Unit]])
+      }
+
+    val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =
+      outputSettersList.collect { case (r: ProductGeneratorData.OutputValue.Result[?], s: ProductOutData.Setter[?]) =>
+        r -> s
+      }
+
+    def initialValue(in: CodeOf[In], ctx: CodeOf[Context]): CodeOf[Result[Out]] = pureResult(
+      '{
+        val result: Out = ${ defaultConstructor }
+        ${ pureValues(in, ctx, '{ result }).reduce[CodeOf[Unit]]((a, b) => '{ ${ a }; ${ b } }) }
+        result
+      }
+    )
+
+    @scala.annotation.tailrec
+    def generateBody(
+      in:        CodeOf[In],
+      ctx:       CodeOf[Context],
+      outResult: CodeOf[Result[Out]],
+      params:    List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])]
+    ): CodeOf[Result[Out]] =
+      params match {
+        // all values are taken directly from input and wrapped in Result
+        case Nil =>
+          outResult
+
+        // we have Out object on left and value to put into setter on right
+        case (param, setter) :: tail =>
+          type Right
+          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Right]]]
+          implicit val paramTpe: Type[Right] = param.tpe.asInstanceOf[Type[Right]]
+
+          val fun: CodeOf[(Out, Any) => Out] =
+            '{ (left: Out, right: paramTpe.Underlying) =>
+              ${ setter.asInstanceOf[ProductOutData.Setter[Right]].set('{ left }, '{ right }) }
+              left
+            }.asInstanceOf[CodeOf[(Out, Any) => Out]]
+
+          generateBody(in, ctx, mergeResults(outResult, rightCode, fun), tail)
+      }
+
+    val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
+      '{ (in: In, ctx: Context) =>
+        ${ generateBody('{ in }, '{ ctx }, initialValue('{ in }, '{ ctx }), resultValues) }
+      }
+    )
+
+    DerivationResult
+      .pure(body)
+      .log(s"Java Beans derivation, setters: $outputSettersList")
+      .logSuccess(code => s"Generated code: ${previewCode(code)}")
+  }
 }

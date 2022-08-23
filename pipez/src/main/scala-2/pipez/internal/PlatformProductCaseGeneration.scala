@@ -265,7 +265,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(mergeResults(outResult, rightCode, fun), tail)
       }
 
-    val body: c.Expr[Pipe[In, Out]] = lift[In, Out](
+    val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
       c.Expr[(In, Context) => Result[Out]](
         q"""
         ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) =>

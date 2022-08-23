@@ -22,21 +22,19 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
   def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] =
     TypeRepr.of(using Pipe).appliedTo(List(TypeRepr.of[I], TypeRepr.of[O])).asType.asInstanceOf[Type[Pipe[I, O]]]
 
-  val pipeDerivation: CodeOf[
-    PipeDerivation[Pipe] { type Context = Definitions.Context; type Result[O] = Definitions.Result[O] }
-  ] =
-    pd.asInstanceOf[CodeOf[
-      PipeDerivation[Pipe] { type Context = Definitions.Context; type Result[O] = Definitions.Result[O] }
-    ]]
+  val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Context, Result]] = {
+    given p: scala.quoted.Type[Pipe] = Pipe
+    '{ ${ pd }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]] }
+  }
 
   // Scala 3-macro specific instances, required because code-generation needs these types
 
-  override implicit val Context: scala.quoted.Type[Context] = {
+  implicit override val Context: scala.quoted.Type[Context] = {
     given p: scala.quoted.Type[Pipe] = Pipe
     val tpe = '{ ${ pd }.updateContext(???, ???) }.asTerm.tpe
     tpe.asType.asInstanceOf[scala.quoted.Type[Context]]
   }
-  override implicit val Result: scala.quoted.Type[Result] = {
+  implicit override val Result: scala.quoted.Type[Result] = {
     given p: scala.quoted.Type[Pipe] = Pipe
     val AppliedType(tpe, _) = '{ ${ pd }.pureResult(1) }.asTerm.tpe
     tpe.asType.asInstanceOf[scala.quoted.Type[Result]]

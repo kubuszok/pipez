@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{Context, Result}
+import pipez.internal.Definitions.{ Context, Result }
 import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
@@ -211,15 +211,15 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
 
     final case class CaseClass(
-      caller: Constructor,
-      output: List[List[OutputValue]]
+      constructor: Constructor,
+      output:      List[List[OutputValue]]
     ) extends ProductGeneratorData {
       override def toString: String = s"CaseClass${output.map(list => "(" + list.mkString(", ") + ")").mkString}"
     }
 
     final case class JavaBean(
-      caller: CodeOf[Out],
-      output: List[(OutputValue, ProductOutData.Setter[?])]
+      defaultConstructor: CodeOf[Out],
+      output:             List[(OutputValue, ProductOutData.Setter[?])]
     ) extends ProductGeneratorData {
       override def toString: String = s"JavaBean(${output.mkString(", ")})"
     }
@@ -315,9 +315,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   private def attemptProductRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
     for {
-      data <- extractProductInData(settings) zip extractProductOutData(settings).logSuccess(data =>
-        s"Resolved Java Bean output: $data"
-      )
+      data <- extractProductInData(settings) zip extractProductOutData(settings)
       (inData, outData) = data
       generatorData <- matchFields(inData, outData, settings)
       code <- generateProductCode(generatorData)

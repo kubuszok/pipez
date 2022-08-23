@@ -28,7 +28,7 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
   ): CodeOf[Pipe[I, O]] = '{
     ${ pipeDerivation }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]].lift(${ call })
   }
-
+  
   final def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],

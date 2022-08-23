@@ -1,6 +1,7 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{Context, Result}
+import pipez.PipeDerivation
+import pipez.internal.Definitions.{ Context, Result }
 
 import scala.quoted.{ Type as _, * }
 
@@ -24,24 +25,34 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
 
   final def lift[I: Type, O: Type](
     call: CodeOf[(I, Context) => Result[O]]
-  ): CodeOf[Pipe[I, O]] = '{ ${ pipeDerivation }.lift(${ call }) }
+  ): CodeOf[Pipe[I, O]] = '{
+    ${ pipeDerivation }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]].lift(${ call })
+  }
 
   final def unlift[I: Type, O: Type](
     pipe: CodeOf[Pipe[I, O]],
     in:   CodeOf[I],
     ctx:  CodeOf[Context]
-  ): CodeOf[Result[O]] = '{ ${ pipeDerivation }.unlift(${ pipe }, ${ in }, ${ ctx }) }
+  ): CodeOf[Result[O]] = '{
+    ${ pipeDerivation }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]].unlift(${ pipe }, ${ in }, ${ ctx })
+  }
 
   final def updateContext(
     ctx:  CodeOf[Context],
     path: CodeOf[pipez.Path]
-  ): CodeOf[Context] = '{ ${ pipeDerivation }.updateContext(${ ctx }, ${ path }) }
+  ): CodeOf[Context] = '{
+    ${ pipeDerivation }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]].updateContext(${ ctx }, ${ path })
+  }
 
-  final def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]] = '{ ${ pipeDerivation }.pureResult(${ a }) }
+  final def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]] = '{
+    ${ pipeDerivation }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]].pureResult(${ a })
+  }
 
   final def mergeResults[A: Type, B: Type, C: Type](
     ra: CodeOf[Result[A]],
     rb: CodeOf[Result[B]],
     f:  CodeOf[(A, B) => C]
-  ): CodeOf[Result[C]] = '{ ${ pipeDerivation }.mergeResults(${ ra }, ${ rb }, ${ f }) }
+  ): CodeOf[Result[C]] = '{
+    ${ pipeDerivation }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]].mergeResults(${ ra }, ${ rb }, ${ f })
+  }
 }

@@ -34,7 +34,7 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
           extractSubclasses(TypeRepr.of[A].typeSymbol).map { subtypeType =>
             EnumData.SumType.Case(
               subtypeType.name,
-              subtypeType.typeRef.qualifier.asType.asInstanceOf[Type[A]],
+              subtypeType.typeRef.asType.asInstanceOf[Type[A]],
               isCaseObject = subtypeType.flags.is(Flags.Module)
             )
           }

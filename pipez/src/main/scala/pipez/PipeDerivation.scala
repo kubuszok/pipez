@@ -69,4 +69,9 @@ object PipeDerivation extends PipeDerivationPlatform {
 
   /** Specialization for `Pipe`s which are interchangeable to `In => Out` */
   trait Simple[Pipe[_, _]] extends NoContext[Pipe] with NoParsing[Pipe]
+
+  type Aux[Pipe[_, _], Context0, Result0[_]] = PipeDerivation[Pipe] {
+    type Context   = Context0
+    type Result[A] = Result0[A]
+  }
 }

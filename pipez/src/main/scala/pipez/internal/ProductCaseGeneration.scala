@@ -51,7 +51,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       get:  CodeOf[In] => CodeOf[InField]
     ) {
 
-      override def toString: String = s"Getter($name : $tpe)"
+      override def toString: String = s"Getter($name : ${previewType(tpe)})"
     }
   }
 
@@ -68,7 +68,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       params: List[ListMap[String, ConstructorParam[?]]]
     ) extends ProductOutData {
       override def toString: String = s"CaseClass${params.map { list =>
-          "(" + list.map { case (n, p) => s"$n : ${p.tpe}" }.mkString(", ") + ")"
+          "(" + list.map { case (n, p) => s"$n : ${previewType(p.tpe)}" }.mkString(", ") + ")"
         }.mkString}"
     }
 
@@ -78,7 +78,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       set:  (CodeOf[Out], CodeOf[OutField]) => CodeOf[Unit]
     ) {
 
-      override def toString: String = s"Setter($name : $tpe)"
+      override def toString: String = s"Setter($name : ${previewType(tpe)})"
     }
     final case class JavaBean(
       defaultConstructor: CodeOf[Out],
@@ -199,14 +199,14 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         tpe:    Type[A],
         caller: (CodeOf[In], CodeOf[Context]) => CodeOf[A]
       ) extends OutputValue {
-        override def toString: String = s"Pure { ($In, Context) => $tpe }"
+        override def toString: String = s"Pure { (${previewType[In]}, Context) => ${previewType(tpe)} }"
       }
 
       final case class Result[A](
         tpe:    Type[A],
         caller: (CodeOf[In], CodeOf[Context]) => CodeOf[Definitions.Result[A]]
       ) extends OutputValue {
-        override def toString: String = s"Result { ($In, Context) => $tpe }"
+        override def toString: String = s"Result { (${previewType[In]}, Context) => ${previewType(tpe)} }"
       }
     }
 

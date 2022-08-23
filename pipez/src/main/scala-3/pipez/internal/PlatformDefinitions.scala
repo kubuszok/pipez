@@ -1,7 +1,7 @@
 package pipez.internal
 
-import pipez.{ PipeDerivation, PipeDerivationConfig}
-import pipez.internal.Definitions.{Context, Result}
+import pipez.{ PipeDerivation, PipeDerivationConfig }
+import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.{ nowarn, unused }
 import scala.quoted.{ Type as _, * }
@@ -14,6 +14,10 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
 
   override type Type[A]   = scala.quoted.Type[A]
   override type CodeOf[A] = Expr[A]
+
+  final def previewType[A: Type]: String =
+    val repr = TypeRepr.of[A]
+    scala.util.Try(repr.show).getOrElse(repr.toString)
 
   final def previewCode[A](code: CodeOf[A]): String = code.show
 
@@ -33,7 +37,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
 
   // Scala 3-macro specific instances, required because code-generation needs these types
 
-  given Pipe:         scala.quoted.Type[Pipe]
-  given Context: scala.quoted.Type[Context]
-  given Result:  scala.quoted.Type[Result]
+  implicit val Pipe:    scala.quoted.Type[Pipe]
+  implicit val Context: scala.quoted.Type[Context]
+  implicit val Result:  scala.quoted.Type[Result]
 }

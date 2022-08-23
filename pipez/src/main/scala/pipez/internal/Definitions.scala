@@ -30,6 +30,9 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Provides `Type` instance for `Pipe[I, O]` */
   implicit def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]]
 
+  /** Prints type value */
+  def previewType[A: Type]: String
+
   /** Provides `Type` instance for `In` */
   implicit val In: Type[In]
 
@@ -269,9 +272,9 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Reads configs if passed, or fallback to defaults (empty `Settings`) otherwise */
   final def readSettingsIfGiven(code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): DerivationResult[Settings] =
     code
-      .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
+      .fold(DerivationResult.pure(new Settings(List(ConfigEntry.EnableDiagnostics))))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
-      .log(s"Pipeline from $In to $Out")
+      .log(s"Pipeline from ${previewType[In]} to ${previewType[Out]}")
       .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")
       .logSuccess(config => s"Configuration used: $config")
 }

@@ -31,12 +31,12 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
 
   // Scala 3-macro specific instances, required because code-generation needs these types
 
-  override given Context: scala.quoted.Type[Context] = {
+  override implicit val Context: scala.quoted.Type[Context] = {
     given p: scala.quoted.Type[Pipe] = Pipe
     val tpe = '{ ${ pd }.updateContext(???, ???) }.asTerm.tpe
     tpe.asType.asInstanceOf[scala.quoted.Type[Context]]
   }
-  override given Result: scala.quoted.Type[Result] = {
+  override implicit val Result: scala.quoted.Type[Result] = {
     given p: scala.quoted.Type[Pipe] = Pipe
     val AppliedType(tpe, _) = '{ ${ pd }.pureResult(1) }.asTerm.tpe
     tpe.asType.asInstanceOf[scala.quoted.Type[Result]]

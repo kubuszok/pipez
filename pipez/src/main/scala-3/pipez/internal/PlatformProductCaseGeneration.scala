@@ -35,7 +35,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     }).map { method =>
       method.name.toString -> ProductInData.Getter[Any](
         name = method.name.toString,
-        tpe = method.typeRef.qualifier.asType.asInstanceOf[Type[Any]],
+        tpe = method.typeRef.asType.asInstanceOf[Type[Any]],
         get =
           if (method.paramSymss.isEmpty)
             (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr // TODO: or Argss(Nil) ?
@@ -66,7 +66,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           case method if method.name.toLowerCase.startsWith("set") && method.paramSymss.flatten.size == 1 =>
             method.name -> ProductOutData.Setter[Any](
               name = method.name.toString,
-              tpe = method.typeRef.qualifier.asType.asInstanceOf[Type[Any]],
+              tpe = method.typeRef.asType.asInstanceOf[Type[Any]],
               set = (out: CodeOf[Out], value: CodeOf[Any]) =>
                 out.asTerm.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
             )
@@ -105,7 +105,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               .map { param =>
                 param.name.toString -> ProductOutData.ConstructorParam(
                   name = param.name,
-                  tpe = param.typeRef.qualifier.asType.asInstanceOf[Type[Any]]
+                  tpe = param.typeRef.asType.asInstanceOf[Type[Any]]
                 )
               }
               .to(ListMap)

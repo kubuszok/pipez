@@ -1,7 +1,7 @@
 package pipez.internal
 
 import pipez.PipeDerivationConfig
-import pipez.internal.Definitions.{Context, Result}
+import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.nowarn
 import scala.util.chaining.scalaUtilChainingOps
@@ -34,21 +34,23 @@ trait Generators[Pipe[_, _], In, Out]
   final def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
     .map {
       case DerivationError.MissingPublicConstructor =>
-        s"$Out is missing a public constructor that could be used to initiate its value"
+        s"${previewType[Out]} is missing a public constructor that could be used to initiate its value"
       case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
-        s"Couldn't find implicit of type ${PipeOf(inFieldType, outFieldType)}"
+        s"Couldn't find implicit of type ${previewType(PipeOf(inFieldType, outFieldType))}"
       case DerivationError.MissingPublicSource(outFieldName) =>
-        s"Couldn't find a field/method which could be used as a source for $outFieldName from $Out; use config to provide it manually"
+        s"Couldn't find a field/method which could be used as a source for $outFieldName from ${previewType[Out]}; use config to provide it manually"
       case DerivationError.MissingMatchingSubType(inSubtypeType) =>
         s"Couldn't find corresponding subtype for $inSubtypeType"
       case DerivationError.MissingMatchingValue(inValue) =>
         s"Couldn't find corresponding value for $inValue"
       case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
-        s"Couldn't find an implicit value converting $inFieldType to $outFieldType, required by $In.$inField to $Out.$outField conversion; provide the right implicit or configuration"
+        s"Couldn't find an implicit value converting $inFieldType to ${previewType(
+            outFieldType
+          )}, required by ${previewType[In]}.$inField to ${previewType[Out]}.$outField conversion; provide the right implicit or configuration"
       case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
-        s"Couldn't convert $In (${if (isInSumType) "sum type" else "value enumeration"}) into ${Out} (${
-            if (isOutSumType) "sum type" else "value enumeration"
-          })"
+        s"Couldn't convert ${previewType[In]} (${
+            if (isInSumType) "sum type" else "value enumeration"
+          }) into ${previewType[Out]} (${if (isOutSumType) "sum type" else "value enumeration"})"
       case DerivationError.NotYetSupported =>
         s"Your setup is valid, but the library doesn't support it yet; if you think it's a bug contact library authors"
       case DerivationError.InvalidConfiguration(msg) =>

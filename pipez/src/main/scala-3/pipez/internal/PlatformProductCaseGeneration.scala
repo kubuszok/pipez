@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{Context, Result}
+import pipez.internal.Definitions.{ Context, Result }
 
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
@@ -35,10 +35,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     }).map { method =>
       method.name.toString -> ProductInData.Getter[Any](
         name = method.name.toString,
-        tpe = method.typeRef.asType.asInstanceOf[Type[Any]],
+        tpe = TypeRepr.of[In].memberType(method).asType.asInstanceOf[Type[Any]],
         get =
-          if (method.paramSymss.isEmpty)
-            (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr // TODO: or Argss(Nil) ?
+          if (method.paramSymss.isEmpty) (in: CodeOf[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
           else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr
       )
     }.to(ListMap)
@@ -66,7 +65,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           case method if method.name.toLowerCase.startsWith("set") && method.paramSymss.flatten.size == 1 =>
             method.name -> ProductOutData.Setter[Any](
               name = method.name.toString,
-              tpe = method.typeRef.asType.asInstanceOf[Type[Any]],
+              tpe = TypeRepr.of[Out].memberType(method).asType.asInstanceOf[Type[Any]],
               set = (out: CodeOf[Out], value: CodeOf[Any]) =>
                 out.asTerm.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
             )
@@ -95,17 +94,21 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       ProductOutData
         .CaseClass(
           params =>
+            println(s"We are here taking $params")
+            println(New(TypeTree.of[Out]).select(sym.primaryConstructor).appliedToArgss(params.map(_.map(_.asTerm))).show)
             New(TypeTree.of[Out])
               .select(sym.primaryConstructor)
               .appliedToArgss(params.map(_.map(_.asTerm)))
               .asExpr
               .asExprOf[Out],
           sym.primaryConstructor.paramSymss.map { params =>
+            val MethodType(names, types, _) = TypeRepr.of[Out].memberType(sym.primaryConstructor)
+            val typeByName                  = names.zip(types).toMap
             params
               .map { param =>
                 param.name.toString -> ProductOutData.ConstructorParam(
                   name = param.name,
-                  tpe = param.typeRef.asType.asInstanceOf[Type[Any]]
+                  tpe = typeByName(param.name).asType.asInstanceOf[Type[Any]]
                 )
               }
               .to(ListMap)
@@ -117,7 +120,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
     generatorData match {
-      case ProductGeneratorData.CaseClass(caller, results)            => generateCaseClass(caller, results)
+      case ProductGeneratorData.CaseClass(constructor, results)       => generateCaseClass(constructor, results)
       case ProductGeneratorData.JavaBean(defaultConstructor, results) => generateJavaBean(defaultConstructor, results)
     }
 

@@ -22,8 +22,6 @@ final case class CaseManyOutExt(a: Int, b: String, c: Long, x: String)
 final case class CaseLower(aaa: Int, bbb: String, ccc: Long)
 final case class CaseUpper(AAA: Int, BBB: String, CCC: Long)
 
-/*
-
 // Java Beans (as inputs, we rely on their getters, as output, we rely on their default constructor and setters)
 
 import scala.beans.BeanProperty
@@ -93,9 +91,9 @@ object ADTObjectsIn {
 sealed trait ADTObjectsOut extends Product with Serializable
 object ADTObjectsOut {
 
-  final case object A extends ADTObjectsOut
-  final case object B extends ADTObjectsOut
-  final case object C extends ADTObjectsOut
+  case object A extends ADTObjectsOut
+  case object B extends ADTObjectsOut
+  case object C extends ADTObjectsOut
 }
 
 sealed trait ADTClassesIn extends Product with Serializable
@@ -116,9 +114,9 @@ sealed trait ADTObjectsRemovedIn extends Product with Serializable
 
 object ADTObjectsRemovedIn {
 
-  final case object A extends ADTObjectsRemovedIn
-  final case object B extends ADTObjectsRemovedIn
-  final case object C extends ADTObjectsRemovedIn
+  case object A extends ADTObjectsRemovedIn
+  case object B extends ADTObjectsRemovedIn
+  case object C extends ADTObjectsRemovedIn
 }
 sealed trait ADTObjectsRemovedOut extends Product with Serializable
 object ADTObjectsRemovedOut {
@@ -155,5 +153,3 @@ object ADTUpper {
   final case class BBB(b: Int) extends ADTUpper
   final case class CCC(c: Int) extends ADTUpper
 }
-
- */

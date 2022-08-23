@@ -1,6 +1,14 @@
 val scala2version = "2.13.8"
 val scala3version = "3.1.3"
 
+val testCases = project
+  .in(file("testcases"))
+  .settings(
+    name := "testcases",
+    scalaVersion := scala2version,
+    scalacOptions ++= Seq("-deprecation", "-feature", "-Xsource:3")
+  )
+
 val pipez = project
   .in(file("pipez"))
   .settings(
@@ -20,9 +28,10 @@ val pipez = project
         case _             => Seq.empty
       }
     },
-    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
-    //scalafmtOnCompile := true,
+    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test
+    // scalafmtOnCompile := true,
   )
+  .dependsOn(testCases % "test->compile")
 
 val root = project.in(file(".")).settings(name := "pipez-build").aggregate(pipez)
 

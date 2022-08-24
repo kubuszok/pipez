@@ -424,15 +424,16 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTClassesRemovedOut.A(1))
     )
   }
+  */
 
   test("enumMatchingCaseInsensitive, auto summon elements -> match subtypes by name ignoring cases") {
     import NoContextCodec.Auto.* // for recursive derivation
+    pipez.NoContextCodec.Auto.derive[pipez.ADTLower.Aaa, pipez.ADTUpper.AAA]
     assertEquals(
       NoContextCodec
-        .derive(NoContextCodec.Config[ADTLower, ADTUpper].enumMatchingCaseInsensitive)
+        .derive(NoContextCodec.Config[ADTLower, ADTUpper].enableDiagnostics.enumMatchingCaseInsensitive)
         .decode(ADTLower.Ccc(1)),
       Right(ADTUpper.CCC(1))
     )
   }
-   */
 }

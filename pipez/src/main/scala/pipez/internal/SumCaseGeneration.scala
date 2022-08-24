@@ -44,7 +44,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     object SumType {
 
       final case class Case[A](name: String, tpe: Type[A], isCaseObject: Boolean) {
-        override def toString: String = s"Case($name)"
+        override def toString: String = s"Case($name : ${previewType(tpe)})"
       }
     }
 
@@ -63,7 +63,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     object Enumeration {
 
       final case class Value[A](name: String, path: CodeOf[A]) {
-        override def toString: String = s"Value($name)"
+        override def toString: String = s"Value($name = ${previewCode(path)})"
       }
     }
   }
@@ -76,16 +76,22 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
 
     final case class SubtypeRemoved[InSubtype <: In](
       pipe: CodeOf[Pipe[InSubtype, Out]]
-    ) extends InSubtypeLogic[InSubtype]
+    ) extends InSubtypeLogic[InSubtype] {
+      override def toString: String = s"SubtypeRemoved(${previewCode(pipe)})"
+    }
 
     final case class SubtypeRenamed[InSubtype <: In, OutSubtype <: Out](
       outSubtype: Type[OutSubtype]
-    ) extends InSubtypeLogic[InSubtype]
+    ) extends InSubtypeLogic[InSubtype] {
+      override def toString: String = s"SubtypeRenamed(${previewType(outSubtype)})"
+    }
 
     final case class PipeProvided[InSubtype <: In, OutSubtype <: Out](
       outSubtype: Type[OutSubtype],
       pipe:       CodeOf[Pipe[InSubtype, OutSubtype]]
-    ) extends InSubtypeLogic[InSubtype]
+    ) extends InSubtypeLogic[InSubtype] {
+      override def toString: String = s"PipeProvided(${previewType(outSubtype)}, ${previewCode(pipe)})"
+    }
 
     def resolve[InSubtype <: In: Type](settings: Settings): InSubtypeLogic[InSubtype] = {
       import ConfigEntry.*
@@ -114,23 +120,23 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
         outData
           .findSubtype(inSubtypeName, settings.isEnumCaseInsensitive)
           .flatMap(outSubtype => fromOutputSubtype(typeOf[InSubtype], outSubtype.tpe))
-          .log(s"Subtype ${typeOf[InSubtype]} uses default resolution (matching output name, summoning)")
+          .log(s"Subtype ${previewType(typeOf[InSubtype])} uses default resolution (matching output name, summoning)")
       case SubtypeRemoved(pipe) =>
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[Out] }
         fromMissingPipe[InSubtype](pipe).log(
-          s"Subtype ${typeOf[InSubtype]} considered removed from input, uses provided pipe"
+          s"Subtype ${previewType(typeOf[InSubtype])} considered removed from input, uses provided pipe"
         )
       case SubtypeRenamed(outSubtypeType) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
         fromOutputSubtype(typeOf[InSubtype], outSubtypeType).log(
-          s"Subtype ${typeOf[InSubtype]} considered renamed to $outSubtypeType, uses summoning"
+          s"Subtype ${previewType(typeOf[InSubtype])} considered renamed to $outSubtypeType, uses summoning"
         )
       case PipeProvided(outSubtypeType, pipe) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[OutSubtype] }
         fromOutputPipe(pipe)(typeOf[InSubtype], outSubtypeType).log(
-          s"Subtype ${typeOf[InSubtype]} converted to $outSubtypeType using provided pipe"
+          s"Subtype ${previewType(typeOf[InSubtype])} converted to $outSubtypeType using provided pipe"
         )
     }
   }
@@ -171,17 +177,24 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
         inSubtype:  Type[InSubtype],
         outSubtype: Type[OutSubtype],
         pipe:       CodeOf[Pipe[InSubtype, OutSubtype]]
-      ) extends InputSubtype
+      ) extends InputSubtype {
+        override def toString: String =
+          s"Convert(${previewType(inSubtype)}, ${previewType(outSubtype)}, ${previewCode(pipe)})"
+      }
 
       final case class Handle[InSubtype <: In](
         inSubtype: Type[InSubtype],
         pipe:      CodeOf[Pipe[InSubtype, Out]]
-      ) extends InputSubtype
+      ) extends InputSubtype {
+        override def toString: String = s"Handle(${previewType(inSubtype)}, ${previewCode(pipe)})"
+      }
     }
 
     final case class Subtypes(subtypes: ListMap[String, InputSubtype]) extends EnumGeneratorData
 
-    final case class Pairing(in: CodeOf[In], codeOf: CodeOf[Out])
+    final case class Pairing(in: CodeOf[In], out: CodeOf[Out]) {
+      override def toString: String = s"Pairing(${previewCode(in)}, ${previewCode(out)})"
+    }
 
     final case class Values(values: ListMap[String, Pairing]) extends EnumGeneratorData
   }

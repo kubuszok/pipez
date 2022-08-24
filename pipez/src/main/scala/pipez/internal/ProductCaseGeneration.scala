@@ -96,18 +96,24 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
     final case class FieldAdded[OutField](
       pipe: CodeOf[Pipe[In, OutField]]
-    ) extends OutFieldLogic[OutField]
+    ) extends OutFieldLogic[OutField] {
+      override def toString: String = s"FieldAdded(${previewCode(pipe)})"
+    }
 
     final case class FieldRenamed[InField, OutField](
       inField:     String,
       inFieldType: Type[InField]
-    ) extends OutFieldLogic[OutField]
+    ) extends OutFieldLogic[OutField] {
+      override def toString: String = s"FieldRenamed($inField : ${previewType(inFieldType)})"
+    }
 
     final case class PipeProvided[InField, OutField](
       inField:     String,
       inFieldType: Type[InField],
       pipe:        CodeOf[Pipe[InField, OutField]]
-    ) extends OutFieldLogic[OutField]
+    ) extends OutFieldLogic[OutField] {
+      override def toString: String = s"PipeProvided($inField : ${previewType(inFieldType)}, ${previewCode(pipe)})"
+    }
 
     private def resolve[OutField: Type](
       settings:     Settings,

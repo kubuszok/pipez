@@ -58,13 +58,15 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
         //implicit val Out: Type[Out] = outSubtype.asInstanceOf[Type[Out]]
         val arg = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
         val argE = Ident(arg.termRef).asExpr.asInstanceOf[CodeOf[In]]
-        val body = '{ ${ unlift(pipe.asInstanceOf[CodeOf[Pipe[In, Out]]], argE, ctx) }.asInstanceOf[Result[Out]] }
+        val pipeFix: CodeOf[Pipe[In, Out]] = '{ ${ pipe.asInstanceOf }.asInstanceOf[Pipe[In, Out]] }
+        val body = unlift(pipeFix, argE, ctx).asInstanceOf[CodeOf[Result[Out]]]
         CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
       case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe) =>
         implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
         val arg = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
         val argE = Ident(arg.termRef).asExpr.asInstanceOf[CodeOf[In]]
-        val body = '{ ${ unlift(pipe.asInstanceOf[CodeOf[Pipe[In, Out]]], argE, ctx) }.asInstanceOf[Result[Out]] }
+        val pipeFix: CodeOf[Pipe[In, Out]] = pipe.asInstanceOf[CodeOf[Pipe[In, Out]]]
+        val body = unlift(pipeFix, argE, ctx).asInstanceOf[CodeOf[Result[Out]]]
         CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
     }.pipe(Match(in.asTerm, _)).asExpr.asInstanceOf[CodeOf[Result[Out]]]
 

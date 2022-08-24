@@ -31,11 +31,11 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val sym = TypeRepr.of[In].typeSymbol
     (sym.caseFields ++ sym.declaredMethods.filter { m =>
       val n = m.name.toLowerCase
-      n.startsWith("is") || n.startsWith("get")
+      (n.startsWith("is") || n.startsWith("get")) && m.paramSymss.flatten.isEmpty
     }).map { method =>
       method.name.toString -> ProductInData.Getter[Any](
         name = method.name.toString,
-        tpe = TypeRepr.of[In].memberType(method).widenByName.asType.asInstanceOf[Type[Any]],
+        tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
         get =
           if (method.paramSymss.isEmpty) (in: CodeOf[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
           else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr

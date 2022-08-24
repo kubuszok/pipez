@@ -123,21 +123,17 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that Out <:< outFieldType is correct
           FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
-        case RenameField(Field(Root, inName), In, Field(Root, outFieldGetter), Out)
+        case RenameField(Field(Root, inName), in, Field(Root, outFieldGetter), out)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that Out <:< outFieldType is correct
           FieldRenamed(inName, In)
-        case PlugInField(Field(Root, inName), In, Field(Root, outFieldGetter), Out, pipe)
+        case PlugInField(Field(Root, inName), in, Field(Root, outFieldGetter), out, pipe)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that Out <:< outFieldType is correct
           PipeProvided[Any, OutField](inName,
-                                      In.asInstanceOf[Type[Any]],
+                                      in.asInstanceOf[Type[Any]],
                                       pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]]
           )
-        case PlugInField(Field(Root, inName), In, Field(Root, outFieldGetter), Out, pipe) =>
-          println(inName)
-          println(outFieldName)
-          ???
       }
     }
 
@@ -346,6 +342,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         )
         .pipe(DerivationResult.sequence(_))
         .map(ProductGeneratorData.CaseClass(caller, _))
+        .logSuccess(gen => s"Case generation: $gen")
 
     case ProductOutData.JavaBean(defaultConstructor, setters) =>
       setters.values
@@ -355,6 +352,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         .toList
         .pipe(DerivationResult.sequence(_))
         .map(ProductGeneratorData.JavaBean(defaultConstructor, _))
+        .logSuccess(gen => s"Case generation: $gen")
   }
 
   // if inField <:< outField then (in, ctx) => in : OutField

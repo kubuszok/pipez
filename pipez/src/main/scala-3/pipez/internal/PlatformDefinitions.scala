@@ -4,6 +4,7 @@ import pipez.{ PipeDerivation, PipeDerivationConfig }
 import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.{ nowarn, unused }
+import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
 @scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
@@ -58,7 +59,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       case Apply(TypeApply(Select(expr, "addField"), List(outputType)), List(outputField, pipe)) =>
         for {
           outFieldPath <- extractPath(outputField)
-          outFieldType = outputType.tpe.asType.asInstanceOf[Type[Any]]
+          outFieldType = returnType[Any](outputType.tpe)
           result <- extract(
             expr,
             ConfigEntry.AddField(
@@ -74,9 +75,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       case Apply(TypeApply(Select(expr, "renameField"), List(inputType, outputType)), List(inputField, outputField)) =>
         for {
           inPath <- extractPath(inputField)
-          inputFieldType = inputType.tpe.asType.asInstanceOf[Type[Any]]
+          inputFieldType = returnType[Any](inputType.tpe)
           outPath <- extractPath(outputField)
-          outputFieldType = outputType.tpe.asType.asInstanceOf[Type[Any]]
+          outputFieldType = returnType[Any](outputType.tpe)
           result <- extract(
             expr,
             ConfigEntry.RenameField(inPath, inputFieldType, outPath, outputFieldType) :: acc
@@ -88,9 +89,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
           ) =>
         for {
           inPath <- extractPath(inputField)
-          inputFieldType = inputType.tpe.asType.asInstanceOf[Type[Any]]
+          inputFieldType = returnType[Any](inputType.tpe)
           outPath <- extractPath(outputField)
-          outputFieldType = outputType.tpe.asType.asInstanceOf[Type[Any]]
+          outputFieldType = returnType[Any](outputType.tpe)
           result <- extract(
             expr,
             ConfigEntry.PlugInField(
@@ -111,7 +112,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       case Apply(TypeApply(Select(expr, "removeSubtype"), List(inputSubtype)), List(pipe)) =>
         for {
           inputSubtypePath <- extractPath(inputSubtype)
-          inputSubtypeType = inputSubtype.tpe.asInstanceOf[Type[In]]
+          inputSubtypeType = returnType[In](inputSubtype.tpe)
           result <- extract(
             expr,
             ConfigEntry.RemoveSubtype(
@@ -127,9 +128,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       case TypeApply(Select(expr, "renameSubtype"), List(inputSubtype, outputSubtype)) =>
         for {
           inputSubtypePath <- extractPath(inputSubtype)
-          inputSubtypeType = inputSubtype.tpe.asInstanceOf[Type[In]]
+          inputSubtypeType = returnType[In](inputSubtype.tpe)
           outputSubtypePath <- extractPath(outputSubtype)
-          outputSubtypeType = outputSubtype.tpe.asInstanceOf[Type[Out]]
+          outputSubtypeType = returnType[Out](outputSubtype.tpe)
           result <- extract(
             expr,
             ConfigEntry.RenameSubtype(
@@ -144,9 +145,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       case Apply(TypeApply(Select(expr, "plugInSubtype"), List(inputSubtype, outputSubtype)), List(pipe)) =>
         for {
           inputSubtypePath <- extractPath(inputSubtype)
-          inputSubtypeType = inputSubtype.tpe.asInstanceOf[Type[In]]
+          inputSubtypeType = returnType[In](inputSubtype.tpe)
           outputSubtypePath <- extractPath(outputSubtype)
-          outputSubtypeType = outputSubtype.tpe.asInstanceOf[Type[Out]]
+          outputSubtypeType = returnType[Out](outputSubtype.tpe)
           result <- extract(
             expr,
             ConfigEntry.PlugInSubtype(
@@ -175,4 +176,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
   implicit val Pipe:    scala.quoted.Type[Pipe]
   implicit val Context: scala.quoted.Type[Context]
   implicit val Result:  scala.quoted.Type[Result]
+
+  def returnType[A](typeRepr: TypeRepr): Type[A] = typeRepr.widenByName match
+    case MethodType(_, _, out) => returnType[A](out)
+    case out                   => out.asType.asInstanceOf[Type[A]]
 }

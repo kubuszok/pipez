@@ -175,7 +175,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     // case class -> case class
     assertEquals(
       NoContextCodec
-        .derive(NoContextCodec.Config[CaseOnesIn, CaseOnesOutExt].enableDiagnostics.plugInField(_.a, _.x, (a: Int) => Right(a.toString)))
+        .derive(NoContextCodec.Config[CaseOnesIn, CaseOnesOutExt].plugInField(_.a, _.x, (a: Int) => Right(a.toString)))
         .decode(CaseOnesIn(1)),
       Right(CaseOnesOutExt(1, "1"))
     )

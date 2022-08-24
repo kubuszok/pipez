@@ -329,10 +329,10 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  /*
   test("no config, auto summon elements -> use matching subtypes") {
     import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
+    NoContextCodec.derive[ADTObjectsIn.A.type, ADTObjectsOut.A.type]
     assertEquals(
       NoContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B),
       Right(ADTObjectsOut.B)
@@ -384,7 +384,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTObjectsRemovedOut.A)
     )
     // case classes in ADT
-    implicit val aCodec = NoContextCodec.derive(
+    implicit val aCodec: NoContextCodec[ADTClassesRemovedIn.C, ADTClassesRemovedOut.A] = NoContextCodec.derive(
       NoContextCodec.Config[ADTClassesRemovedIn.C, ADTClassesRemovedOut.A].renameField(_.c, _.a)
     )
     assertEquals(
@@ -424,14 +424,12 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTClassesRemovedOut.A(1))
     )
   }
-  */
 
   test("enumMatchingCaseInsensitive, auto summon elements -> match subtypes by name ignoring cases") {
     import NoContextCodec.Auto.* // for recursive derivation
-    pipez.NoContextCodec.Auto.derive[pipez.ADTLower.Aaa, pipez.ADTUpper.AAA]
     assertEquals(
       NoContextCodec
-        .derive(NoContextCodec.Config[ADTLower, ADTUpper].enableDiagnostics.enumMatchingCaseInsensitive)
+        .derive(NoContextCodec.Config[ADTLower, ADTUpper].enumMatchingCaseInsensitive)
         .decode(ADTLower.Ccc(1)),
       Right(ADTUpper.CCC(1))
     )

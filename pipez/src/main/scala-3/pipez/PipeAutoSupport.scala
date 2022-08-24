@@ -2,7 +2,7 @@ package pipez
 
 trait PipeAutoSupport[Pipe[_, _]] {
 
-  inline given derive[In, Out](using
+  implicit inline def derive[In, Out](implicit
     pipeDerivation: PipeDerivation[Pipe]
   ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveDefault[Pipe, In, Out]('{ pipeDerivation }) }
 }

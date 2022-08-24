@@ -19,13 +19,13 @@
      - [ ] context update
  - [ ] Scala 3
    - [X] diagnostics - Scala 3
-   - [ ] config parsing
+   - [X] config parsing
    - [ ] products - Scala 3
      - [X] case class -> case class
      - [X] case class -> java beans
      - [X] java beans -> case class
      - [X] java beans -> java beans
-     - [ ] fields modifications
+     - [X] fields modifications
      - [ ] context update
    - [ ] sum types
      - [ ] ADT -> ADT

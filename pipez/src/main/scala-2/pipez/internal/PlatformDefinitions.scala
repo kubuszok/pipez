@@ -34,7 +34,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       case Apply(Select(expr, TermName(get)), List()) => extractPath(expr).map(Path.Field(_, get)) // extract .getField
       case Ident(TermName(_))                         => Right(Path.Root) // drop argName from before .field
       case tt: TypeTree => Right(Path.Subtype(Path.Root, tt.tpe))
-      case _ => Left(s"Path ${showCode(in)} is not in format _.field1.field2")
+      case _ => Left(s"Path ${previewCode(in)} is not in format _.field1.field2")
     }
 
     def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
@@ -70,7 +70,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             ConfigEntry.RenameField(inPath, inputField.tpe.resultType, outPath, outputField.tpe.resultType) :: acc
           )
         } yield result
-      // matches {cfg}.plugIn(_.in, _.out, pipe)
+      // matches {cfg}.plugInField(_.in, _.out, pipe)
       case Apply(TypeApply(Select(expr, TermName("plugInField")), _), List(inputField, outputField, pipe)) =>
         for {
           inFieldPath <- extractPath(inputField)
@@ -122,7 +122,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             ) :: acc
           )
         } yield result
-      // matches {cfg}.pipeInSubtype[InSubtype, OutSubtype](pipe)
+      // matches {cfg}.plugInSubtype[InSubtype, OutSubtype](pipe)
       case Apply(TypeApply(Select(expr, TermName("plugInSubtype")), List(inputSubtype, outputSubtype)), List(pipe)) =>
         for {
           inputSubtypePath <- extractPath(inputSubtype)

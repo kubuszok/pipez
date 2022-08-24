@@ -272,7 +272,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Reads configs if passed, or fallback to defaults (empty `Settings`) otherwise */
   final def readSettingsIfGiven(code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): DerivationResult[Settings] =
     code
-      .fold(DerivationResult.pure(new Settings(List(ConfigEntry.EnableDiagnostics))))(readConfig)
+      .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
       .log(s"Pipeline from ${previewType[In]} to ${previewType[Out]}")
       .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")

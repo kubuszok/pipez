@@ -55,7 +55,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  /*
   test("field conversion -> use implicit codec to convert field value if types differ but names match") {
     implicit val aCodec: NoContextCodec[Int, String] = int => Right(int.toString)
     // case class -> case class
@@ -176,7 +175,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     // case class -> case class
     assertEquals(
       NoContextCodec
-        .derive(NoContextCodec.Config[CaseOnesIn, CaseOnesOutExt].plugInField(_.a, _.x, (a: Int) => Right(a.toString)))
+        .derive(NoContextCodec.Config[CaseOnesIn, CaseOnesOutExt].enableDiagnostics.plugInField(_.a, _.x, (a: Int) => Right(a.toString)))
         .decode(CaseOnesIn(1)),
       Right(CaseOnesOutExt(1, "1"))
     )
@@ -330,6 +329,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  /*
   test("no config, auto summon elements -> use matching subtypes") {
     import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT

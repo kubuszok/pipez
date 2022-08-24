@@ -215,7 +215,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     def initialValue(in: CodeOf[In], ctx: CodeOf[Context]): CodeOf[Result[Out]] = pureResult(
       '{
         val result: Out = ${ defaultConstructor }
-        ${ pureValues(in, ctx, '{ result }).reduce[CodeOf[Unit]]((a, b) => '{ ${ a }; ${ b } }) }
+        ${ pureValues(in, ctx, '{ result }).fold[CodeOf[Unit]]('{ () })((a, b) => '{ ${ a }; ${ b } }) }
         result
       }
     )

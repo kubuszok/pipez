@@ -134,6 +134,10 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
                                       In.asInstanceOf[Type[Any]],
                                       pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]]
           )
+        case PlugInField(Field(Root, inName), In, Field(Root, outFieldGetter), Out, pipe) =>
+          println(inName)
+          println(outFieldName)
+          ???
       }
     }
 

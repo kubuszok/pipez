@@ -332,9 +332,10 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   test("no config, auto summon elements -> use matching subtypes") {
     import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
-    NoContextCodec.derive[ADTObjectsIn.A.type, ADTObjectsOut.A.type]
+//    implicit val a: NoContextCodec[ADTObjectsIn.A.type, ADTObjectsOut.A.type] = deriveAutomatic
+//    implicit val b: NoContextCodec[ADTObjectsIn.B.type, ADTObjectsOut.B.type] = deriveAutomatic
     assertEquals(
-      NoContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B),
+      NoContextCodec.derive(NoContextCodec.Config[ADTObjectsIn, ADTObjectsOut].enableDiagnostics).decode(ADTObjectsIn.B),
       Right(ADTObjectsOut.B)
     )
     // case classes in ADT

@@ -7,6 +7,11 @@ import scala.quoted.{ Type as _, * }
 
 // The way we are dispatching things here is a workaround that methods expanded in `inline` should be `object`
 
+sealed trait Foo
+object Foo {
+  case object Bar
+}
+
 @scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
   pd:                                    Expr[PipeDerivation[Pipe]],
@@ -26,6 +31,7 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
     given p: scala.quoted.Type[Pipe] = Pipe
     '{ ${ pd }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]] }
   }
+  val previewPipeDerivation: String = previewCode(pd)
 
   // Scala 3-macro specific instances, required because code-generation needs these types
 

@@ -42,15 +42,15 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
   val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Definitions.Context, Definitions.Result]]
 
+  def previewPipeDerivation: String
+
   /** Type representing how we got the specific value from the `in: In` argument */
   sealed trait Path extends Product with Serializable
   object Path {
 
-    case object Root extends Path
-    final case class Field(from: Path, name: String) extends Path
-    final case class Subtype[A](from: Path, tpe: Type[A]) extends Path
-    final case class AtIndex(from: Path, index: Int) extends Path // might not be needed
-    final case class AtKey(from: Path, key: String) extends Path // might not be needed
+    case object Root extends Path { override def toString = "_" }
+    final case class Field(from: Path, name: String) extends Path { override def toString = s"$from.$name" }
+    final case class Subtype(from: Path, name: String) extends Path { override def toString = s"($from : $name)" }
   }
 
   /** Possible configuration options that we can work with inside a macro. Parsed from `pipez.PipeDerivationConfig` */
@@ -63,14 +63,19 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       outputField:  Path,
       outFieldType: Type[OutField],
       pipe:         CodeOf[Pipe[In, OutField]]
-    ) extends ConfigEntry
+    ) extends ConfigEntry {
+      override def toString: String = s"AddField($outputField : ${previewType(outFieldType)}, ${previewCode(pipe)})"
+    }
 
     final case class RenameField[InField, OutField](
       inputField:     Path,
       inputFieldType: Type[InField],
       outputField:    Path,
       outFieldType:   Type[OutField]
-    ) extends ConfigEntry
+    ) extends ConfigEntry {
+      override def toString: String =
+        s"AddField($inputField : ${previewType(inputFieldType)}, $outputField : ${previewType(outFieldType)})"
+    }
 
     final case class PlugInField[InField, OutField](
       inputField:     Path,
@@ -78,7 +83,10 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       outputField:    Path,
       outFieldType:   Type[OutField],
       pipe:           CodeOf[Pipe[InField, OutField]]
-    ) extends ConfigEntry
+    ) extends ConfigEntry {
+      override def toString: String =
+        s"PlugInField($inputField : ${previewType(inputFieldType)}, $outputField : ${previewType(outFieldType)}, ${previewCode(pipe)})"
+    }
 
     case object FieldCaseInsensitive extends ConfigEntry
 
@@ -86,14 +94,20 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       inputSubtype:     Path,
       inputSubtypeType: Type[InSubtype],
       pipe:             CodeOf[Pipe[InSubtype, Out]]
-    ) extends ConfigEntry
+    ) extends ConfigEntry {
+      override def toString: String =
+        s"RemoveSubtype($inputSubtype : ${previewType(inputSubtypeType)}, ${previewCode(pipe)})"
+    }
 
     final case class RenameSubtype[InSubtype <: In, OutSubtype <: Out](
       inputSubtype:      Path,
       inputSubtypeType:  Type[InSubtype],
       outputSubtype:     Path,
       outputSubtypeType: Type[OutSubtype]
-    ) extends ConfigEntry
+    ) extends ConfigEntry {
+      override def toString: String =
+        s"RenameSubtype($inputSubtype : ${previewType(inputSubtypeType)}, $outputSubtype : ${previewType(outputSubtypeType)})"
+    }
 
     final case class PlugInSubtype[InSubtype <: In, OutSubtype <: Out](
       inputSubtype:      Path,
@@ -101,7 +115,10 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       outputSubtype:     Path,
       outputSubtypeType: Type[OutSubtype],
       pipe:              CodeOf[Pipe[InSubtype, OutSubtype]]
-    ) extends ConfigEntry
+    ) extends ConfigEntry {
+      override def toString: String =
+        s"PlugInSubtype($inputSubtype : ${previewType(inputSubtypeType)}, $outputSubtype : ${previewType(outputSubtypeType)}, ${previewCode(pipe)})"
+    }
 
     case object EnumCaseInsensitive extends ConfigEntry
   }
@@ -275,7 +292,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")
       .log(s"Pipeline from ${previewType[In]} to ${previewType[Out]}")
-      .log(s"PipeDerivation used: ${previewCode(pipeDerivation)}")
+      .log(s"PipeDerivation used: $previewPipeDerivation")
       .logSuccess(config => s"Configuration used: $config")
 }
 object Definitions {

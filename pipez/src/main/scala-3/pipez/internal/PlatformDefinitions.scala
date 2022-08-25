@@ -23,6 +23,11 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
   final def previewCode[A](code: CodeOf[A]): String = code.show
 
   final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
+    println(s"summon ${TypeRepr.of[Input]} -> ${TypeRepr.of[Output]}")
+    Implicits.search(TypeRepr.of(using PipeOf[Input, Output])) match {
+      case iss: ImplicitSearchSuccess =>
+      case isf: ImplicitSearchFailure => println(isf.explanation)
+    }
     DerivationResult
       .fromOption(scala.quoted.Expr.summon[Pipe[Input, Output]])(
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])
@@ -39,7 +44,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       case Select(term, field)                         => extractPath(term).map(Path.Field(_, field)) // extract .field
       case Apply(Select(term, get), List())            => extractPath(term).map(Path.Field(_, get)) // extract .getField
       case Ident(_)                                    => Right(Path.Root) // drop argName from before .field
-      // TODO: TypeTree for subtype
+      case Singleton(Select(_, subtypeName))           => Right(Path.Subtype(Path.Root, subtypeName)) // A.CaseObject
+      case TypeSelect(_, subtypeName)                  => Right(Path.Subtype(Path.Root, subtypeName)) // A.CaseClass
       case _ => Left(s"Path ${previewCode(in.asExpr)} is not in format _.field1.field2 ($in)")
     }
 
@@ -155,7 +161,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
               inputSubtypeType,
               outputSubtypePath,
               outputSubtypeType,
-              singleAbstractMethodExpansion(pipe.asInstanceOf[CodeOf[Pipe[In, Out]]])(
+              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[CodeOf[Pipe[In, Out]]])(
                 PipeOf[In, Out](inputSubtypeType, outputSubtypeType)
               )
             ) :: acc

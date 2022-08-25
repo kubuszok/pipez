@@ -82,7 +82,6 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     } else if (isCaseObject[Out]) {
       // case object case
 
-      println(s"output resolved to ${TypeRepr.of[Out].termSymbol.typeRef}")
       ProductOutData
         .CaseClass(
           params => Ref(TypeRepr.of[Out].termSymbol).asExpr.asExprOf[Out],

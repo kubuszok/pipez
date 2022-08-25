@@ -169,6 +169,6 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
   implicit val AnyT:     Type[Any]        = tq"_root_.scala.Any".asInstanceOf[Type[Any]]
   implicit val ArrayAny: Type[Array[Any]] = tq"_root_.scala.Array[_root_.scala.Any]".asInstanceOf[Type[Array[Any]]]
-  implicit def Context:  Type[Context]    = tq"$pipeDerivation.Context".asInstanceOf[Type[Context]]
-  implicit def Result[A: Type]: Type[Result[A]] = tq"$pipeDerivation.Result[${typeOf[A].typeSymbol}]".asInstanceOf[Type[Result[A]]]
+  def Context         = tq"$pipeDerivation.Context"
+  def Result[A: Type] = tq"$pipeDerivation.Result[${typeOf[A].typeSymbol}]"
 }

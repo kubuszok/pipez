@@ -22,10 +22,7 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
 
   def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] =
     c.universe
-      .appliedType(pipeTpe.typeSymbol.asInstanceOf[c.Symbol],
-                   typeOf[I].asInstanceOf[c.Type],
-                   typeOf[O].asInstanceOf[c.Type]
-      )
+      .appliedType(pipeTpe.typeSymbol.asInstanceOf[c.Symbol], typeOf[I], typeOf[O])
       .asInstanceOf[Type[Pipe[I, O]]]
 
   import c.universe.*
@@ -52,13 +49,18 @@ final class Macro(val c: blackbox.Context) {
     pd = pipeDerivation
   )
 
+  // I messed up something with the types of generated Trees - shape is almost identical to the last working version
+  // before I started working on Scala 3 and making adjustments, but without this, it produces "type mismatch error".
+  private def fixTypes[Out](expr: blackbox.Context#Expr[Out]): c.Expr[Out] =
+    c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree.asInstanceOf[c.Tree])))
+
   /** Called with `macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]` */
   def deriveDefault[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
-    m.deriveDefault
-  }.asInstanceOf[c.Expr[Pipe[In, Out]]]
+    fixTypes(m.deriveDefault)
+  }
 
   /** Called with `macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]` */
   def deriveConfigured[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
@@ -67,6 +69,6 @@ final class Macro(val c: blackbox.Context) {
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
-    m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]])
-  }.asInstanceOf[c.Expr[Pipe[In, Out]]]
+    fixTypes(m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]))
+  }
 }

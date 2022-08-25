@@ -13,10 +13,10 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
   final def isSubtype[A: Type, B: Type]: Boolean =
     typeOf[A] <:< typeOf[B]
 
-  def reportDiagnostics[A](result: DerivationResult[A]): Unit =
+  final def reportDiagnostics[A](result: DerivationResult[A]): Unit =
     c.echo(c.enclosingPosition, diagnosticsMessage(result))
 
-  def reportError(errors: List[DerivationError]): Nothing =
+  final def reportError(errors: List[DerivationError]): Nothing =
     c.abort(c.enclosingPosition, errorMessage(errors))
 
   final def lift[I: Type, O: Type](

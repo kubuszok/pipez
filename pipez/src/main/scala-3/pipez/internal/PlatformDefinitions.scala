@@ -23,11 +23,6 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
   final def previewCode[A](code: CodeOf[A]): String = code.show
 
   final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
-    println(s"summon ${TypeRepr.of[Input]} -> ${TypeRepr.of[Output]}")
-    Implicits.search(TypeRepr.of(using PipeOf[Input, Output])) match {
-      case iss: ImplicitSearchSuccess =>
-      case isf: ImplicitSearchFailure => println(isf.explanation)
-    }
     DerivationResult
       .fromOption(scala.quoted.Expr.summon[Pipe[Input, Output]])(
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])

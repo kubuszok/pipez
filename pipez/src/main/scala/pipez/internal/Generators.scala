@@ -102,7 +102,6 @@ trait Generators[Pipe[_, _], In, Out]
           startTime.hashCode
         }
         val result = resolveConversion(config)
-        println("we are here")
         if (isDiagnosticsEnabled) {
           val stopTime = java.time.Instant.now()
           val duration = java.time.Duration.between(startTime, stopTime)

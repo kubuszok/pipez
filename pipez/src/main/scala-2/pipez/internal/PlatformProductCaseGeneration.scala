@@ -58,7 +58,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       val defaultConstructor = DerivationResult.fromOption(
         Out.decls.collectFirst {
           case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
-            c.Expr[Out](q"new ${Out.typeSymbol}()")
+            c.Expr[Out](q"new $Out()")
         }
       )(DerivationError.MissingPublicConstructor)
 
@@ -167,7 +167,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           val right = c.freshName(TermName("right"))
           val fun: CodeOf[(Array[Any], Any) => Out] = c.Expr[(Array[Any], Any) => Out](
             q"""
-             ($left : scala.Array[scala.Any], $right : ${param.tpe.typeSymbol}) => {
+             ($left : scala.Array[scala.Any], $right : ${param.tpe}) => {
                $left($idx) = $right
                ${constructor(constructorParams(left))}
              }
@@ -184,7 +184,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Array[Any], Any) => Array[Any]](
             q"""
-            ($left : scala.Array[scala.Any], $right : ${param.tpe.typeSymbol}) => {
+            ($left : scala.Array[scala.Any], $right : ${param.tpe}) => {
               $left($idx) = $right
               $left
             }
@@ -197,7 +197,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
       c.Expr[(In, Context) => Result[Out]](
         q"""
-        ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) =>
+        ($in : $In, $ctx : $pipeDerivation.Context) =>
           ${generateBody(initialValue, paramToIdx.toList)}
         """
       )
@@ -207,7 +207,6 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       .pure(body)
       .log(s"Case class derivation, constructor params: $outputParameterLists")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
-      .logSuccess(code => s"Generated code: ${showRaw(code)}")
   }
 
   private def generateJavaBean(
@@ -220,7 +219,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val result = c.freshName(TermName("result"))
     val pureValues: List[CodeOf[Unit]] = outputSettersList.collect {
       case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
-        setter.asInstanceOf[ProductOutData.Setter[Any]].set(c.Expr[Out](Ident(result)), caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")))
+        setter.asInstanceOf[ProductOutData.Setter[Any]].set(c.Expr[Out](q"$result"), caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")))
     }
 
     val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =
@@ -232,7 +231,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       c.Expr[Out](
         q"""
         {
-          val $result = $defaultConstructor
+          val $result: $Out = $defaultConstructor
           ..$pureValues
           $result
         }
@@ -258,7 +257,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Out, Any) => Out](
             q"""
-            ($left : ${Out.typeSymbol}, $right : ${param.tpe.typeSymbol}) => {
+            ($left : $Out, $right : ${param.tpe}) => {
               ${setter.asInstanceOf[ProductOutData.Setter[Any]].set(c.Expr(q"$left"), c.Expr(q"$right"))}
               $left
             }
@@ -271,7 +270,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
       c.Expr[(In, Context) => Result[Out]](
         q"""
-        ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) =>
+        ($in : $In, $ctx : $pipeDerivation.Context) =>
           ${generateBody(initialValue, resultValues)}
         """
       )

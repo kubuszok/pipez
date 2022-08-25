@@ -1,15 +1,17 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{ Context, Result }
+
 trait PlatformGenerators[Pipe[_, _], In, Out]
     extends Generators[Pipe, In, Out]
-    with ProductCaseGeneration[Pipe, In, Out]
-    with SumCaseGeneration[Pipe, In, Out] {
+    with PlatformProductCaseGeneration[Pipe, In, Out]
+    with PlatformSumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] =>
 
   import c.universe.*
 
-  final def isSubtype[A, B](lower: Type[A], higher: Type[B]): Boolean =
-    lower <:< higher
+  final def isSubtype[A: Type, B: Type]: Boolean =
+    typeOf[A] <:< typeOf[B]
 
   def reportDiagnostics[A](result: DerivationResult[A]): Unit =
     c.echo(c.enclosingPosition, diagnosticsMessage(result))

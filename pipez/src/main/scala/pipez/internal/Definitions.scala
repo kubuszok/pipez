@@ -213,10 +213,11 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
     }
 
     def diagnostic: Diagnostic
-    final def log(message: String): DerivationResult[A] = this match {
-      case Success(value, diagnostic)  => Success(value, diagnostic :+ message)
-      case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ message)
-    }
+    final def log(message: String): DerivationResult[A] = {println(message); this}
+//    final def log(message: String): DerivationResult[A] = this match {
+//      case Success(value, diagnostic)  => Success(value, diagnostic :+ message)
+//      case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ message)
+//    }
     final def logResult(success: A => String)(failure: List[DerivationError] => String): DerivationResult[A] =
       this match {
         case DerivationResult.Success(value, _)  => log(success(value))

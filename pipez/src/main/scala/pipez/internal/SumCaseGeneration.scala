@@ -108,15 +108,15 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
       }
     }
 
+    type OutSubtype <: Out
     def resolveSubtype[InSubtype <: In: Type](
       settings:      Settings,
       outData:       EnumData.SumType[Out],
       inSubtypeName: String
-    ): DerivationResult[EnumGeneratorData.InputSubtype] = resolve(settings) match {
+    ): DerivationResult[EnumGeneratorData.InputSubtype] = resolve[InSubtype](settings) match {
       // OutSubtype - the same (simple) name as InSubtype
       // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
       case DefaultSubtype() =>
-        type OutSubtype <: Out
         outData
           .findSubtype(inSubtypeName, settings.isEnumCaseInsensitive)
           .flatMap(outSubtype => fromOutputSubtype(typeOf[InSubtype], outSubtype.tpe))
@@ -246,6 +246,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
       code <- generateEnumCode(generatorData)
     } yield code
 
+  type InSubtype <: In
   // In the enum derivation, the logic in driven by In type:
   // - every input subtype/value should be handled
   // - so we are iterating over the list of possible values of In and check the configuration for them
@@ -256,12 +257,11 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     settings: Settings
   ): DerivationResult[EnumGeneratorData] = (inData, outData) match {
     case (EnumData.SumType(inSubtypes), outData @ EnumData.SumType(_)) =>
-      type InSubtype <: In
       inSubtypes
         .map(_.asInstanceOf[EnumData.SumType.Case[InSubtype]])
         .map { case EnumData.SumType.Case(inSubtypeName, inSubtypeType, _) =>
           implicit val inSubtypeTpe: Type[InSubtype] = inSubtypeType
-          InSubtypeLogic.resolveSubtype(settings, outData, inSubtypeName).map(inSubtypeName -> _)
+          InSubtypeLogic.resolveSubtype[InSubtype](settings, outData, inSubtypeName).map(inSubtypeName -> _)
         }
         .pipe(DerivationResult.sequence(_))
         .map(_.to(ListMap))

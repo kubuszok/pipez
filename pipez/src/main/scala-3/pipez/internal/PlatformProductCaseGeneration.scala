@@ -43,7 +43,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     }.to(ListMap)
       .pipe(ProductInData(_))
       .pipe(DerivationResult.pure)
-      .logSuccess(data => s"Resolved inputs: $data")
+      .logSuccess(data => s"Resolved input: $data")
   }
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =

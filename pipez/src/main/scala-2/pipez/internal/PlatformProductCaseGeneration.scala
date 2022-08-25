@@ -1,5 +1,7 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{ Context, Result }
+
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
@@ -22,10 +24,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   }
   final def isJavaBean[A: Type]: Boolean =
     typeOf[A].typeSymbol.isClass &&
-      tpe.members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
-      tpe.members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
+      typeOf[A].members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
+      typeOf[A].members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
   final def isInstantiable[A: Type]: Boolean =
-    !typeOf[A].typeSymbol.isAbstract && tpe.members.exists(m => m.isPublic && m.isConstructor)
+    !typeOf[A].typeSymbol.isAbstract && typeOf[A].members.exists(m => m.isPublic && m.isConstructor)
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
     In.members // we fetch ALL members, even those that might have been inherited
@@ -36,8 +38,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               "is"
             ) || member.name.toString.toLowerCase.startsWith("get")) =>
           member.name.toString -> ProductInData.Getter[Any](
-            name = member.name.toStrg,
-            tpe = member.asMethod.returnType,
+            name = member.name.toString,
+            tpe = member.asMethod.returnType.asInstanceOf[Type[Any]],
             get =
               if (member.asMethod.paramLists.isEmpty)
                 (in: CodeOf[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
@@ -47,7 +49,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       .to(ListMap)
       .pipe(ProductInData(_))
       .pipe(DerivationResult.pure)
-      .logSuccess(data => s"Resolved inputs: $data")
+      .logSuccess(data => s"Resolved input: $data")
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean[Out]) {
@@ -69,7 +71,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               ) && method.asMethod.paramLists.flatten.size == 1 =>
             method.name.toString -> ProductOutData.Setter(
               name = method.name.toString,
-              tpe = method.asMethod.paramLists.flatten.head.typeSignature,
+              tpe = method.asMethod.paramLists.flatten.head.typeSignature.asInstanceOf[Type[Any]],
               set = (out: CodeOf[Out], value: CodeOf[Any]) =>
                 c.Expr[Unit](q"$out.${method.asMethod.name.toTermName}($value)")
             )
@@ -104,7 +106,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
                   .map { param =>
                     param.name.toString -> ProductOutData.ConstructorParam(
                       name = param.name.toString,
-                      tpe = param.typeSignature
+                      tpe = param.typeSignature.asInstanceOf[Type[Any]]
                     )
                   }
                   .to(ListMap)
@@ -138,7 +140,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     def constructorParams(arr: TermName): List[List[CodeOf[?]]] = outputParameterLists.map(
       _.map {
         case ProductGeneratorData.OutputValue.Pure(_, caller) =>
-          caller(in, ctx)
+          caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"))
         case r @ ProductGeneratorData.OutputValue.Result(tpe, _) =>
           c.Expr(q"""$arr(${paramToIdx(r)}).asInstanceOf[$tpe]""")
       }
@@ -159,7 +161,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
         // last param - after adding the last value to array we extract all values from it into constructor
         case (param, idx) :: Nil =>
-          val rightCode = param.caller(caller(c.Expr[In](in), caller(c.Expr[Context](ctx))
+          val rightCode = param.caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")).asInstanceOf[CodeOf[Result[Any]]]
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
@@ -176,7 +178,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
         // we combine Array's Result with a param's Result, store param in array and iterate further
         case (param, idx) :: tail =>
-          val rightCode = param.caller(in, ctx)
+          val rightCode = param.caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")).asInstanceOf[CodeOf[Result[Any]]]
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
@@ -205,6 +207,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       .pure(body)
       .log(s"Case class derivation, constructor params: $outputParameterLists")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
+      .logSuccess(code => s"Generated code: ${showRaw(code)}")
   }
 
   private def generateJavaBean(
@@ -214,10 +217,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val in  = c.freshName(TermName("in"))
     val ctx = c.freshName(TermName("ctx"))
 
-    val result: Argument[Out] = c.freshName(TermName("result"))
+    val result = c.freshName(TermName("result"))
     val pureValues: List[CodeOf[Unit]] = outputSettersList.collect {
       case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
-        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(c.Expr[In](in), caller(c.Expr[Context](ctx)))
+        setter.asInstanceOf[ProductOutData.Setter[Any]].set(c.Expr[Out](Ident(result)), caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")))
     }
 
     val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =
@@ -249,14 +252,14 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
         // we have Out object on left and value to put into setter on right
         case (param, setter) :: tail =>
-          val rightCode = param.caller(in, ctx)
+          val rightCode = param.caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")).asInstanceOf[CodeOf[Result[Any]]]
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Out, Any) => Out](
             q"""
             ($left : ${Out.typeSymbol}, $right : ${param.tpe.typeSymbol}) => {
-              ${setter.asInstanceOf[ProductOutData.Setter[Any]].set(left, c.Expr(q"$right"))}
+              ${setter.asInstanceOf[ProductOutData.Setter[Any]].set(c.Expr(q"$left"), c.Expr(q"$right"))}
               $left
             }
             """

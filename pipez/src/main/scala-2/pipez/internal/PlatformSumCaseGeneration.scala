@@ -1,5 +1,7 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{ Context, Result }
+
 import scala.annotation.{ nowarn, unused }
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
@@ -30,12 +32,16 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
         EnumData.SumType(
           extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType =>
             EnumData.SumType.Case(subtypeType.name.toString,
-                                  subtypeType.toType,
+                                  subtypeType.toType.asInstanceOf[Type[A]],
                                   isCaseObject = subtypeType.asClass.isModule
             )
           }
         )
-      )(_ => DerivationError.InvalidConfiguration(s"${typeOf[A]} seem like an ADT but cannot extract its subtypes"))
+      )(_ =>
+        DerivationError.InvalidConfiguration(
+          s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes"
+        )
+      )
     } else DerivationResult.fail(DerivationError.NotYetImplemented("Java Enum parsing"))
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
@@ -48,16 +54,16 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     val in  = c.freshName(TermName("in"))
     val ctx = c.freshName(TermName("ctx"))
 
-    val ctxE = c.Expr[Context](ctx)
+    val ctxE = c.Expr[Context](q"$ctx")
 
     val cases = subtypes.map {
       case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe) =>
         val arg  = c.freshName(TermName("arg"))
-        val code = unlift(pipe, c.Expr[In](arg), ctxE)
+        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE)
         cq"""$arg : ${inSubtype.typeSymbol} => $code.asInstanceOf[$pipeDerivation.Result[${Out.typeSymbol}]]"""
       case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe) =>
         val arg  = c.freshName(TermName("arg"))
-        val code = unlift(pipe, c.Expr[In](arg), ctxE)
+        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE)
         cq"""$arg : ${inSubtype.typeSymbol} => $code"""
     }
 

@@ -143,16 +143,16 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       }
     }
 
+    type InField
     def resolveField[OutField: Type](
       settings:     Settings,
       inData:       ProductInData,
       outParamName: String
-    ): DerivationResult[ProductGeneratorData.OutputValue] = resolve(settings, outParamName) match {
+    ): DerivationResult[ProductGeneratorData.OutputValue] = resolve[OutField](settings, outParamName) match {
       case DefaultField() =>
         // if inField (same name as out) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
         // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, ctx) : Result[OutField]
-        type InField
         inData
           .findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -170,7 +170,6 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         // if inField (name provided) not found then error
         // else if inField <:< outField then (in, ctx) => in : OutField
         // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, ctx) : Result[OutField]
-        type InField
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -182,7 +181,6 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       case PipeProvided(inFieldName, _, pipe) =>
         // if inField (name provided) not found then error
         // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
-        type InField
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])

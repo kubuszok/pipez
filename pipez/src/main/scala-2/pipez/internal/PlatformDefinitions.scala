@@ -1,6 +1,7 @@
 package pipez.internal
 
 import pipez.PipeDerivationConfig
+import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.{ nowarn, unused }
 import scala.reflect.macros.blackbox
@@ -11,8 +12,13 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
   import c.universe.*
 
-  override type Type[@unused A] = c.Type
-  override type CodeOf[A]       = Expr[A]
+  type Tagged[U] = { type Tag = U }
+  type @@[T, U]  = T & Tagged[U]
+
+  override type Type[A]   = c.Type @@ A
+  override type CodeOf[A] = Expr[A]
+
+  final def previewType[A: Type]: String = typeOf[A].toString
 
   final def previewCode[A](code: CodeOf[A]): String = showCode(code.tree)
 
@@ -33,8 +39,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       case Select(expr, TermName(field))              => extractPath(expr).map(Path.Field(_, field)) // extract .field
       case Apply(Select(expr, TermName(get)), List()) => extractPath(expr).map(Path.Field(_, get)) // extract .getField
       case Ident(TermName(_))                         => Right(Path.Root) // drop argName from before .field
-      case tt: TypeTree => Right(Path.Subtype(Path.Root, tt.tpe))
-      case _ => Left(s"Path ${previewCode(in)} is not in format _.field1.field2")
+      case tt: TypeTree => Right(Path.Subtype(Path.Root, tt.tpe.toString)) // A.Subtype
+      case _ => Left(s"Path ${previewCode(c.Expr(in))} is not in format _.field1.field2")
     }
 
     def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
@@ -54,9 +60,10 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
           TypeRef(_, _, List(_, outFieldType)) = outputField.tpe
           result <- extract(
             expr,
-            ConfigEntry.AddField(outFieldPath,
-                                 outFieldType,
-                                 singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[In, Any](In, outFieldType))
+            ConfigEntry.AddField(
+              outFieldPath,
+              outFieldType.asInstanceOf[Type[Any]],
+              singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[In, Any](In, outFieldType.asInstanceOf[Type[Any]]))
             ) :: acc
           )
         } yield result
@@ -67,7 +74,11 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
           outPath <- extractPath(outputField)
           result <- extract(
             expr,
-            ConfigEntry.RenameField(inPath, inputField.tpe.resultType, outPath, outputField.tpe.resultType) :: acc
+            ConfigEntry.RenameField(inPath,
+                                    inputField.tpe.resultType.asInstanceOf[Type[Any]],
+                                    outPath,
+                                    outputField.tpe.resultType.asInstanceOf[Type[Any]]
+            ) :: acc
           )
         } yield result
       // matches {cfg}.plugInField(_.in, _.out, pipe)
@@ -81,10 +92,12 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             expr,
             ConfigEntry.PlugInField(
               inFieldPath,
-              inFieldType,
+              inFieldType.asInstanceOf[Type[Any]],
               outFieldPath,
-              outFieldType,
-              singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[Any, Any](inFieldType, outFieldType))
+              outFieldType.asInstanceOf[Type[Any]],
+              singleAbstractMethodExpansion(c.Expr(pipe))(
+                PipeOf[Any, Any](inFieldType.asInstanceOf[Type[Any]], outFieldType.asInstanceOf[Type[Any]])
+              )
             ) :: acc
           )
         } yield result
@@ -95,7 +108,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       case Apply(TypeApply(Select(expr, TermName("removeSubtype")), List(inputSubtype)), List(pipe)) =>
         for {
           inputSubtypePath <- extractPath(inputSubtype)
-          inputSubtypeType = inputSubtype.tpe
+          inputSubtypeType = inputSubtype.tpe.asInstanceOf[Type[In]]
           result <- extract(
             expr,
             ConfigEntry.RemoveSubtype(
@@ -109,9 +122,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       case TypeApply(Select(expr, TermName("renameSubtype")), List(inputSubtype, outputSubtype)) =>
         for {
           inputSubtypePath <- extractPath(inputSubtype)
-          inputSubtypeType = inputSubtype.tpe
+          inputSubtypeType = inputSubtype.tpe.asInstanceOf[Type[In]]
           outputSubtypePath <- extractPath(outputSubtype)
-          outputSubtypeType = outputSubtype.tpe
+          outputSubtypeType = outputSubtype.tpe.asInstanceOf[Type[Out]]
           result <- extract(
             expr,
             ConfigEntry.RenameSubtype(
@@ -133,10 +146,12 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
             expr,
             ConfigEntry.PlugInSubtype(
               inputSubtypePath,
-              inputSubtypeType,
+              inputSubtypeType.asInstanceOf[Type[In]],
               outputSubtypePath,
-              outputSubtypeType,
-              singleAbstractMethodExpansion(c.Expr(pipe))(PipeOf[In, Out](inputSubtypeType, outputSubtypeType))
+              outputSubtypeType.asInstanceOf[Type[Out]],
+              singleAbstractMethodExpansion(c.Expr(pipe))(
+                PipeOf[In, Out](inputSubtypeType.asInstanceOf[Type[In]], outputSubtypeType.asInstanceOf[Type[Out]])
+              )
             ) :: acc
           )
         } yield result
@@ -149,4 +164,11 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
     DerivationResult.fromEither(extract(code.tree, Nil))(DerivationError.InvalidConfiguration(_))
   }
+
+  // Scala 2-macro specific instances
+
+  implicit val AnyT:     Type[Any]        = tq"_root_.scala.Any".asInstanceOf[Type[Any]]
+  implicit val ArrayAny: Type[Array[Any]] = tq"_root_.scala.Array[_root_.scala.Any]".asInstanceOf[Type[Array[Any]]]
+  implicit def Context:  Type[Context]    = tq"$pipeDerivation.Context".asInstanceOf[Type[Context]]
+  implicit def Result[A: Type]: Type[Result[A]] = tq"$pipeDerivation.Result[${typeOf[A].typeSymbol}]".asInstanceOf[Type[Result[A]]]
 }

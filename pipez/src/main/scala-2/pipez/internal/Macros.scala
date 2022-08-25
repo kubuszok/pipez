@@ -1,6 +1,7 @@
 package pipez.internal
 
 import pipez.{ PipeDerivation, PipeDerivationConfig }
+import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
@@ -16,17 +17,22 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
 ) extends PlatformDefinitions[Pipe, In, Out]
     with PlatformGenerators[Pipe, In, Out] {
 
-  def PipeOf[I, O](i: Type[I], o: Type[O]): Type[Pipe[I, O]] =
+  override val In:  Type[In]  = inTpe.asInstanceOf[Type[In]]
+  override val Out: Type[Out] = outTpe.asInstanceOf[Type[Out]]
+
+  def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] =
     c.universe
-      .appliedType(pipeTpe.typeSymbol.asInstanceOf[c.Symbol], i.asInstanceOf[c.Type], o.asInstanceOf[c.Type])
+      .appliedType(pipeTpe.typeSymbol.asInstanceOf[c.Symbol],
+                   typeOf[I].asInstanceOf[c.Type],
+                   typeOf[O].asInstanceOf[c.Type]
+      )
       .asInstanceOf[Type[Pipe[I, O]]]
-  val In:  Type[In]  = inTpe.asInstanceOf[Type[In]]
-  val Out: Type[Out] = outTpe.asInstanceOf[Type[Out]]
 
   import c.universe.*
 
-  val pipeDerivation: CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }] =
-    pd.asInstanceOf[CodeOf[PipeDerivation[Pipe] { type Context = self.Context; type Result[O] = self.Result[O] }]]
+  val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Context, Result]] =
+    pd.asInstanceOf[CodeOf[PipeDerivation.Aux[Pipe, Context, Result]]]
+  val previewPipeDerivation: String = previewCode(pipeDerivation)
 }
 
 final class Macro(val c: blackbox.Context) {
@@ -36,8 +42,10 @@ final class Macro(val c: blackbox.Context) {
   type ConstructorWeakTypeTag[F[_, _]] = WeakTypeTag[F[Any, Nothing]]
 
   private def macros[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
-                                                                                             pipeDerivation: c.Expr[PipeDerivation[Pipe]]
-  ) = new MacrosImpl[Pipe, In, Out](c)(
+    pipeDerivation: c.Expr[PipeDerivation[Pipe]]
+  ) = new MacrosImpl[Pipe, In, Out](
+    c
+  )(
     pipeTpe = c.weakTypeOf[Pipe[Any, Nothing]].typeConstructor,
     inTpe = c.weakTypeOf[In],
     outTpe = c.weakTypeOf[Out],

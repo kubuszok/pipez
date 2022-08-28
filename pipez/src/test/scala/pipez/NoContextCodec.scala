@@ -1,12 +1,14 @@
 package pipez
 
+/** Some Decoder that only needs `In` to parse it to `Either[List[String], Out]` */
 trait NoContextCodec[In, Out] {
 
   def decode(in: In): Either[List[String], Out]
 }
 
 object NoContextCodec extends PipeSemiautoSupport[NoContextCodec] with PipeSemiautoConfiguredSupport[NoContextCodec] {
-  
+
+  // Information for macros to let them now how to combine smaller instances into bigger instances
   implicit val pipeDerivation: PipeDerivation.NoContext[NoContextCodec] = new PipeDerivation.NoContext[NoContextCodec] {
 
     final type Result[Out] = Either[List[String], Out]
@@ -30,5 +32,6 @@ object NoContextCodec extends PipeSemiautoSupport[NoContextCodec] with PipeSemia
     }
   }
 
+  // after importing `NoContextCodec.Auto.*`, it provides ability to derive things automatically
   object Auto extends PipeAutoSupport[NoContextCodec]
 }

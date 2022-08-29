@@ -219,7 +219,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     val result = c.freshName(TermName("result"))
     val pureValues: List[CodeOf[Unit]] = outputSettersList.collect {
       case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
-        setter.asInstanceOf[ProductOutData.Setter[Any]].set(c.Expr[Out](q"$result"), caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")))
+        setter
+          .asInstanceOf[ProductOutData.Setter[Any]]
+          .set(c.Expr[Out](q"$result"), caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")))
     }
 
     val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =

@@ -43,7 +43,11 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
             )
           }
         )
-      )(_ => DerivationError.InvalidConfiguration(s"${previewType( typeOf[A])} seem like an ADT but cannot extract its subtypes"))
+      )(_ =>
+        DerivationError.InvalidConfiguration(
+          s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes"
+        )
+      )
     } else DerivationResult.fail(DerivationError.NotYetImplemented("Java Enum parsing"))
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =

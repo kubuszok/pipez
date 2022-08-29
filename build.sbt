@@ -28,8 +28,8 @@ val pipez = project
         case _             => Seq.empty
       }
     },
-    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test
-    // scalafmtOnCompile := true,
+    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
+    scalafmtOnCompile := true
   )
   .dependsOn(testCases % "test->compile")
 

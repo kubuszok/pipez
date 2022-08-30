@@ -12,59 +12,32 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
   /** True iff `A` is `sealed` */
   def isADT[A: Type]: Boolean
 
-  /** True if `A extends java.lang.Enum[A]` */
-  def isJavaEnum[A: Type]: Boolean
-
   /** Check is `A =:= B` in a platform-independent code */
   def areSubtypesEqual[A: Type, B: Type]: Boolean
 
   final def isSumType[A: Type]: Boolean =
-    isADT[A] || isJavaEnum[A]
+    isADT[A]
 
   /** Whether both `In` and `Out` are ADTs/Java Enums */
   final def isUsableAsSumTypeConversion: Boolean =
     isSumType[In] && isSumType[Out]
 
   /** Stores information from what pieces `Out` is made */
-  sealed trait EnumData[A] extends Product with Serializable
+  final case class EnumData[A](elements: List[EnumData.Case[? <: A]]) {
+
+    def findSubtype(subtypeName: String, caseInsensitiveSearch: Boolean): DerivationResult[EnumData.Case[? <: A]] =
+      DerivationResult.fromOption(
+        elements.collectFirst {
+          case sumType @ EnumData.Case(name, _, _, _)
+              if inputNameMatchesOutputName(name, subtypeName, caseInsensitiveSearch) =>
+            sumType
+        }
+      )(DerivationError.MissingMatchingSubType(subtypeName))
+  }
   object EnumData {
 
-    final case class SumType[A](elements: List[SumType.Case[? <: A]]) extends EnumData[A] {
-
-      def findSubtype(subtypeName: String, caseInsensitiveSearch: Boolean): DerivationResult[SumType.Case[? <: A]] =
-        DerivationResult.fromOption(
-          elements.collectFirst {
-            case sumType @ SumType.Case(name, _, _, _)
-                if inputNameMatchesOutputName(name, subtypeName, caseInsensitiveSearch) =>
-              sumType
-          }
-        )(DerivationError.MissingMatchingSubType(subtypeName))
-    }
-
-    object SumType {
-
-      final case class Case[A](name: String, tpe: Type[A], isCaseObject: Boolean, path: Path) {
-        override def toString: String = s"Case($name : ${previewType(tpe)})"
-      }
-    }
-
-    final case class Enumeration[A](values: List[Enumeration.Value[A]]) extends EnumData[A] {
-
-      def findValue(valueName: String, caseInsensitiveSearch: Boolean): DerivationResult[Enumeration.Value[A]] =
-        DerivationResult.fromOption(
-          values.collectFirst {
-            case value @ EnumData.Enumeration.Value(name, _)
-                if inputNameMatchesOutputName(valueName, name, caseInsensitiveSearch) =>
-              value
-          }
-        )(DerivationError.MissingMatchingValue(valueName))
-    }
-
-    object Enumeration {
-
-      final case class Value[A](name: String, path: CodeOf[A]) {
-        override def toString: String = s"Value($name = ${previewCode(path)})"
-      }
+    final case class Case[A](name: String, tpe: Type[A], isCaseObject: Boolean, path: Path) {
+      override def toString: String = s"Case($name : ${previewType(tpe)})"
     }
   }
 
@@ -111,7 +84,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     type OutSubtype <: Out
     def resolveSubtype[InSubtype <: In: Type](
       settings:      Settings,
-      outData:       EnumData.SumType[Out],
+      outData:       EnumData[Out],
       inSubtypeName: String
     ): DerivationResult[EnumGeneratorData.InputSubtype] = resolve[InSubtype](settings) match {
       // OutSubtype - the same (simple) name as InSubtype
@@ -141,33 +114,8 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     }
   }
 
-  /** Translation strategy for a particular input value */
-  sealed trait InValueLogic extends Product with Serializable
-  object InValueLogic {
-
-    final case class DefaultValue() extends InValueLogic
-
-    def resolve(settings: Settings): InValueLogic = {
-      import ConfigEntry.*
-
-      settings.resolve[InValueLogic](DefaultValue())(PartialFunction.empty)
-    }
-
-    def resolveValue(
-      settings:    Settings,
-      outData:     EnumData.Enumeration[Out],
-      inValueName: String,
-      inValueCode: CodeOf[In]
-    ): DerivationResult[EnumGeneratorData.Pairing] = resolve(settings) match {
-      case DefaultValue() =>
-        outData.findValue(inValueName, settings.isEnumCaseInsensitive).map {
-          case EnumData.Enumeration.Value(_, outCode) => EnumGeneratorData.Pairing(inValueCode, outCode)
-        }
-    }
-  }
-
   /** Final platform-independent result of matching inputs with outputs using resolved strategies */
-  sealed trait EnumGeneratorData extends Product with Serializable
+  final case class EnumGeneratorData(subtypes: ListMap[String, EnumGeneratorData.InputSubtype])
   object EnumGeneratorData {
 
     sealed trait InputSubtype extends Product with Serializable
@@ -191,14 +139,6 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
         override def toString: String = s"Handle(${previewType(inSubtype)}, ${previewCode(pipe)})"
       }
     }
-
-    final case class Subtypes(subtypes: ListMap[String, InputSubtype]) extends EnumGeneratorData
-
-    final case class Pairing(in: CodeOf[In], out: CodeOf[Out]) {
-      override def toString: String = s"Pairing(${previewCode(in)}, ${previewCode(out)})"
-    }
-
-    final case class Values(values: ListMap[String, Pairing]) extends EnumGeneratorData
   }
 
   object SumTypeConversion {
@@ -256,41 +196,17 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
     outData:  EnumData[Out],
     settings: Settings
   ): DerivationResult[EnumGeneratorData] = (inData, outData) match {
-    case (EnumData.SumType(inSubtypes), outData @ EnumData.SumType(_)) =>
+    case (EnumData(inSubtypes), outData) =>
       inSubtypes
-        .map(_.asInstanceOf[EnumData.SumType.Case[InSubtype]])
-        .map { case EnumData.SumType.Case(inSubtypeName, inSubtypeType, _, path) =>
+        .map(_.asInstanceOf[EnumData.Case[InSubtype]])
+        .map { case EnumData.Case(inSubtypeName, inSubtypeType, _, path) =>
           implicit val inSubtypeTpe: Type[InSubtype] = inSubtypeType
           InSubtypeLogic.resolveSubtype[InSubtype](settings, outData, inSubtypeName).map(inSubtypeName -> _)
         }
         .pipe(DerivationResult.sequence(_))
         .map(_.to(ListMap))
-        .map(EnumGeneratorData.Subtypes(_))
-    case (EnumData.Enumeration(inValues), outData @ EnumData.Enumeration(_)) =>
-      inValues
-        .map { case EnumData.Enumeration.Value(inValueName, inValueCode) =>
-          InValueLogic.resolveValue(settings, outData, inValueName, inValueCode).map(inValueName -> _)
-        }
-        .pipe(DerivationResult.sequence(_))
-        .map(_.to(ListMap))
-        .map(EnumGeneratorData.Values(_))
-    case (inSumType @ EnumData.SumType(_), EnumData.Enumeration(_)) =>
-      attemptSubtypesAsEnumeration(inSumType) match {
-        case Some(inEnumeration) => matchEnums(inEnumeration, outData, settings)
-        case None =>
-          DerivationResult.fail(DerivationError.NotSupportedEnumConversion(isInSumType = true, isOutSumType = false))
-      }
-    case (EnumData.Enumeration(_), outSubtype @ EnumData.SumType(_)) =>
-      attemptSubtypesAsEnumeration(outSubtype) match {
-        case Some(outEnumeration) => matchEnums(inData, outEnumeration, settings)
-        case None =>
-          DerivationResult.fail(DerivationError.NotSupportedEnumConversion(isInSumType = false, isOutSumType = true))
-      }
+        .map(EnumGeneratorData(_))
   }
-
-  private def attemptSubtypesAsEnumeration[Tpe](subtype: EnumData.SumType[Tpe]): Option[EnumData.Enumeration[Tpe]] =
-    // TODO: try converting all enum types to values
-    None
 
   // OutSubtype - name provided
   // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, updateContext(ctx, path)): Result[OutSubtype] }

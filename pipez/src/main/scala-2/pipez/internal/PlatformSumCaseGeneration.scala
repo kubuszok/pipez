@@ -14,8 +14,6 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     val sym = typeOf[A].typeSymbol
     sym.isClass && sym.asClass.isSealed
   }
-  final def isJavaEnum[A: Type]: Boolean =
-    typeOf[A].typeSymbol.isJavaEnum
 
   final def areSubtypesEqual[A: Type, B: Type]: Boolean = typeOf[A] =:= typeOf[B]
 
@@ -23,34 +21,30 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
 
   final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData[Out]
 
-  private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
-    if (isADT[A]) {
-      def extractSubclasses(t: TypeSymbol): List[TypeSymbol] =
-        if (t.asClass.isSealed) t.asClass.knownDirectSubclasses.toList.map(_.asType).flatMap(extractSubclasses)
-        else List(t)
-      DerivationResult.unsafe[EnumData[A]](
-        EnumData.SumType(
-          extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType =>
-            EnumData.SumType.Case(
-              subtypeType.name.toString,
-              subtypeType.toType.asInstanceOf[Type[A]],
-              isCaseObject = subtypeType.asClass.isModule,
-              path = Path.Subtype(Path.Root, subtypeType.name.toString)
-            )
-          }
-        )
-      )(_ =>
-        DerivationError.InvalidConfiguration(
-          s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes"
-        )
+  private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] = {
+    def extractSubclasses(t: TypeSymbol): List[TypeSymbol] =
+      if (t.asClass.isSealed) t.asClass.knownDirectSubclasses.toList.map(_.asType).flatMap(extractSubclasses)
+      else List(t)
+    DerivationResult.unsafe[EnumData[A]](
+      EnumData(
+        extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType =>
+          EnumData.Case(
+            subtypeType.name.toString,
+            subtypeType.toType.asInstanceOf[Type[A]],
+            isCaseObject = subtypeType.asClass.isModule,
+            path = Path.Subtype(Path.Root, subtypeType.name.toString)
+          )
+        }
       )
-    } else DerivationResult.fail(DerivationError.NotYetImplemented("Java Enum parsing"))
+    )(_ =>
+      DerivationError.InvalidConfiguration(
+        s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes"
+      )
+    )
+  }
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
-    generatorData match {
-      case EnumGeneratorData.Subtypes(subtypes) => generateSubtypes(subtypes.values.toList)
-      case EnumGeneratorData.Values(values)     => generateEnumeration(values.values.toList)
-    }
+    generateSubtypes(generatorData.subtypes.values.toList)
 
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
     val in  = c.freshName(TermName("in"))
@@ -82,7 +76,4 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
       .log(s"Sum types derivation, subtypes: $subtypes")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
   }
-
-  private def generateEnumeration(@unused values: List[EnumGeneratorData.Pairing]) =
-    DerivationResult.fail(DerivationError.NotYetImplemented("Enumeration code emission"))
 }

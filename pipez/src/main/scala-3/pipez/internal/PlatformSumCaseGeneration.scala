@@ -39,7 +39,8 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
             EnumData.SumType.Case(
               subtypeType.name,
               subtypeType.typeRef.asType.asInstanceOf[Type[A]],
-              isCaseObject = subtypeType.flags.is(Flags.Module)
+              isCaseObject = subtypeType.flags.is(Flags.Module),
+              path = Path.Subtype(Path.Root, subtypeType.name)
             )
           }
         )
@@ -59,19 +60,19 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
     def cases(in: CodeOf[In], ctx: CodeOf[Context]) = subtypes
       .map {
-        case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe) =>
+        case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
           implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
           val arg  = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
           val argE = Ident(arg.termRef).asExpr.asInstanceOf[CodeOf[In]]
           val pipeFix: CodeOf[Pipe[In, Out]] = '{ ${ pipe.asInstanceOf }.asInstanceOf[Pipe[In, Out]] }
-          val body = unlift(pipeFix, argE, ctx).asInstanceOf[CodeOf[Result[Out]]]
+          val body = unlift(pipeFix, argE, updateContext(ctx, pathCode(path))).asInstanceOf[CodeOf[Result[Out]]]
           CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
-        case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe) =>
+        case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
           implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
           val arg  = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
           val argE = Ident(arg.termRef).asExpr.asInstanceOf[CodeOf[In]]
           val pipeFix: CodeOf[Pipe[In, Out]] = pipe.asInstanceOf[CodeOf[Pipe[In, Out]]]
-          val body = unlift(pipeFix, argE, ctx).asInstanceOf[CodeOf[Result[Out]]]
+          val body = unlift(pipeFix, argE, updateContext(ctx, pathCode(path))).asInstanceOf[CodeOf[Result[Out]]]
           CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
       }
       .pipe(Match(in.asTerm, _))

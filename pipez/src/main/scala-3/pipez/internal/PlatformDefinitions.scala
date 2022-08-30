@@ -22,6 +22,11 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
 
   final def previewCode[A](code: CodeOf[A]): String = code.show
 
+  final def pathCode(path: Path): CodeOf[pipez.Path] = path match
+    case Path.Root                => '{ pipez.Path.root }
+    case Path.Field(from, name)   => '{ ${ pathCode(from) }.field(${ Expr(name) }) }
+    case Path.Subtype(from, name) => '{ ${ pathCode(from) }.subtype(${ Expr(name) }) }
+
   final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
     DerivationResult
       .fromOption(scala.quoted.Expr.summon[Pipe[Input, Output]])(

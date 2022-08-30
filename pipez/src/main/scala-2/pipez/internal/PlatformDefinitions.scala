@@ -6,6 +6,7 @@ import pipez.internal.Definitions.{ Context, Result }
 import scala.annotation.{ nowarn, unused }
 import scala.reflect.macros.blackbox
 
+@nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
 
   val c: blackbox.Context
@@ -21,6 +22,12 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   final def previewType[A: Type]: String = typeOf[A].toString
 
   final def previewCode[A](code: CodeOf[A]): String = showCode(code.tree)
+
+  final def pathCode(path: Path): CodeOf[pipez.Path] = path match {
+    case Path.Root                => c.Expr[pipez.Path](q"_root_.pipez.Path.root")
+    case Path.Field(from, name)   => c.Expr[pipez.Path](q"${pathCode(from)}.field(${Constant(name)})")
+    case Path.Subtype(from, name) => c.Expr[pipez.Path](q"${pathCode(from)}.subtype(${Constant(name)})")
+  }
 
   final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
     DerivationResult

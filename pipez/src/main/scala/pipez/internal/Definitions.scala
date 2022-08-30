@@ -42,7 +42,11 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
   val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Definitions.Context, Definitions.Result]]
 
+  /** Like previewCode(pipeDerivation) but allowing hiding some shenanigans we do */
   def previewPipeDerivation: String
+
+  /** Translates `Path` as seen in macro to runtime value we can pass to updateContext` */
+  def pathCode(path: Path): CodeOf[pipez.Path]
 
   /** Type representing how we got the specific value from the `in: In` argument */
   sealed trait Path extends Product with Serializable

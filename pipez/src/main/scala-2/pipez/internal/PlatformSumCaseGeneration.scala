@@ -31,9 +31,11 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
       DerivationResult.unsafe[EnumData[A]](
         EnumData.SumType(
           extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType =>
-            EnumData.SumType.Case(subtypeType.name.toString,
-                                  subtypeType.toType.asInstanceOf[Type[A]],
-                                  isCaseObject = subtypeType.asClass.isModule
+            EnumData.SumType.Case(
+              subtypeType.name.toString,
+              subtypeType.toType.asInstanceOf[Type[A]],
+              isCaseObject = subtypeType.asClass.isModule,
+              path = Path.Subtype(Path.Root, subtypeType.name.toString)
             )
           }
         )
@@ -54,16 +56,16 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     val in  = c.freshName(TermName("in"))
     val ctx = c.freshName(TermName("ctx"))
 
-    val ctxE = c.Expr[Context](q"$ctx")
+    def ctxE(path: Path) = updateContext(c.Expr[Context](q"$ctx"), pathCode(path))
 
     val cases = subtypes.map {
-      case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe) =>
+      case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
         val arg  = c.freshName(TermName("arg"))
-        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE)
+        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE(path))
         cq"""$arg : ${inSubtype.typeSymbol} => $code.asInstanceOf[$pipeDerivation.Result[${Out.typeSymbol}]]"""
-      case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe) =>
+      case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
         val arg  = c.freshName(TermName("arg"))
-        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE)
+        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE(path))
         cq"""$arg : ${inSubtype.typeSymbol} => $code"""
     }
 

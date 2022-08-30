@@ -245,6 +245,14 @@ Instance of `PipeDerivation[F]` is best to define in companion object as well un
 possible implementations that user should pick manually at call site (either by providing implicit in scope or passing
 the value manually to the macro).
 
+Additionally, if you:
+
+ * don't need Context (`type Context = Unit`), you can extend `PipeDerivation.NoContext[F]`
+ * don't need Result (`type Result[A] = A`), you can extend `PipeDerivation.NoParsing[F]`
+ * don't need any of the above, you can extend `PipeDerivation.Simple[F]`
+
+instead of `PipeDerivation[F]`.
+
 ### Contracts and laws
 
 What Pipez promises is that it:

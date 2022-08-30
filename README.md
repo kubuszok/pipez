@@ -78,7 +78,7 @@ implicit val codecDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] 
   // here we decided to implement map2 logic
   def mergeResult[A, B, C](fa: Result[A], fb: => Result[B], (A, B) => C): Result[C] =
     for { a <- fa; b <- fb } yield f(a, b)
-  // TODO: not yet implemented
+  // can be used to update Context with Field/Subtype information before passing it into codec
   def updateContext(context: Context, path: Path) = context
 }
 ```
@@ -103,7 +103,7 @@ would derive something similar to:
 codecDerivation.lift { (in: In, ctx: codecDerivation.Context) =>
   codecDerivation.mergeResult(
     codecDerivation.pure(in.a), // types match, no need to transform
-    codecDerivation.unlift(doubleToString, in.b, ctx), // type don't match, converting
+    codecDerivation.unlift(doubleToString, in.b, codecDerivation.updateContext(ctx, Path.root.field("b"))), // type don't match, converting
     (a: Int, b: String) => Out(a, b) // combining results together
   )
 } // Codec[In, Out]
@@ -156,8 +156,8 @@ would generate something like:
 ```scala
 codecDerivation.lift { (in: In, ctx: codecDerivation.Context) =>
   in match {
-    case arg : In.A => codecDerivation(derivedForA : Codec[In.A, Out.A], arg, ctx)
-    case arg : In.B => codecDerivation(derivedForB : Codec[In.B, Out.B], arg, ctx)
+    case arg : In.A => codecDerivation(derivedForA : Codec[In.A, Out.A], arg, codecDerivation.updateContext(ctx, Path.root.subtype("A")))
+    case arg : In.B => codecDerivation(derivedForB : Codec[In.B, Out.B], arg, codecDerivation.updateContext(ctx, Path.root.subtype("B")))
   }
 } // Codec[In, Out]
 ```
@@ -171,7 +171,7 @@ PipeDerivation.derive(
   PipezDerivationConfig[Codec, In, Out]
     // output is missing subtype corresponding to input subtype, provide In2 => Out conversion
     .removeSubtype[In2](codec: Codec[In2, Out])
-    // rename subtype, fetch converion from implicit scope
+    // rename subtype, fetch conversion from implicit scope
     .renameSubtype[In2, Out2]
     // wire subtypes, provide conversion manually
     .plugInSubtype[In2, Out2](codec: Codec[In2, Out2])
@@ -181,8 +181,6 @@ PipeDerivation.derive(
 ```
 
 ### Using and updating context
-
-> **!!! not yet implemented !!!**
 
 If `F[A, B]` needs some additional value to create the result, e.g. it might contain a path to the currently converted
 field/subtype, so that it could be placed in failure message on failed decoding, `updateContext` will be used

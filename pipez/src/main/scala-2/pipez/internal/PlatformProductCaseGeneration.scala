@@ -43,7 +43,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             get =
               if (member.asMethod.paramLists.isEmpty)
                 (in: CodeOf[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
-              else (in: CodeOf[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()")
+              else (in: CodeOf[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()"),
+            path = Path.Field(Path.Root, member.name.toString)
           )
       }
       .to(ListMap)

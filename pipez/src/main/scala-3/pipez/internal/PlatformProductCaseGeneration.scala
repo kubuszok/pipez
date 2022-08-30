@@ -38,7 +38,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
         get =
           if (method.paramSymss.isEmpty) (in: CodeOf[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
-          else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr
+          else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr,
+        path = Path.Field(Path.Root, method.name.toString)
       )
     }.to(ListMap)
       .pipe(ProductInData(_))

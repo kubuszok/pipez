@@ -48,7 +48,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class Getter[InField](
       name: String,
       tpe:  Type[InField],
-      get:  CodeOf[In] => CodeOf[InField]
+      get:  CodeOf[In] => CodeOf[InField],
+      path: Path
     ) {
 
       override def toString: String = s"Getter($name : ${previewType(tpe)})"
@@ -151,8 +152,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     ): DerivationResult[ProductGeneratorData.OutputValue] = resolve[OutField](settings, outParamName) match {
       case DefaultField() =>
         // if inField (same name as out) not found then error
-        // else if inField <:< outField then (in, ctx) => in : OutField
-        // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, ctx) : Result[OutField]
+        // else if inField <:< outField then (in, ctx) => pure(in : OutField)
+        // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, updateContext(ctx, path)) : Result[OutField]
         inData
           .findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -168,8 +169,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
           .log(s"Field $outParamName considered added to output, uses provided pipe")
       case FieldRenamed(inFieldName, _) =>
         // if inField (name provided) not found then error
-        // else if inField <:< outField then (in, ctx) => in : OutField
-        // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, ctx) : Result[OutField]
+        // else if inField <:< outField then (in, ctx) => pure(in : OutField)
+        // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, updateContext(ctx, path)) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -180,7 +181,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
           .log(s"Field $outParamName is considered renamed from $inFieldName, uses summoning if types differ")
       case PipeProvided(inFieldName, _, pipe) =>
         // if inField (name provided) not found then error
-        // else (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
+        // else (in, ctx) => unlift(summon[InField, OutField])(in.used, updateContext(ctx, path)) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -259,8 +260,6 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   /** Platform-specific way of generating code from resolved information
     *
-    * TODO: update after implementing Paths: ctx -> updateContext(ctx, path)
-    *
     * For case class output should generate code like:
     *
     * {{{
@@ -268,12 +267,12 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     *   pipeDerivation.mergeResult(
     *     pipeDerivation.mergeResult(
     *       pipeDerivation.pure(Array[Any](2)),
-    *       pipeDerivation.unlift(fooPipe, in.foo, ctx)
+    *       pipeDerivation.unlift(fooPipe, in.foo, pipeDerivation.updateContext(ctx, Path.root.field("foo")))
     *     ) { (left, right) =>
     *       left(0) = right
     *       left
     *     },
-    *     pipeDerivation.unlift(barPipe, in.bar, ctx)
+    *     pipeDerivation.unlift(barPipe, in.bar, pipeDerivation.updateContext(ctx, Path.root.field("bar")))
     *   ) { (left, right) =>
     *     left(1) = right
     *     new Out(
@@ -302,12 +301,12 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     *         val result = new Out()
     *         result
     *       },
-    *       pipeDerivation.unlift(fooPipe, in.foo, ctx)
+    *       pipeDerivation.unlift(fooPipe, in.foo, pipeDerivation.updateContext(ctx, Path.root.field("foo")))
     *     ) { (left, right) =>
     *       left.setFoo(right)
     *       left
     *     },
-    *     pipeDerivation.unlift(barPipe, in.bar, ctx)
+    *     pipeDerivation.unlift(barPipe, in.bar, pipeDerivation.updateContext(ctx, Path.root.field("bar")))
     *   ) { (left, right) =>
     *     left.setBar(right)
     *     left
@@ -359,8 +358,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         .logSuccess(gen => s"Case generation: $gen")
   }
 
-  // if inField <:< outField then (in, ctx) => in : OutField
-  // else (in, ctx) => unlift(summon[InField, OutField])(in.inField, ctx) : Result[OutField]
+  // if inField <:< outField then (in, ctx) => pure(in : OutField)
+  // else (in, ctx) => unlift(summon[InField, OutField])(in.inField, updateContext(ctx, path)) : Result[OutField]
   private def fromFieldConstructorParam[InField: Type, OutField: Type](
     getter: ProductInData.Getter[InField]
   ): DerivationResult[ProductGeneratorData.OutputValue] =
@@ -375,7 +374,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       summonPipe[InField, OutField].map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
           typeOf[OutField],
-          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
+          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
         )
       }
     }
@@ -388,14 +387,14 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     (in, ctx) => unlift[In, OutField](pipe, in, ctx)
   )
 
-  // (in, ctx) => unlift(summon[InField, OutField])(in.used, ctx) : Result[OutField]
+  // (in, ctx) => unlift(summon[InField, OutField])(in.used, updateContext(ctx, path)) : Result[OutField]
   private def pipeProvidedConstructorParam[InField: Type, OutField: Type](
     getter: ProductInData.Getter[InField],
     pipe:   CodeOf[Pipe[InField, OutField]]
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
       typeOf[OutField],
-      (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), ctx)
+      (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
     )
 }
 object ProductCaseGeneration {

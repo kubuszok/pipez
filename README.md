@@ -253,6 +253,11 @@ Additionally, if you:
 
 instead of `PipeDerivation[F]`.
 
+### Debugging
+
+If you are not sure what is happening during macro expansion and what code it generated,
+pass it a configuration with `.enableDiagnosics` option.
+
 ### Contracts and laws
 
 What Pipez promises is that it:

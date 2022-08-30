@@ -94,7 +94,7 @@ case class Out(a: Int, b: String)
 
 implicit val doubleToString: Codec[Double, String] = ...
 
-PipeDerivation.derive[In, Out]
+PipeDerivation.derive[Codec, In, Out]
 ```
 
 would derive something similar to:
@@ -115,6 +115,20 @@ or `unlift` and somehow combine them with `mergeResult` to get `Result[Out]`).
 If the library cannot find a corresponding field in `In` for some field in `Out`, or if field types mismatch and there
 is no implicit conversion, explicit configuration have to be passed or compilation will fail.
 
+```scala
+PipeDerivation.derive(
+  PipezDerivationConfig[Codec, In, Out]
+    // output has field with no corresponding field in input - provide In => Out2 conversion
+    .addField(_.out : Out2, codec: Codec[In, Out2])
+    // rename fields, if needed fetch conversion from implicit scope
+    .renameField(_.in, _.out)
+    // wire input field to output field and provide codec manually
+    .plugInField(_.in: In2, _.out: Out2, codec: Codec[In2, Out2])
+    // don't match names in case sensitive way
+    .fieldMatchingCaseInsensitive
+)
+```
+
 ### Sum types
 
 For sum types, unless overridden by user using config, library will pair each input subtype with an output subtype by
@@ -134,7 +148,7 @@ object Out {
 }
 
 import PipeDerivation.Auto.* // to allow recursive derivation of Codec[In.A, Out.A] and Codec[In.B, Out.B]
-PipeDerivation.derive[In, Out]
+PipeDerivation.derive[Codec, In, Out]
 ```
 
 would generate something like:
@@ -150,9 +164,111 @@ codecDerivation.lift { (in: In, ctx: codecDerivation.Context) =>
 
 (same as for product types user should just assume that argument will be delegated to the right subtype codec).
 
+In case there is no matching output subtype for input subtype, user should provide a config:
+
+```scala
+PipeDerivation.derive(
+  PipezDerivationConfig[Codec, In, Out]
+    // output is missing subtype corresponding to input subtype, provide In2 => Out conversion
+    .removeSubtype[In2](codec: Codec[In2, Out])
+    // rename subtype, fetch converion from implicit scope
+    .renameSubtype[In2, Out2]
+    // wire subtypes, provide conversion manually
+    .plugInSubtype[In2, Out2](codec: Codec[In2, Out2])
+    // don't match subtypes in case sensitive way
+    .enumMatchingCaseInsensitive
+)
+```
+
 ### Using and updating context
 
-not yet implemented
+> **!!! not yet implemented !!!**
+
+If `F[A, B]` needs some additional value to create the result, e.g. it might contain a path to the currently converted
+field/subtype, so that it could be placed in failure message on failed decoding, `updateContext` will be used
+to make sure that `ctx: pipeDerivation.Context` passed to the `unlift` is updated with information about current
+field subtype.
+
+`Context` isn't restricted to such cases though. One could define codec which has the ability to e.g. fail fast
+like this:
+
+```scala
+trait Codec[A, B] {
+  def decode(value: A, shouldFailFast: Boolean): Either[List[String], B]
+}
+```
+
+Then derivation would pass this extra argument around unchanged if you defined it as:
+
+```scala
+implicit val pipeDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] {
+  type Context = Boolean
+  def updateContext(ctx: Context, path: Path): Context = ctx
+  ...
+}
+```
+
+In case a type class/function doesn't expect a tuple but more arguments or `In` is nested
+in some wrapper, `lift` and `unlift` should perform the conversion `(In, Context) <=> Arguments`.
+
+### Utilities
+
+Instead of calling `PipeDerivation.derive[Codec, In, Out]` it would be nicer to be able to call
+`Codec.derive[In, Out]`. This can be achieved through
+
+```scala
+object Codec extends PipeSemiautoSupport[Codec]
+```
+
+Similarly `PipeDerivation.derive(PipeDerivationConfig[Codec, In, Out]...)` could be replaced with
+`Coded.derive(Codec.Config[In, Out]...)` with:
+
+```scala
+object Codec extends PipeSemiautoConfiguredSupport[Codec]
+```
+
+(these 2 are non mutually exclusive so one can `extends` both traits).
+
+If the `derive` with default options should be an implicit to make it automatic one can
+
+```scala
+object Codec extends PipeAutoSupport[Codec] // automatic derivation is always in scope
+
+// or
+
+object Codec {
+  object Auto extends PipeAutoSupport[Codec] // require import Codec.Auto.*
+}
+```
+
+Instance of `PipeDerivation[F]` is best to define in companion object as well unless there could be several
+possible implementations that user should pick manually at call site (either by providing implicit in scope or passing
+the value manually to the macro).
+
+### Contracts and laws
+
+What Pipez promises is that it:
+
+ * will not use conversion if an input field type is a subtype of output field type
+ * when conversion of a field/subtype will be performed, the library will provide instance (from summoning or config)
+   and then use users code (`pipeDerivation.unlift`) to run it
+ * partial results of conversions of fields will be combined through `pipeDerivation.mergeResult`
+
+It does not however:
+
+ * provide a way of handling `Option` types (e.g. creating `F[Option[A], Option[B]]` from `F[A, B]`), or collections
+   (e.g. creating `F[Seq[A], List[B]]` from `F[A, B]`) - it is assumed that it is the responsibility of the user
+ * guarantee that the results build with `PipeDerivation[F]` will be following some contracts like Cats/Cats Effect
+   laws. It is up to the user to make sure that their implementation of `PipeDerivation[F]` will not violate any laws
+
+In other words, the user implementing their type class (function) and its derivation is responsible for defining
+the type class contracts and its laws. Pipez is responsible to make sure that calling this type class and building
+the final result is done through user-provided methods. With that user should be able to determine whether derived
+code with follow the laws as well.
+
+This is the biggest difference against `TransformerF`s from Chimney, which were coming with some predefined assumptions
+which made it difficult to establish what are the laws that `TransformerF` should follow, and how it could be modified
+to not break user's code.
 
 ## Examples
 

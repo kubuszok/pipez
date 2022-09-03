@@ -76,7 +76,7 @@ implicit val codecDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] 
   // will be used when the value can be created without any conversion
   def pure[A](a: A): Result[A] = Right(a)
   // here we decided to implement map2 logic
-  def mergeResult[A, B, C](fa: Result[A], fb: => Result[B], (A, B) => C): Result[C] =
+  def mergeResult[A, B, C](ctx Context, fa: Result[A], fb: => Result[B], (A, B) => C): Result[C] =
     for { a <- fa; b <- fb } yield f(a, b)
   // can be used to update Context with Field/Subtype information before passing it into codec
   def updateContext(context: Context, path: Path) = context
@@ -102,6 +102,7 @@ would derive something similar to:
 ```scala
 codecDerivation.lift { (in: In, ctx: codecDerivation.Context) =>
   codecDerivation.mergeResult(
+    ctx,
     codecDerivation.pure(in.a), // types match, no need to transform
     codecDerivation.unlift(doubleToString, in.b, codecDerivation.updateContext(ctx, Path.root.field("b"))), // type don't match, converting
     (a: Int, b: String) => Out(a, b) // combining results together

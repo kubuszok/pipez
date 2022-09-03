@@ -37,7 +37,7 @@ trait PipeDerivation[Pipe[_, _]] {
   def pureResult[A](a: A): Result[A]
 
   /** Combines 2 `Results` into 1 */
-  def mergeResults[A, B, C](ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C]
+  def mergeResults[A, B, C](context: Context, ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C]
 }
 object PipeDerivation extends PipeDerivationPlatform {
 
@@ -55,6 +55,11 @@ object PipeDerivation extends PipeDerivationPlatform {
     final def unlift[In, Out](pipe: Pipe[In, Out], in: In, ctx: Context): Result[Out] = simpleUnlift(pipe, in)
 
     final def updateContext(context: Context, path: Path): Context = context
+
+    /** Merges `Result`s as if `Context` was not passed around */
+    def simpleMergeResults[A, B, C](ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C]
+    final def mergeResults[A, B, C](context: Context, ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C] =
+      simpleMergeResults(ra, rb, f)
   }
 
   /** Specialization for `Pipe`s which are interchangeable to `(In, Context) => Out` */

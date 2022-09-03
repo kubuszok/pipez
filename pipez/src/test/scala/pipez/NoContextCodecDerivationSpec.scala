@@ -171,7 +171,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  test("plugIn config -> create output field value from input field using explicitly passed codec") {
+  test("plugInField config -> create output field value from input field using explicitly passed codec") {
     // case class -> case class
     assertEquals(
       NoContextCodec

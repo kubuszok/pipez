@@ -38,8 +38,9 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
     c.Expr[Result[A]](q"""$pipeDerivation.pureResult($a)""")
 
   final def mergeResults[A: Type, B: Type, C: Type](
-    ra: CodeOf[Result[A]],
-    rb: CodeOf[Result[B]],
-    f:  CodeOf[(A, B) => C]
-  ): CodeOf[Result[C]] = c.Expr[Result[C]](q"""$pipeDerivation.mergeResults($ra, $rb, $f)""")
+    ctx: CodeOf[Context],
+    ra:  CodeOf[Result[A]],
+    rb:  CodeOf[Result[B]],
+    f:   CodeOf[(A, B) => C]
+  ): CodeOf[Result[C]] = c.Expr[Result[C]](q"""$pipeDerivation.mergeResults($ctx, $ra, $rb, $f)""")
 }

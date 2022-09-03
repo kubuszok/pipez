@@ -265,21 +265,25 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     * {{{
     * pipeDerivation.lift { (in: In, ctx: pipeDerivation.Context) =>
     *   pipeDerivation.mergeResult(
+    *      ctx,
     *     pipeDerivation.mergeResult(
+    *        ctx,
     *       pipeDerivation.pure(Array[Any](2)),
-    *       pipeDerivation.unlift(fooPipe, in.foo, pipeDerivation.updateContext(ctx, Path.root.field("foo")))
-    *     ) { (left, right) =>
-    *       left(0) = right
-    *       left
-    *     },
-    *     pipeDerivation.unlift(barPipe, in.bar, pipeDerivation.updateContext(ctx, Path.root.field("bar")))
-    *   ) { (left, right) =>
-    *     left(1) = right
-    *     new Out(
-    *       foo = left(0).asInstanceOf[Foo2],
-    *       bar = left(1).asInstanceOf[Bar2],
-    *     )
-    *   }
+    *       pipeDerivation.unlift(fooPipe, in.foo, pipeDerivation.updateContext(ctx, Path.root.field("foo"))),
+    *       { (left, right) =>
+    *         left(0) = right
+    *         left
+    *        }
+    *     ),
+    *     pipeDerivation.unlift(barPipe, in.bar, pipeDerivation.updateContext(ctx, Path.root.field("bar"))),
+    *     { (left, right) =>
+    *       left(1) = right
+    *       new Out(
+    *         foo = left(0).asInstanceOf[Foo2],
+    *         bar = left(1).asInstanceOf[Bar2],
+    *       )
+    *     }
+    *   )
     * }
     * }}}
     *
@@ -296,21 +300,25 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     * {{{
     * pipeDerivation.lift { (in: In, ctx: pipeDerivation.Context) =>
     *   pipeDerivation.mergeResult(
+    *     ctx,
     *     pipeDerivation.mergeResult(
+    *       ctx,
     *       pipeDerivation.pure {
     *         val result = new Out()
     *         result
     *       },
-    *       pipeDerivation.unlift(fooPipe, in.foo, pipeDerivation.updateContext(ctx, Path.root.field("foo")))
-    *     ) { (left, right) =>
-    *       left.setFoo(right)
+    *       pipeDerivation.unlift(fooPipe, in.foo, pipeDerivation.updateContext(ctx, Path.root.field("foo"))),
+    *       { (left, right) =>
+    *         left.setFoo(right)
+    *         left
+    *       }
+    *     ),
+    *     pipeDerivation.unlift(barPipe, in.bar, pipeDerivation.updateContext(ctx, Path.root.field("bar"))),
+    *     { (left, right) =>
+    *       left.setBar(right)
     *       left
-    *     },
-    *     pipeDerivation.unlift(barPipe, in.bar, pipeDerivation.updateContext(ctx, Path.root.field("bar")))
-    *   ) { (left, right) =>
-    *     left.setBar(right)
-    *     left
-    *   }
+    *     }
+    *   )
     * }
     * }}}
     */

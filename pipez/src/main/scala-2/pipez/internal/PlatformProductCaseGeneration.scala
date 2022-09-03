@@ -129,40 +129,40 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
   ) = {
-    val in  = c.freshName(TermName("in"))
-    val ctx = c.freshName(TermName("ctx"))
-
     val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Constant] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
       .zipWithIndex
       .map { case (result, idx) => result -> Constant(idx) }
       .toMap
 
-    def constructorParams(arr: TermName): List[List[CodeOf[?]]] = outputParameterLists.map(
-      _.map {
-        case ProductGeneratorData.OutputValue.Pure(_, caller) =>
-          caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"))
-        case r @ ProductGeneratorData.OutputValue.Result(tpe, _) =>
-          c.Expr(q"""$arr(${paramToIdx(r)}).asInstanceOf[$tpe]""")
-      }
-    )
+    def constructorParams(in: CodeOf[In], ctx: CodeOf[Context], arr: CodeOf[Array[Any]]): List[List[CodeOf[?]]] =
+      outputParameterLists.map(
+        _.map {
+          case ProductGeneratorData.OutputValue.Pure(_, caller) =>
+            caller(in, ctx)
+          case r @ ProductGeneratorData.OutputValue.Result(tpe, _) =>
+            c.Expr(q"""$arr(${paramToIdx(r)}).asInstanceOf[$tpe]""")
+        }
+      )
 
     val arrSize = Constant(paramToIdx.size)
     val initialValue: CodeOf[Result[Array[Any]]] = pureResult(c.Expr(q"scala.Array[scala.Any]($arrSize)"))
 
     @scala.annotation.tailrec
     def generateBody(
+      in:          CodeOf[In],
+      ctx:         CodeOf[Context],
       arrayResult: CodeOf[Result[Array[Any]]],
       params:      List[(ProductGeneratorData.OutputValue.Result[?], Constant)]
     ): CodeOf[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
         case Nil =>
-          pureResult(constructor(constructorParams(null)))
+          pureResult(constructor(constructorParams(in, ctx, null)))
 
         // last param - after adding the last value to array we extract all values from it into constructor
         case (param, idx) :: Nil =>
-          val rightCode = param.caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")).asInstanceOf[CodeOf[Result[Any]]]
+          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
@@ -170,16 +170,16 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             q"""
              ($left : scala.Array[scala.Any], $right : ${param.tpe}) => {
                $left($idx) = $right
-               ${constructor(constructorParams(left))}
+               ${constructor(constructorParams(in, ctx, c.Expr[Array[Any]](q"$left")))}
              }
              """
           )
 
-          mergeResults(arrayResult, rightCode, fun)
+          mergeResults(ctx, arrayResult, rightCode, fun)
 
         // we combine Array's Result with a param's Result, store param in array and iterate further
         case (param, idx) :: tail =>
-          val rightCode = param.caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")).asInstanceOf[CodeOf[Result[Any]]]
+          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
@@ -192,17 +192,21 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             """
           )
 
-          generateBody(mergeResults(arrayResult, rightCode, fun), tail)
+          generateBody(in, ctx, mergeResults(ctx, arrayResult, rightCode, fun), tail)
       }
 
-    val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
-      c.Expr[(In, Context) => Result[Out]](
-        q"""
-        ($in : $In, $ctx : $pipeDerivation.Context) =>
-          ${generateBody(initialValue, paramToIdx.toList)}
-        """
+    val body: CodeOf[Pipe[In, Out]] = {
+      val in  = c.freshName(TermName("in"))
+      val ctx = c.freshName(TermName("ctx"))
+      lift[In, Out](
+        c.Expr[(In, Context) => Result[Out]](
+          q"""
+          ($in : $In, $ctx : $pipeDerivation.Context) =>
+            ${generateBody(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"), initialValue, paramToIdx.toList)}
+          """
+        )
       )
-    )
+    }
 
     DerivationResult
       .pure(body)
@@ -214,36 +218,35 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     defaultConstructor: CodeOf[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
   ) = {
-    val in  = c.freshName(TermName("in"))
-    val ctx = c.freshName(TermName("ctx"))
-
-    val result = c.freshName(TermName("result"))
-    val pureValues: List[CodeOf[Unit]] = outputSettersList.collect {
-      case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
-        setter
-          .asInstanceOf[ProductOutData.Setter[Any]]
-          .set(c.Expr[Out](q"$result"), caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")))
-    }
+    def pureValues(in: CodeOf[In], ctx: CodeOf[Context], result: CodeOf[Out]): List[CodeOf[Unit]] =
+      outputSettersList.collect { case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
+        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx))
+      }
 
     val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =
       outputSettersList.collect { case (r: ProductGeneratorData.OutputValue.Result[?], s: ProductOutData.Setter[?]) =>
         r -> s
       }
 
-    val initialValue: CodeOf[Result[Out]] = pureResult(
-      c.Expr[Out](
-        q"""
-        {
-          val $result: $Out = $defaultConstructor
-          ..$pureValues
-          $result
-        }
-        """
+    def initialValue(in: CodeOf[In], ctx: CodeOf[Context]): CodeOf[Result[Out]] = {
+      val result = c.freshName(TermName("result"))
+      pureResult(
+        c.Expr[Out](
+          q"""
+          {
+            val $result: $Out = $defaultConstructor
+            ..${pureValues(in, ctx, c.Expr[Out](q"$result"))}
+            $result
+          }
+          """
+        )
       )
-    )
+    }
 
     @scala.annotation.tailrec
     def generateBody(
+      in:        CodeOf[In],
+      ctx:       CodeOf[Context],
       outResult: CodeOf[Result[Out]],
       params:    List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])]
     ): CodeOf[Result[Out]] =
@@ -254,7 +257,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
         // we have Out object on left and value to put into setter on right
         case (param, setter) :: tail =>
-          val rightCode = param.caller(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")).asInstanceOf[CodeOf[Result[Any]]]
+          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
 
           val left  = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
@@ -267,17 +270,25 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             """
           )
 
-          generateBody(mergeResults(outResult, rightCode, fun), tail)
+          generateBody(in, ctx, mergeResults(ctx, outResult, rightCode, fun), tail)
       }
 
-    val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
-      c.Expr[(In, Context) => Result[Out]](
-        q"""
-        ($in : $In, $ctx : $pipeDerivation.Context) =>
-          ${generateBody(initialValue, resultValues)}
-        """
+    val body: CodeOf[Pipe[In, Out]] = {
+      val in  = c.freshName(TermName("in"))
+      val ctx = c.freshName(TermName("ctx"))
+      lift[In, Out](
+        c.Expr[(In, Context) => Result[Out]](
+          q"""
+          ($in : $In, $ctx : $pipeDerivation.Context) =>
+            ${generateBody(c.Expr[In](q"$in"),
+                           c.Expr[Context](q"$ctx"),
+                           initialValue(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")),
+                           resultValues
+            )}
+          """
+        )
       )
-    )
+    }
 
     DerivationResult
       .pure(body)

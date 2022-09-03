@@ -173,7 +173,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               ${ constructor(constructorParams(in, ctx, '{ left })) }
             }
 
-          mergeResults[Array[Any], Any, Out](arrayResult, rightCode, fun)
+          mergeResults[Array[Any], Any, Out](ctx, arrayResult, rightCode, fun)
 
         // we combine Array's Result with a param's Result, store param in array and iterate further
         case (param, idx) :: tail =>
@@ -186,7 +186,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               left
             }
 
-          generateBody(in, ctx, mergeResults[Array[Any], Any, Array[Any]](arrayResult, rightCode, fun), tail)
+          generateBody(in, ctx, mergeResults[Array[Any], Any, Array[Any]](ctx, arrayResult, rightCode, fun), tail)
       }
 
     val body: CodeOf[Pipe[In, Out]] = lift[In, Out]('{ (in: In, ctx: Context) =>
@@ -245,7 +245,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               left
             }.asInstanceOf[CodeOf[(Out, Any) => Out]]
 
-          generateBody(in, ctx, mergeResults(outResult, rightCode, fun), tail)
+          generateBody(in, ctx, mergeResults(ctx, outResult, rightCode, fun), tail)
       }
 
     val body: CodeOf[Pipe[In, Out]] = lift[In, Out](

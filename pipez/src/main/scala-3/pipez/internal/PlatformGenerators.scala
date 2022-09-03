@@ -41,8 +41,9 @@ trait PlatformGenerators[Pipe[_, _], In, Out]
   final def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]] = '{ ${ pipeDerivation }.pureResult(${ a }) }
 
   final def mergeResults[A: Type, B: Type, C: Type](
-    ra: CodeOf[Result[A]],
-    rb: CodeOf[Result[B]],
-    f:  CodeOf[(A, B) => C]
-  ): CodeOf[Result[C]] = '{ ${ pipeDerivation }.mergeResults(${ ra }, ${ rb }, ${ f }) }
+    ctx: CodeOf[Context],
+    ra:  CodeOf[Result[A]],
+    rb:  CodeOf[Result[B]],
+    f:   CodeOf[(A, B) => C]
+  ): CodeOf[Result[C]] = '{ ${ pipeDerivation }.mergeResults(${ ctx }, ${ ra }, ${ rb }, ${ f }) }
 }

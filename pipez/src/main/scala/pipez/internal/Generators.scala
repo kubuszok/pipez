@@ -85,11 +85,12 @@ trait Generators[Pipe[_, _], In, Out]
   /** Should generate code `pipeDerivation.pureResult(a)` */
   def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]]
 
-  /** Should generate code `pipeDerivation.mergeResults(ra, rb) { (a, b) => ... }` */
+  /** Should generate code `pipeDerivation.mergeResults(ctx, ra, rb, (a, b) => ...)` */
   def mergeResults[A: Type, B: Type, C: Type](
-    ra: CodeOf[Result[A]],
-    rb: CodeOf[Result[B]],
-    f:  CodeOf[(A, B) => C]
+    context: CodeOf[Context],
+    ra:      CodeOf[Result[A]],
+    rb:      CodeOf[Result[B]],
+    f:       CodeOf[(A, B) => C]
   ): CodeOf[Result[C]]
 
   private def derive(configurationCode: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): CodeOf[Pipe[In, Out]] = {

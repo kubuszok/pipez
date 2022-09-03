@@ -3,6 +3,7 @@ package pipez.internal
 import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.{ nowarn, unused }
+import scala.util.chaining.*
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
@@ -47,29 +48,31 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     generateSubtypes(generatorData.subtypes.values.toList)
 
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
-    val in  = c.freshName(TermName("in"))
-    val ctx = c.freshName(TermName("ctx"))
+    def cases(in: CodeOf[In], ctx: CodeOf[Context]) = subtypes
+      .map {
+        case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
+          val arg  = c.freshName(TermName("arg"))
+          val code = unlift(pipe, c.Expr[In](q"$arg"), updateContext(ctx, pathCode(path)))
+          cq"""$arg : $inSubtype => $code.asInstanceOf[$pipeDerivation.Result[$Out]]"""
+        case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
+          val arg  = c.freshName(TermName("arg"))
+          val code = unlift(pipe, c.Expr[In](q"$arg"), updateContext(ctx, pathCode(path)))
+          cq"""$arg : $inSubtype => $code"""
+      }
+      .pipe(c => q"$in match { case ..$c }")
+      .pipe(c.Expr[Out](_))
 
-    def ctxE(path: Path) = updateContext(c.Expr[Context](q"$ctx"), pathCode(path))
-
-    val cases = subtypes.map {
-      case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
-        val arg  = c.freshName(TermName("arg"))
-        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE(path))
-        cq"""$arg : ${inSubtype.typeSymbol} => $code.asInstanceOf[$pipeDerivation.Result[${Out.typeSymbol}]]"""
-      case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
-        val arg  = c.freshName(TermName("arg"))
-        val code = unlift(pipe, c.Expr[In](q"$arg"), ctxE(path))
-        cq"""$arg : ${inSubtype.typeSymbol} => $code"""
-    }
-
-    val body = lift[In, Out](
-      c.Expr[(In, Context) => Result[Out]](
-        q"""
-        ($in : ${In.typeSymbol}, $ctx : $pipeDerivation.Context) => $in match { case ..$cases }
-        """
+    val body = {
+      val in  = c.freshName(TermName("in"))
+      val ctx = c.freshName(TermName("ctx"))
+      lift[In, Out](
+        c.Expr[(In, Context) => Result[Out]](
+          q"""
+          ($in : $In, $ctx : $pipeDerivation.Context) => ${cases(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"))}
+          """
+        )
       )
-    )
+    }
 
     DerivationResult
       .pure(body)

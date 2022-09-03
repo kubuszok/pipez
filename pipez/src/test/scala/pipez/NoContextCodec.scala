@@ -20,7 +20,7 @@ object NoContextCodec extends PipeSemiautoSupport[NoContextCodec] with PipeSemia
 
     override def pureResult[A](a: A): Either[List[String], A] = Right(a)
 
-    override def mergeResults[A, B, C](
+    override def simpleMergeResults[A, B, C](
       ra: Either[List[String], A],
       rb: => Either[List[String], B],
       f:  (A, B) => C

@@ -8,6 +8,30 @@ Library oriented about deriving (generating by type) functions:
 
 as well as all type classes that could be converted to/from such functions.
 
+Example:
+
+```scala
+// When turning Foo to Bar, field a has to be converted and field b can be copied
+case class Foo(a: Double, b: Int)
+case class Bar(a: String, b: Int)
+
+// How to convert Double to String in the world of _ => _
+implicit val doubleToString1: Double => String = _.toString
+// _ => _ works out of the box:
+val derived1: Foo => Bar = PipeDerivation.derive[_ => _, Foo, Bar]
+println(derived1(Foo(1.0, 2)))
+
+case class Ctx(doubleFormat: String)
+// How to convert Double to String in the world of (_, Ctx) => _
+implicit val doubleToString1: (Double, Ctx) => String = (d, ctx) => ctx.doubleFormat.format(d)
+// (_, Ctx) => _ requires a bit of help:
+implicit val ctxDerivation: PipeDerivation[(_, Ctx) => _] = PipeDerivation.contextFunction[Ctx]()
+val derived2: (Foo, Ctx) => Bar = PipeDerivation.derive[(_, Ctx) => _, Foo, Bar]
+println(derived2(Foo(1.0, 2), Ctx("%.2f")))
+
+// Derivation of type classes or functions returning F[Out] require writing PipeDerivation instance
+```
+
 ## Motivation
 
 Idea for Pipez was born as a side effect of research about possible ways of migrating
@@ -67,7 +91,7 @@ trait Codec[A, B] {
 }
 
 implicit val codecDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] {
-  type Contex = Unit
+  type Context = Unit
   type Result[A] = Either[String, A]
   // these 2 assume that you can always convert function to type class and you can always
   // call the type class providing argument for the function that created it
@@ -76,7 +100,7 @@ implicit val codecDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] 
   // will be used when the value can be created without any conversion
   def pure[A](a: A): Result[A] = Right(a)
   // here we decided to implement map2 logic
-  def mergeResult[A, B, C](ctx Context, fa: Result[A], fb: => Result[B], (A, B) => C): Result[C] =
+  def mergeResult[A, B, C](ctx: Context, fa: Result[A], fb: => Result[B], f: (A, B) => C): Result[C] =
     for { a <- fa; b <- fb } yield f(a, b)
   // can be used to update Context with Field/Subtype information before passing it into codec
   def updateContext(context: Context, path: Path) = context
@@ -92,7 +116,7 @@ their name:
 case class In(a: Int, b: Double)
 case class Out(a: Int, b: String)
 
-implicit val doubleToString: Codec[Double, String] = ...
+implicit val doubleToString: Codec[Double, String] = d => Right(d.toString)
 
 PipeDerivation.derive[Codec, In, Out]
 ```

@@ -6,7 +6,6 @@ import scala.collection.immutable.ListMap
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
-@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
@@ -67,7 +66,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             method.name -> ProductOutData.Setter[Any](
               name = method.name.toString,
               tpe = {
-                val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(method)
+                val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(method): @unchecked
                 tpe.asType.asInstanceOf[Type[Any]]
               },
               set = (out: CodeOf[Out], value: CodeOf[Any]) =>
@@ -104,7 +103,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
               .asExpr
               .asExprOf[Out],
           sym.primaryConstructor.paramSymss.map { params =>
-            val MethodType(names, types, _) = TypeRepr.of[Out].memberType(sym.primaryConstructor)
+            val MethodType(names, types, _) = TypeRepr.of[Out].memberType(sym.primaryConstructor): @unchecked
             val typeByName                  = names.zip(types).toMap
             params
               .map { param =>

@@ -6,7 +6,6 @@ import scala.annotation.unused
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
-@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 

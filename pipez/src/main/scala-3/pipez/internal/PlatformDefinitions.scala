@@ -7,7 +7,6 @@ import scala.annotation.{ nowarn, unused }
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
-@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends Definitions[Pipe, In, Out] {
 
   import quotes.*

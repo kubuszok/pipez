@@ -4,7 +4,7 @@ import pipez.{ PipeDerivation, PipeDerivationConfig }
 import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.nowarn
-import scala.reflect.macros.blackbox
+import scala.reflect.macros.{ TypecheckException, blackbox }
 
 // The way we are dispatching things here is one giant workaround for https://github.com/scala/bug/issues/5712
 
@@ -51,15 +51,24 @@ final class Macro(val c: blackbox.Context) {
 
   // I messed up something with the types of generated Trees - shape is almost identical to the last working version
   // before I started working on Scala 3 and making adjustments, but without this, it produces "type mismatch error".
-  private def fixTypes[Out](expr: blackbox.Context#Expr[Out]): c.Expr[Out] =
+  private def fixTypes[Pipe[_, _]: ConstructorWeakTypeTag, Out](
+    expr:           blackbox.Context#Expr[Out],
+    pipeDerivation: c.Expr[PipeDerivation[Pipe]]
+  ): c.Expr[Out] = try
     c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree.asInstanceOf[c.Tree])))
+  catch {
+    case TypecheckException(_, msg) if msg.startsWith("stable identifier required") =>
+      val tc = c.weakTypeOf[Pipe[Any, Nothing]].typeConstructor
+      val pd = showCode(pipeDerivation.tree)
+      c.abort(c.enclosingPosition, s"Macro requires the implicit PipeDerivation[$tc] to be a stable val, given $pd")
+  }
 
   /** Called with `macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]` */
   def deriveDefault[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
-    fixTypes(m.deriveDefault)
+    fixTypes(m.deriveDefault, pipeDerivation)
   }
 
   /** Called with `macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]` */
@@ -69,6 +78,6 @@ final class Macro(val c: blackbox.Context) {
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
-    fixTypes(m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]))
+    fixTypes(m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]), pipeDerivation)
   }
 }

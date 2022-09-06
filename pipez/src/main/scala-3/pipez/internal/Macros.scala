@@ -12,7 +12,6 @@ object Foo {
   case object Bar
 }
 
-@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
   pd:                                    Expr[PipeDerivation[Pipe]],
   override val Pipe:                     scala.quoted.Type[Pipe],
@@ -42,12 +41,11 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
   }
   implicit override val Result: scala.quoted.Type[Result] = {
     given p: scala.quoted.Type[Pipe] = Pipe
-    val AppliedType(tpe, _) = '{ ${ pd }.pureResult(1) }.asTerm.tpe
+    val AppliedType(tpe, _) = '{ ${ pd }.pureResult(1) }.asTerm.tpe: @unchecked
     tpe.asType.asInstanceOf[scala.quoted.Type[Result]]
   }
 }
 
-@scala.annotation.experimental // due to Quotes.reflect.Symbol.typeRef usage
 object Macros {
 
   import scala.quoted.Type

@@ -6,25 +6,26 @@ Library oriented about deriving (generating by type) functions:
 * `(In, Ctx) => Out`
 * `(In, Ctx) => F[Out]`
 
-as well as all type classes that could be converted to/from such functions.
+as well as all type classes that could be converted to/from such functions, so that all the boring
+part of converting type on input to the very similar type on output could be automatically generated.
 
-Example:
+**Example**:
 
 ```scala
 // When turning Foo to Bar, field a has to be converted and field b can be copied
 case class Foo(a: Double, b: Int)
 case class Bar(a: String, b: Int)
 
-// How to convert Double to String in the world of _ => _
+// How to convert Double to String in the world of _ => _ (Function1):
 implicit val doubleToString1: Double => String = _.toString
 // _ => _ works out of the box:
 val derived1: Foo => Bar = PipeDerivation.derive[_ => _, Foo, Bar]
 println(derived1(Foo(1.0, 2)))
 
 case class Ctx(doubleFormat: String)
-// How to convert Double to String in the world of (_, Ctx) => _
+// How to convert Double to String in the world of (_, Ctx) => _ (Function2[_, Ctx, _]):
 implicit val doubleToString1: (Double, Ctx) => String = (d, ctx) => ctx.doubleFormat.format(d)
-// (_, Ctx) => _ requires a bit of help... (in Scala 2, in Scala 3 it works OOTB as well):
+// (_, Ctx) => _ requires a bit of help... in Scala 2, in Scala 3 it works OOTB as well:
 implicit val ctxDerivation: PipeDerivation[(_, Ctx) => _] = PipeDerivation.contextFunction[Ctx]()
 val derived2: (Foo, Ctx) => Bar = PipeDerivation.derive[(_, Ctx) => _, Foo, Bar]
 println(derived2(Foo(1.0, 2), Ctx("%.2f")))

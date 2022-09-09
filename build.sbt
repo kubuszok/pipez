@@ -35,12 +35,14 @@ val testCases = project
   .settings(
     name := "testcases",
     scalaVersion := scala2version,
+    crossScalaVersions := Seq(scala2version),
     scalacOptions ++= Seq("-deprecation", "-feature", "-Xsource:3")
   )
   .settings(noPublishSettings)
 
 val pipez = project
   .in(file("pipez"))
+  .enablePlugins(GitVersioning)
   .settings(
     name := "pipez",
     organization := "com.kubuszok",
@@ -69,7 +71,15 @@ val pipez = project
   .settings(publishSettings)
   .dependsOn(testCases % "test->compile")
 
-val root = project.in(file(".")).settings(name := "pipez-build").aggregate(pipez)
+val root = project
+  .in(file("."))
+  .enablePlugins(GitVersioning)
+  .settings(
+    name := "pipez-build",
+    crossScalaVersions := Seq(scala2version, scala3version)
+  )
+  .settings(noPublishSettings)
+  .aggregate(pipez)
 
 addCommandAlias("use-213", s"++ $scala2version")
 addCommandAlias("use-3", s"++ $scala3version")

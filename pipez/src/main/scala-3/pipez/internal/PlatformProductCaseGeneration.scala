@@ -84,7 +84,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       ProductOutData
         .CaseClass(
-          params => Ref(TypeRepr.of[Out].termSymbol).asExpr.asExprOf[Out],
+          params => Ref(TypeRepr.of[Out].typeSymbol.companionModule).asExpr.asExprOf[Out],
           List.empty
         )
         .pipe(DerivationResult.pure(_))

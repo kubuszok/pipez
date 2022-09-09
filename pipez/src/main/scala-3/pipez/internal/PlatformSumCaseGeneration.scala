@@ -25,7 +25,7 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
   private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
     def extractSubclasses(sym: Symbol): List[Symbol] =
       if (sym.flags.is(Flags.Sealed)) sym.children.flatMap(extractSubclasses)
-      else if (sym.flags.is(Flags.Module)) List(sym.companionModule)
+      else if (sym.flags.is(Flags.Module)) List(sym.companionModule.moduleClass)
       else List(sym)
 
     DerivationResult.unsafe[EnumData[A]](

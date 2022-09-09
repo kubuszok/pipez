@@ -78,6 +78,7 @@ val root = project
     name := "pipez-build",
     crossScalaVersions := Seq(scala2version, scala3version)
   )
+  .settings(publishSettings)
   .settings(noPublishSettings)
   .aggregate(pipez)
 

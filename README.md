@@ -1,5 +1,10 @@
 # Pipez
 
+![CI build](https://github.com/MateuszKubuszok/pipez/workflows/CI%20build/badge.svg)
+[![Maven Central](https://img.shields.io/maven-central/v/com.kubuszok/pipez_2.13.svg)](http://search.maven.org/#search%7Cga%7C1%7Cpipez)
+[![Javadoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/javadoc.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
+[![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
+
 Library oriented about deriving (generating by type) functions:
 * `In => Out`
 * `In => F[Out]`
@@ -12,9 +17,16 @@ part of converting type on input to the very similar type on output could be aut
 **Example**:
 
 ```scala
+// add in sbt, released for 2.13.8 and 3.2.0
+libraryDependencies += "com.kubuszok" %% "pipez" % "<version>"
+```
+
+```scala
 // When turning Foo to Bar, field a has to be converted and field b can be copied
 case class Foo(a: Double, b: Int)
 case class Bar(a: String, b: Int)
+
+import pipez.*
 
 // How to convert Double to String in the world of _ => _ (Function1):
 implicit val doubleToString1: Double => String = _.toString

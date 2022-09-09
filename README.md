@@ -1,8 +1,8 @@
 # Pipez
 
 ![CI build](https://github.com/MateuszKubuszok/pipez/workflows/CI%20build/badge.svg)
-[![Maven Central](https://img.shields.io/maven-central/v/com.kubuszok/pipez_2.13.svg)](http://search.maven.org/#search%7Cga%7C1%7Cpipez)
-[![Javadoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/javadoc.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
+[![Maven Central](https://img.shields.io/maven-central/v/com.kubuszok/pipez_2.13.svg)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
+[![Javadoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
 [![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 Library oriented about deriving (generating by type) functions:

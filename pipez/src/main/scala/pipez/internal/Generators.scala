@@ -16,7 +16,7 @@ trait Generators[Pipe[_, _], In, Out]
   def isSubtype[A: Type, B: Type]: Boolean
 
   /** Takes `Settings` and passes them to generators, the first which decides it's their case, attempt generation */
-  final val resolveConversion: Settings => DerivationResult[CodeOf[Pipe[In, Out]]] = {
+  final val resolveConversion: Settings => DerivationResult[Expr[Pipe[In, Out]]] = {
     case ProductTypeConversion(generatedCode) => generatedCode
     case SumTypeConversion(generatedCode)     => generatedCode
     case _ =>
@@ -66,34 +66,34 @@ trait Generators[Pipe[_, _], In, Out]
 
   /** Should generate code `pipeDerivation.lift { (in, ctx) => ... }` */
   def lift[I: Type, O: Type](
-    call: CodeOf[(I, Context) => Result[O]]
-  ): CodeOf[Pipe[I, O]]
+    call: Expr[(I, Context) => Result[O]]
+  ): Expr[Pipe[I, O]]
 
   /** Should generate code `pipeDerivation.unlift(pipe)(in, ctx)` */
   def unlift[I: Type, O: Type](
-    pipe: CodeOf[Pipe[I, O]],
-    in:   CodeOf[I],
-    ctx:  CodeOf[Context]
-  ): CodeOf[Result[O]]
+    pipe: Expr[Pipe[I, O]],
+    in:   Expr[I],
+    ctx:  Expr[Context]
+  ): Expr[Result[O]]
 
   /** Should generate code `pipeDerivation.updateContext(ctx, path)` */
   def updateContext(
-    context: CodeOf[Context],
-    path:    CodeOf[pipez.Path]
-  ): CodeOf[Context]
+    context: Expr[Context],
+    path:    Expr[pipez.Path]
+  ): Expr[Context]
 
   /** Should generate code `pipeDerivation.pureResult(a)` */
-  def pureResult[A: Type](a: CodeOf[A]): CodeOf[Result[A]]
+  def pureResult[A: Type](a: Expr[A]): Expr[Result[A]]
 
   /** Should generate code `pipeDerivation.mergeResults(ctx, ra, rb, (a, b) => ...)` */
   def mergeResults[A: Type, B: Type, C: Type](
-    context: CodeOf[Context],
-    ra:      CodeOf[Result[A]],
-    rb:      CodeOf[Result[B]],
-    f:       CodeOf[(A, B) => C]
-  ): CodeOf[Result[C]]
+    context: Expr[Context],
+    ra:      Expr[Result[A]],
+    rb:      Expr[Result[B]],
+    f:       Expr[(A, B) => C]
+  ): Expr[Result[C]]
 
-  private def derive(configurationCode: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): CodeOf[Pipe[In, Out]] = {
+  private def derive(configurationCode: Option[Expr[PipeDerivationConfig[Pipe, In, Out]]]): Expr[Pipe[In, Out]] = {
     var isDiagnosticsEnabled = false
     readSettingsIfGiven(configurationCode)
       .flatMap { config =>
@@ -118,9 +118,9 @@ trait Generators[Pipe[_, _], In, Out]
   }
 
   /** Derives using default `Settings` */
-  final def deriveDefault: CodeOf[Pipe[In, Out]] = derive(None)
+  final def deriveDefault: Expr[Pipe[In, Out]] = derive(None)
 
   /** Derives using `Settings` parsed from `PipeDerivationConfig[Pipe, In, Out]` expression */
-  final def deriveConfigured(configurationCode: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): CodeOf[Pipe[In, Out]] =
+  final def deriveConfigured(configurationCode: Expr[PipeDerivationConfig[Pipe, In, Out]]): Expr[Pipe[In, Out]] =
     derive(Some(configurationCode))
 }

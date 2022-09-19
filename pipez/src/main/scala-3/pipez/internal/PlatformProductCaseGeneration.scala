@@ -36,8 +36,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         name = method.name.toString,
         tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
         get =
-          if (method.paramSymss.isEmpty) (in: CodeOf[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
-          else (in: CodeOf[In]) => in.asTerm.select(method).appliedToNone.asExpr,
+          if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
+          else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
         path = Path.Field(Path.Root, method.name.toString)
       )
     }.to(ListMap)
@@ -69,7 +69,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
                 val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(method): @unchecked
                 tpe.asType.asInstanceOf[Type[Any]]
               },
-              set = (out: CodeOf[Out], value: CodeOf[Any]) =>
+              set = (out: Expr[Out], value: Expr[Any]) =>
                 out.asTerm.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
             )
         }
@@ -119,7 +119,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         .logSuccess(data => s"Resolved case class output: $data")
     }
 
-  final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
+  final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[Expr[Pipe[In, Out]]] =
     generatorData match {
       case ProductGeneratorData.CaseClass(constructor, results)       => generateCaseClass(constructor, results)
       case ProductGeneratorData.JavaBean(defaultConstructor, results) => generateJavaBean(defaultConstructor, results)
@@ -129,13 +129,13 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
   ) = {
-    val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], CodeOf[Int]] = outputParameterLists.flatten
+    val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Expr[Int]] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
       .zipWithIndex
       .map { case (result, idx) => result -> Literal(IntConstant(idx)).asExpr.asExprOf[Int] }
       .toMap
 
-    def constructorParams(in: CodeOf[In], ctx: CodeOf[Context], arr: CodeOf[Array[Any]]): List[List[CodeOf[?]]] =
+    def constructorParams(in: Expr[In], ctx: Expr[Context], arr: Expr[Array[Any]]): List[List[Expr[?]]] =
       outputParameterLists.map(
         _.map {
           case ProductGeneratorData.OutputValue.Pure(_, caller) =>
@@ -147,15 +147,15 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       )
 
     val arrSize = Literal(IntConstant(paramToIdx.size)).asExpr.asExprOf[Int]
-    val initialValue: CodeOf[Result[Array[Any]]] = pureResult('{ scala.Array[scala.Any]($arrSize) })
+    val initialValue: Expr[Result[Array[Any]]] = pureResult('{ scala.Array[scala.Any]($arrSize) })
 
     @scala.annotation.tailrec
     def generateBody(
-      in:          CodeOf[In],
-      ctx:         CodeOf[Context],
-      arrayResult: CodeOf[Result[Array[Any]]],
-      params:      List[(ProductGeneratorData.OutputValue.Result[?], CodeOf[Int])]
-    ): CodeOf[Result[Out]] =
+      in:          Expr[In],
+      ctx:         Expr[Context],
+      arrayResult: Expr[Result[Array[Any]]],
+      params:      List[(ProductGeneratorData.OutputValue.Result[?], Expr[Int])]
+    ): Expr[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
         case Nil =>
@@ -163,10 +163,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
         // last param - after adding the last value to array we extract all values from it into constructor
         case (param, idx) :: Nil =>
-          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
+          val rightCode = param.caller(in, ctx).asInstanceOf[Expr[Result[Any]]]
           implicit val rightType: Type[Any] = param.tpe.asInstanceOf[Type[Any]]
 
-          val fun: CodeOf[(Array[Any], Any) => Out] =
+          val fun: Expr[(Array[Any], Any) => Out] =
             '{ (left: Array[Any], right: rightType.Underlying) =>
               left($idx) = right
               ${ constructor(constructorParams(in, ctx, '{ left })) }
@@ -176,10 +176,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
         // we combine Array's Result with a param's Result, store param in array and iterate further
         case (param, idx) :: tail =>
-          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Any]]]
+          val rightCode = param.caller(in, ctx).asInstanceOf[Expr[Result[Any]]]
           implicit val rightType: Type[Any] = param.tpe.asInstanceOf[Type[Any]]
 
-          val fun: CodeOf[(Array[Any], Any) => Array[Any]] =
+          val fun: Expr[(Array[Any], Any) => Array[Any]] =
             '{ (left: Array[Any], right: rightType.Underlying) =>
               left($idx) = right
               left
@@ -188,7 +188,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           generateBody(in, ctx, mergeResults[Array[Any], Any, Array[Any]](ctx, arrayResult, rightCode, fun), tail)
       }
 
-    val body: CodeOf[Pipe[In, Out]] = lift[In, Out]('{ (in: In, ctx: Context) =>
+    val body: Expr[Pipe[In, Out]] = lift[In, Out]('{ (in: In, ctx: Context) =>
       ${ generateBody('{ in }, '{ ctx }, initialValue, paramToIdx.toList) }
     })
 
@@ -199,12 +199,12 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   }
 
   private def generateJavaBean(
-    defaultConstructor: CodeOf[Out],
+    defaultConstructor: Expr[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
   ) = {
-    def pureValues(in: CodeOf[In], ctx: CodeOf[Context], result: CodeOf[Out]): List[CodeOf[Unit]] =
+    def pureValues(in: Expr[In], ctx: Expr[Context], result: Expr[Out]): List[Expr[Unit]] =
       outputSettersList.collect { case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
-        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx).asInstanceOf[CodeOf[Unit]])
+        setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx).asInstanceOf[Expr[Unit]])
       }
 
     val resultValues: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])] =
@@ -212,21 +212,21 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         r -> s
       }
 
-    def initialValue(in: CodeOf[In], ctx: CodeOf[Context]): CodeOf[Result[Out]] = pureResult(
+    def initialValue(in: Expr[In], ctx: Expr[Context]): Expr[Result[Out]] = pureResult(
       '{
         val result: Out = ${ defaultConstructor }
-        ${ pureValues(in, ctx, '{ result }).fold[CodeOf[Unit]]('{ () })((a, b) => '{ ${ a }; ${ b } }) }
+        ${ pureValues(in, ctx, '{ result }).fold[Expr[Unit]]('{ () })((a, b) => '{ ${ a }; ${ b } }) }
         result
       }
     )
 
     @scala.annotation.tailrec
     def generateBody(
-      in:        CodeOf[In],
-      ctx:       CodeOf[Context],
-      outResult: CodeOf[Result[Out]],
+      in:        Expr[In],
+      ctx:       Expr[Context],
+      outResult: Expr[Result[Out]],
       params:    List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])]
-    ): CodeOf[Result[Out]] =
+    ): Expr[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
         case Nil =>
@@ -235,19 +235,19 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         // we have Out object on left and value to put into setter on right
         case (param, setter) :: tail =>
           type Right
-          val rightCode = param.caller(in, ctx).asInstanceOf[CodeOf[Result[Right]]]
+          val rightCode = param.caller(in, ctx).asInstanceOf[Expr[Result[Right]]]
           implicit val paramTpe: Type[Right] = param.tpe.asInstanceOf[Type[Right]]
 
-          val fun: CodeOf[(Out, Any) => Out] =
+          val fun: Expr[(Out, Any) => Out] =
             '{ (left: Out, right: paramTpe.Underlying) =>
               ${ setter.asInstanceOf[ProductOutData.Setter[Right]].set('{ left }, '{ right }) }
               left
-            }.asInstanceOf[CodeOf[(Out, Any) => Out]]
+            }.asInstanceOf[Expr[(Out, Any) => Out]]
 
           generateBody(in, ctx, mergeResults(ctx, outResult, rightCode, fun), tail)
       }
 
-    val body: CodeOf[Pipe[In, Out]] = lift[In, Out](
+    val body: Expr[Pipe[In, Out]] = lift[In, Out](
       '{ (in: In, ctx: Context) =>
         ${ generateBody('{ in }, '{ ctx }, initialValue('{ in }, '{ ctx }), resultValues) }
       }

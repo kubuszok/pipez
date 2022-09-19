@@ -26,7 +26,7 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
   def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] =
     TypeRepr.of(using Pipe).appliedTo(List(TypeRepr.of[I], TypeRepr.of[O])).asType.asInstanceOf[Type[Pipe[I, O]]]
 
-  val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Context, Result]] = {
+  val pipeDerivation: Expr[PipeDerivation.Aux[Pipe, Context, Result]] = {
     given p: scala.quoted.Type[Pipe] = Pipe
     '{ ${ pd }.asInstanceOf[PipeDerivation.Aux[Pipe, Context, Result]] }
   }

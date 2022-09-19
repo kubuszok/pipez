@@ -2,7 +2,7 @@ package pipez
 
 import scala.language.experimental.macros
 
-trait PipeDerivationPlatform { self: PipeDerivation.type =>
+private[pipez] trait PipeDerivationPlatform { self: PipeDerivation.type =>
 
   def derive[Pipe[_, _], In, Out](implicit
     pipeDerivation: PipeDerivation[Pipe]

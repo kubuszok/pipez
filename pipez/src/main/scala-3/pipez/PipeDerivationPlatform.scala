@@ -1,6 +1,6 @@
 package pipez
 
-trait PipeDerivationPlatform { self: PipeDerivation.type =>
+protected[pipez] trait PipeDerivationPlatform { self: PipeDerivation.type =>
 
   inline def derive[Pipe[_, _], In, Out](using
     pipeDerivation: PipeDerivation[Pipe]

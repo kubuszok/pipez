@@ -1,11 +1,16 @@
 package pipez
 
-sealed abstract class Path(show: String) extends Product with Serializable {
+/** Represents path to the value from the object that was passed into `Pipe` to the parsed field.
+  *
+  * You can use it in `pipeDerivation.updateContext(context, path)` definition, so that before parsing of value
+  * `Context` would be enriched with an information how this value was obtained.
+  *
+  * It allows generating error messages with information where parsing failed.
+  */
+sealed abstract class Path(override val toString: String) extends Product with Serializable {
 
   final def field(name: String):   Path = Path.Field(this, name)
   final def subtype(name: String): Path = Path.Subtype(this, name)
-
-  override lazy val toString = show
 }
 object Path {
 

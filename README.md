@@ -37,8 +37,7 @@ println(derived1(Foo(1.0, 2)))
 case class Ctx(doubleFormat: String)
 // How to convert Double to String in the world of (_, Ctx) => _ (Function2[_, Ctx, _]):
 implicit val doubleToString1: (Double, Ctx) => String = (d, ctx) => ctx.doubleFormat.format(d)
-// (_, Ctx) => _ requires a bit of help... in Scala 2, in Scala 3 it works OOTB as well:
-implicit val ctxDerivation: PipeDerivation[(_, Ctx) => _] = PipeDerivation.contextFunction[Ctx]()
+// (_, Ctx) => _ works OOTB as well:
 val derived2: (Foo, Ctx) => Bar = PipeDerivation.derive[(_, Ctx) => _, Foo, Bar]
 println(derived2(Foo(1.0, 2), Ctx("%.2f")))
 

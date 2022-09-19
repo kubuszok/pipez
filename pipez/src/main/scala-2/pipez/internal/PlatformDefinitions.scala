@@ -174,8 +174,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
   // Scala 2-macro specific instances
 
-  implicit val AnyT:     Type[Any]        = tq"_root_.scala.Any".asInstanceOf[Type[Any]]
-  implicit val ArrayAny: Type[Array[Any]] = tq"_root_.scala.Array[_root_.scala.Any]".asInstanceOf[Type[Array[Any]]]
-  def Context         = tq"$pipeDerivation.Context"
-  def Result[A: Type] = tq"$pipeDerivation.Result[${typeOf[A].typeSymbol}]"
+  implicit val AnyT:     Type[Any]        = c.weakTypeOf[Any].asInstanceOf[Type[Any]]
+  implicit val ArrayAny: Type[Array[Any]] = c.weakTypeOf[Array[Any]].asInstanceOf[Type[Array[Any]]]
+  def Context:           Type[Context]    = c.weakTypeOf[Context].asInstanceOf[Type[Context]]
+  def Result[A: Type]: Type[Result[A]] =
+    c.universe.appliedType(c.weakTypeOf[Result[Unit]].typeConstructor, typeOf[A]).asInstanceOf[Type[Result[A]]]
 }

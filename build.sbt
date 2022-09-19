@@ -34,6 +34,7 @@ val testCases = project
   .in(file("testcases"))
   .settings(
     name := "testcases",
+    organization := "com.kubuszok",
     scalaVersion := scala2version,
     crossScalaVersions := Seq(scala2version),
     scalacOptions ++= Seq("-deprecation", "-feature", "-Xsource:3")
@@ -76,6 +77,7 @@ val root = project
   .enablePlugins(GitVersioning)
   .settings(
     name := "pipez-build",
+    organization := "com.kubuszok",
     crossScalaVersions := Seq(scala2version, scala3version)
   )
   .settings(publishSettings)

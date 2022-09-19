@@ -53,7 +53,7 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
         case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
           val arg  = c.freshName(TermName("arg"))
           val code = unlift(pipe, c.Expr[In](q"$arg"), updateContext(ctx, pathCode(path)))
-          cq"""$arg : $inSubtype => $code.asInstanceOf[$pipeDerivation.Result[$Out]]"""
+          cq"""$arg : $inSubtype => $code.asInstanceOf[${Result[Out]}]"""
         case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
           val arg  = c.freshName(TermName("arg"))
           val code = unlift(pipe, c.Expr[In](q"$arg"), updateContext(ctx, pathCode(path)))
@@ -68,7 +68,7 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
       lift[In, Out](
         c.Expr[(In, Context) => Result[Out]](
           q"""
-          ($in : $In, $ctx : $pipeDerivation.Context) => ${cases(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"))}
+          ($in : $In, $ctx : $Context) => ${cases(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"))}
           """
         )
       )

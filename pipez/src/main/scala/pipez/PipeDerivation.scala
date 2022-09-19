@@ -99,4 +99,7 @@ object PipeDerivation extends PipeDerivationPlatform {
     override def unlift[In, Out](pipe: (In, Ctx) => Out, in: In, ctx: Context): Out              = pipe(in, ctx)
     override def updateContext(context: Context, path: Path): Context = contextUpdate(context, path)
   }
+
+  /** Default instance for `(In, Ctx) => Out` with `Ctx` passed around without updating */
+  implicit def contextFunction[Ctx]: PipeDerivation[(_, Ctx) => _] = contextFunction[Ctx]()
 }

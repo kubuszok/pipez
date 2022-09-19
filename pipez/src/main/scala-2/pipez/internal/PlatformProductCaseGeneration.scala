@@ -201,7 +201,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       lift[In, Out](
         c.Expr[(In, Context) => Result[Out]](
           q"""
-          ($in : $In, $ctx : $pipeDerivation.Context) =>
+          ($in : $In, $ctx : $Context) =>
             ${generateBody(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx"), initialValue, paramToIdx.toList)}
           """
         )
@@ -279,7 +279,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       lift[In, Out](
         c.Expr[(In, Context) => Result[Out]](
           q"""
-          ($in : $In, $ctx : $pipeDerivation.Context) =>
+          ($in : $In, $ctx : $Context) =>
             ${generateBody(c.Expr[In](q"$in"),
                            c.Expr[Context](q"$ctx"),
                            initialValue(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")),

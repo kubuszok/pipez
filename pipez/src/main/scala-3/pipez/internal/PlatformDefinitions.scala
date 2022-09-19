@@ -12,32 +12,32 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
   import quotes.*
   import quotes.reflect.*
 
-  override type Type[A]   = scala.quoted.Type[A]
-  override type CodeOf[A] = Expr[A]
+  override type Type[A] = scala.quoted.Type[A]
+  override type Expr[A] = scala.quoted.Expr[A]
 
   final def previewType[A: Type]: String =
     val repr = TypeRepr.of[A]
     scala.util.Try(repr.show).getOrElse(repr.toString)
 
-  final def previewCode[A](code: CodeOf[A]): String = code.show
+  final def previewCode[A](code: Expr[A]): String = code.show
 
-  final def pathCode(path: Path): CodeOf[pipez.Path] = path match
+  final def pathCode(path: Path): Expr[pipez.Path] = path match
     case Path.Root                => '{ pipez.Path.root }
     case Path.Field(from, name)   => '{ ${ pathCode(from) }.field(${ Expr(name) }) }
     case Path.Subtype(from, name) => '{ ${ pathCode(from) }.subtype(${ Expr(name) }) }
 
-  final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
+  final def summonPipe[Input: Type, Output: Type]: DerivationResult[Expr[Pipe[Input, Output]]] =
     DerivationResult
       .fromOption(scala.quoted.Expr.summon[Pipe[Input, Output]])(
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
 
-  final def singleAbstractMethodExpansion[SAM: Type](code: CodeOf[SAM]): CodeOf[SAM] =
+  final def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM] =
     val SAM = typeOf[SAM]
     '{ scala.Predef.identity[SAM.Underlying](${ code }) }
 
-  final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
+  final def readConfig(code: Expr[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
     def extractPath(in: Tree): Either[String, Path] = in match {
       case Block(List(DefDef(_, _, _, Some(term))), _) => extractPath(term)
       case Select(term, field)                         => extractPath(term).map(Path.Field(_, field)) // extract .field
@@ -70,7 +70,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
             ConfigEntry.AddField(
               outFieldPath,
               outFieldType,
-              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[CodeOf[Pipe[In, Any]]])(
+              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[Expr[Pipe[In, Any]]])(
                 PipeOf[In, Any](In, outFieldType)
               )
             ) :: acc
@@ -104,7 +104,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
               inputFieldType,
               outPath,
               outputFieldType,
-              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[CodeOf[Pipe[Any, Any]]])(
+              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[Expr[Pipe[Any, Any]]])(
                 PipeOf[Any, Any](inputFieldType, outputFieldType)
               )
             ) :: acc
@@ -123,7 +123,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
             ConfigEntry.RemoveSubtype(
               inputSubtypePath,
               inputSubtypeType,
-              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[CodeOf[Pipe[In, Out]]])(
+              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[Expr[Pipe[In, Out]]])(
                 PipeOf[In, Out](inputSubtypeType, Out)
               )
             ) :: acc
@@ -160,7 +160,7 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
               inputSubtypeType,
               outputSubtypePath,
               outputSubtypeType,
-              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[CodeOf[Pipe[In, Out]]])(
+              singleAbstractMethodExpansion(pipe.asExpr.asInstanceOf[Expr[Pipe[In, Out]]])(
                 PipeOf[In, Out](inputSubtypeType, outputSubtypeType)
               )
             ) :: acc

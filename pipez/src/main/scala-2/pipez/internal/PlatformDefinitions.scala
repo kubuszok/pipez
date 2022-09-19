@@ -16,30 +16,30 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
   type Tagged[U] = { type Tag = U }
   type @@[T, U]  = T & Tagged[U]
 
-  override type Type[A]   = c.Type @@ A
-  override type CodeOf[A] = Expr[A]
+  override type Type[A] = c.Type @@ A
+  override type Expr[A] = c.Expr[A]
 
   final def previewType[A: Type]: String = typeOf[A].toString
 
-  final def previewCode[A](code: CodeOf[A]): String = showCode(code.tree)
+  final def previewCode[A](code: Expr[A]): String = showCode(code.tree)
 
-  final def pathCode(path: Path): CodeOf[pipez.Path] = path match {
+  final def pathCode(path: Path): Expr[pipez.Path] = path match {
     case Path.Root                => c.Expr[pipez.Path](q"_root_.pipez.Path.root")
     case Path.Field(from, name)   => c.Expr[pipez.Path](q"${pathCode(from)}.field(${Constant(name)})")
     case Path.Subtype(from, name) => c.Expr[pipez.Path](q"${pathCode(from)}.subtype(${Constant(name)})")
   }
 
-  final def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]] =
+  final def summonPipe[Input: Type, Output: Type]: DerivationResult[Expr[Pipe[Input, Output]]] =
     DerivationResult
       .unsafe(c.Expr[Pipe[Input, Output]](c.inferImplicitValue(PipeOf[Input, Output], silent = false)))(_ =>
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
 
-  final def singleAbstractMethodExpansion[SAM: Type](code: CodeOf[SAM]): CodeOf[SAM] =
+  final def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM] =
     c.Expr(q"_root_.scala.Predef.identity[${typeOf[SAM]}]($code)")
 
-  final def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
+  final def readConfig(code: Expr[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
     @nowarn("cat=unused")
     def extractPath(in: Tree): Either[String, Path] = in match {
       case Function(_, expr)                          => extractPath(expr)

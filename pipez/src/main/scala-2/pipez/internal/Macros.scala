@@ -27,14 +27,14 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
 
   import c.universe.*
 
-  val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Context, Result]] = {
-    val expr = pd.asInstanceOf[CodeOf[PipeDerivation[Pipe]]]
+  val pipeDerivation: Expr[PipeDerivation.Aux[Pipe, Context, Result]] = {
+    val expr = pd.asInstanceOf[Expr[PipeDerivation[Pipe]]]
     val Pipe = pipeTpe.asInstanceOf[c.Type]
     c.Expr(
       q"""$expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$Pipe, $Context, ${Result[Any].typeConstructor}]]"""
     )
   }
-  val previewPipeDerivation: String = previewCode(pd.asInstanceOf[CodeOf[PipeDerivation[Pipe]]])
+  val previewPipeDerivation: String = previewCode(pd.asInstanceOf[Expr[PipeDerivation[Pipe]]])
 }
 
 final class Macro(val c: blackbox.Context) {

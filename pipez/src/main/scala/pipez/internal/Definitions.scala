@@ -22,7 +22,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   type Type[A]
 
   /** Platform-specific expression representation (c.universe.Expr[A] in 2, quotes.Expr[A] in 3 */
-  type CodeOf[A]
+  type Expr[A]
 
   /** Summons Type independently of the platform */
   def typeOf[A](implicit tpe: Type[A]): Type[A] = tpe
@@ -40,13 +40,13 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   implicit val Out: Type[Out]
 
   /** Value of `PipeDerivation[Pipe]`, which was passed to macro as (most likely) implicit */
-  val pipeDerivation: CodeOf[PipeDerivation.Aux[Pipe, Definitions.Context, Definitions.Result]]
+  val pipeDerivation: Expr[PipeDerivation.Aux[Pipe, Definitions.Context, Definitions.Result]]
 
   /** Like previewCode(pipeDerivation) but allowing hiding some shenanigans we do */
   def previewPipeDerivation: String
 
   /** Translates `Path` as seen in macro to runtime value we can pass to updateContext` */
-  def pathCode(path: Path): CodeOf[pipez.Path]
+  def pathCode(path: Path): Expr[pipez.Path]
 
   /** Type representing how we got the specific value from the `in: In` argument */
   sealed trait Path extends Product with Serializable
@@ -66,7 +66,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
     final case class AddField[OutField](
       outputField:  Path,
       outFieldType: Type[OutField],
-      pipe:         CodeOf[Pipe[In, OutField]]
+      pipe:         Expr[Pipe[In, OutField]]
     ) extends ConfigEntry {
       override def toString: String = s"AddField($outputField : ${previewType(outFieldType)}, ${previewCode(pipe)})"
     }
@@ -86,7 +86,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       inputFieldType: Type[InField],
       outputField:    Path,
       outFieldType:   Type[OutField],
-      pipe:           CodeOf[Pipe[InField, OutField]]
+      pipe:           Expr[Pipe[InField, OutField]]
     ) extends ConfigEntry {
       override def toString: String =
         s"PlugInField($inputField : ${previewType(inputFieldType)}, $outputField : ${previewType(outFieldType)}, ${previewCode(pipe)})"
@@ -97,7 +97,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
     final case class RemoveSubtype[InSubtype <: In](
       inputSubtype:     Path,
       inputSubtypeType: Type[InSubtype],
-      pipe:             CodeOf[Pipe[InSubtype, Out]]
+      pipe:             Expr[Pipe[InSubtype, Out]]
     ) extends ConfigEntry {
       override def toString: String =
         s"RemoveSubtype($inputSubtype : ${previewType(inputSubtypeType)}, ${previewCode(pipe)})"
@@ -118,7 +118,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       inputSubtypeType:  Type[InSubtype],
       outputSubtype:     Path,
       outputSubtypeType: Type[OutSubtype],
-      pipe:              CodeOf[Pipe[InSubtype, OutSubtype]]
+      pipe:              Expr[Pipe[InSubtype, OutSubtype]]
     ) extends ConfigEntry {
       override def toString: String =
         s"PlugInSubtype($inputSubtype : ${previewType(inputSubtypeType)}, $outputSubtype : ${previewType(outputSubtypeType)}, ${previewCode(pipe)})"
@@ -274,24 +274,24 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   }
 
   /** Allows displaying the generated code in platform-independent way */
-  def previewCode[A](code: CodeOf[A]): String
+  def previewCode[A](code: Expr[A]): String
 
   /** Allows summoning the type class in platform-independent way */
-  def summonPipe[Input: Type, Output: Type]: DerivationResult[CodeOf[Pipe[Input, Output]]]
+  def summonPipe[Input: Type, Output: Type]: DerivationResult[Expr[Pipe[Input, Output]]]
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
     * hint
     */
-  def singleAbstractMethodExpansion[SAM: Type](code: CodeOf[SAM]): CodeOf[SAM]
+  def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM]
 
   /** Turns the code defining `PipeDerivationConfig[Pipe, In, Out]` into `Settings`.
     *
     * Requires that config is created as one chain while passing the parameter.
     */
-  def readConfig(code: CodeOf[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings]
+  def readConfig(code: Expr[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings]
 
   /** Reads configs if passed, or fallback to defaults (empty `Settings`) otherwise */
-  final def readSettingsIfGiven(code: Option[CodeOf[PipeDerivationConfig[Pipe, In, Out]]]): DerivationResult[Settings] =
+  final def readSettingsIfGiven(code: Option[Expr[PipeDerivationConfig[Pipe, In, Out]]]): DerivationResult[Settings] =
     code
       .fold(DerivationResult.pure(new Settings(Nil)))(readConfig)
       .log(if (code.isDefined) "Derivation started with configuration" else "Derivation started without configuration")

@@ -44,11 +44,11 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     )
   }
 
-  final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]] =
+  final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[Expr[Pipe[In, Out]]] =
     generateSubtypes(generatorData.subtypes.values.toList)
 
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
-    def cases(in: CodeOf[In], ctx: CodeOf[Context]) = subtypes
+    def cases(in: Expr[In], ctx: Expr[Context]) = subtypes
       .map {
         case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
           val arg  = c.freshName(TermName("arg"))

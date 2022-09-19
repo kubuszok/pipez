@@ -27,7 +27,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     (isCaseClass[Out] || isCaseObject[Out] || isJavaBean[Out]) && isInstantiable[Out]
 
   /** Should create `Out` expression from the constructor arguments grouped in parameter lists */
-  type Constructor = List[List[CodeOf[Any]]] => CodeOf[Out]
+  type Constructor = List[List[Expr[Any]]] => Expr[Out]
 
   /** Stores information how each attribute/getter could be extracted from `In` value */
   final case class ProductInData(getters: ListMap[String, ProductInData.Getter[?]]) {
@@ -48,7 +48,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class Getter[InField](
       name: String,
       tpe:  Type[InField],
-      get:  CodeOf[In] => CodeOf[InField],
+      get:  Expr[In] => Expr[InField],
       path: Path
     ) {
 
@@ -76,13 +76,13 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class Setter[OutField](
       name: String,
       tpe:  Type[OutField],
-      set:  (CodeOf[Out], CodeOf[OutField]) => CodeOf[Unit]
+      set:  (Expr[Out], Expr[OutField]) => Expr[Unit]
     ) {
 
       override def toString: String = s"Setter($name : ${previewType(tpe)})"
     }
     final case class JavaBean(
-      defaultConstructor: CodeOf[Out],
+      defaultConstructor: Expr[Out],
       setters:            ListMap[String, Setter[?]]
     ) extends ProductOutData {
       override def toString: String = s"JavaBean(${setters.map { case (n, p) => s"$n : $p" }.mkString(", ")})"
@@ -96,7 +96,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class DefaultField[OutField]() extends OutFieldLogic[OutField]
 
     final case class FieldAdded[OutField](
-      pipe: CodeOf[Pipe[In, OutField]]
+      pipe: Expr[Pipe[In, OutField]]
     ) extends OutFieldLogic[OutField] {
       override def toString: String = s"FieldAdded(${previewCode(pipe)})"
     }
@@ -111,7 +111,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     final case class PipeProvided[InField, OutField](
       inField:     String,
       inFieldType: Type[InField],
-      pipe:        CodeOf[Pipe[InField, OutField]]
+      pipe:        Expr[Pipe[InField, OutField]]
     ) extends OutFieldLogic[OutField] {
       override def toString: String = s"PipeProvided($inField : ${previewType(inFieldType)}, ${previewCode(pipe)})"
     }
@@ -129,7 +129,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         case AddField(Field(Root, outFieldGetter), outFieldType, pipe)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that Out <:< outFieldType is correct
-          FieldAdded(pipe.asInstanceOf[CodeOf[Pipe[In, OutField]]])
+          FieldAdded(pipe.asInstanceOf[Expr[Pipe[In, OutField]]])
         case RenameField(Field(Root, inName), in, Field(Root, outFieldGetter), out)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that Out <:< outFieldType is correct
@@ -137,10 +137,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         case PlugInField(Field(Root, inName), in, Field(Root, outFieldGetter), out, pipe)
             if inputNameMatchesOutputName(outFieldGetter, outFieldName, settings.isFieldCaseInsensitive) =>
           // TODO: validate that Out <:< outFieldType is correct
-          PipeProvided[Any, OutField](inName,
-                                      in.asInstanceOf[Type[Any]],
-                                      pipe.asInstanceOf[CodeOf[Pipe[Any, OutField]]]
-          )
+          PipeProvided[Any, OutField](inName, in.asInstanceOf[Type[Any]], pipe.asInstanceOf[Expr[Pipe[Any, OutField]]])
       }
     }
 
@@ -187,7 +184,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
           .map { getter =>
             implicit val tpe: Type[InField] = getter.tpe
-            pipeProvidedConstructorParam[InField, OutField](getter, pipe.asInstanceOf[CodeOf[Pipe[InField, OutField]]])
+            pipeProvidedConstructorParam[InField, OutField](getter, pipe.asInstanceOf[Expr[Pipe[InField, OutField]]])
           }
           .log(s"Field $outParamName converted from $inFieldName using provided pipe")
     }
@@ -202,14 +199,14 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
       final case class Pure[A](
         tpe:    Type[A],
-        caller: (CodeOf[In], CodeOf[Context]) => CodeOf[A]
+        caller: (Expr[In], Expr[Context]) => Expr[A]
       ) extends OutputValue {
         override def toString: String = s"Pure { (${previewType[In]}, Context) => ${previewType(tpe)} }"
       }
 
       final case class Result[A](
         tpe:    Type[A],
-        caller: (CodeOf[In], CodeOf[Context]) => CodeOf[Definitions.Result[A]]
+        caller: (Expr[In], Expr[Context]) => Expr[Definitions.Result[A]]
       ) extends OutputValue {
         override def toString: String = s"Result { (${previewType[In]}, Context) => ${previewType(tpe)} }"
       }
@@ -223,7 +220,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     }
 
     final case class JavaBean(
-      defaultConstructor: CodeOf[Out],
+      defaultConstructor: Expr[Out],
       output:             List[(OutputValue, ProductOutData.Setter[?])]
     ) extends ProductGeneratorData {
       override def toString: String = s"JavaBean(${output.mkString(", ")})"
@@ -232,7 +229,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   object ProductTypeConversion {
 
-    final def unapply(settings: Settings): Option[DerivationResult[CodeOf[Pipe[In, Out]]]] =
+    final def unapply(settings: Settings): Option[DerivationResult[Expr[Pipe[In, Out]]]] =
       if (isUsableAsProductOutput) Some(attemptProductRendering(settings)) else None
   }
 
@@ -322,9 +319,9 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     * }
     * }}}
     */
-  def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[CodeOf[Pipe[In, Out]]]
+  def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[Expr[Pipe[In, Out]]]
 
-  private def attemptProductRendering(settings: Settings): DerivationResult[CodeOf[Pipe[In, Out]]] =
+  private def attemptProductRendering(settings: Settings): DerivationResult[Expr[Pipe[In, Out]]] =
     for {
       data <- extractProductInData(settings) zip extractProductOutData(settings)
       (inData, outData) = data
@@ -379,7 +376,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         )
       )
     } else {
-      summonPipe[InField, OutField].map { (pipe: CodeOf[Pipe[InField, OutField]]) =>
+      summonPipe[InField, OutField].map { (pipe: Expr[Pipe[InField, OutField]]) =>
         ProductGeneratorData.OutputValue.Result(
           typeOf[OutField],
           (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
@@ -389,7 +386,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
   // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
   private def fieldAddedConstructorParam[OutField: Type](
-    pipe: CodeOf[Pipe[In, OutField]]
+    pipe: Expr[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
     typeOf[OutField],
     (in, ctx) => unlift[In, OutField](pipe, in, ctx)
@@ -398,7 +395,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   // (in, ctx) => unlift(summon[InField, OutField])(in.used, updateContext(ctx, path)) : Result[OutField]
   private def pipeProvidedConstructorParam[InField: Type, OutField: Type](
     getter: ProductInData.Getter[InField],
-    pipe:   CodeOf[Pipe[InField, OutField]]
+    pipe:   Expr[Pipe[InField, OutField]]
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
       typeOf[OutField],

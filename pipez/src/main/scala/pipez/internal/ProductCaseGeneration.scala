@@ -10,6 +10,9 @@ import scala.util.chaining.*
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
+  /** True iff `A` is a tuple */
+  def isTuple[A: Type]: Boolean
+
   /** True iff `A` is defined as `case class` */
   def isCaseClass[A: Type]: Boolean
 
@@ -41,6 +44,11 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         getters.collectFirst {
           case (_, getter) if inputNameMatchesOutputName(getter.name, inParamName, caseInsensitiveSearch) => getter
         }
+      )(DerivationError.MissingPublicSource(outParamName))
+
+    def findIndex(index: Int, outParamName: String): DerivationResult[ProductInData.Getter[?]] =
+      DerivationResult.fromOption(
+        getters.toList.lift(index).map(_._2)
       )(DerivationError.MissingPublicSource(outParamName))
   }
   object ProductInData {
@@ -145,14 +153,19 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     def resolveField[OutField: Type](
       settings:     Settings,
       inData:       ProductInData,
-      outParamName: String
+      outParamName: String,
+      indexOpt:     Option[Int]
     ): DerivationResult[ProductGeneratorData.OutputValue] = resolve[OutField](settings, outParamName) match {
       case DefaultField() =>
-        // if inField (same name as out) not found then error
+        // if inField (same name as out - same index if tuple) not found then error
         // else if inField <:< outField then (in, ctx) => pure(in : OutField)
         // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, updateContext(ctx, path)) : Result[OutField]
-        inData
-          .findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive)
+        indexOpt
+          .fold {
+            inData.findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive) // match by name
+          } { index =>
+            inData.findIndex(index, outParamName) // match by index
+          }
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
           .flatMap { getter =>
             implicit val tpe: Type[InField] = getter.tpe
@@ -325,7 +338,9 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     for {
       data <- extractProductInData(settings) zip extractProductOutData(settings)
       (inData, outData) = data
-      generatorData <- matchFields(inData, outData, settings)
+      generatorData <-
+        if (isTuple[In] || isTuple[Out]) matchFieldsByPosition(inData, outData, settings)
+        else matchFieldsByName(inData, outData, settings)
       code <- generateProductCode(generatorData)
     } yield code
 
@@ -333,7 +348,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   // - every field of Out should have an assigned value
   // - so we are iterating over the list of fields in Out and check the configuration for them
   // - additional fields in In can be safely ignored
-  private def matchFields(
+  // - field by default are matched by their name
+  private def matchFieldsByName(
     inData:   ProductInData,
     outData:  ProductOutData,
     settings: Settings
@@ -343,7 +359,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
         .map(
           _.values
             .map { case ProductOutData.ConstructorParam(outParamName, outParamType) =>
-              OutFieldLogic.resolveField(settings, inData, outParamName)(outParamType)
+              OutFieldLogic.resolveField(settings, inData, outParamName, None)(outParamType)
             }
             .toList
             .pipe(DerivationResult.sequence(_))
@@ -355,12 +371,44 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     case ProductOutData.JavaBean(defaultConstructor, setters) =>
       setters.values
         .map { case setter @ ProductOutData.Setter(outSetterName, outSetterType, _) =>
-          OutFieldLogic.resolveField(settings, inData, outSetterName)(outSetterType).map(_ -> setter)
+          OutFieldLogic.resolveField(settings, inData, outSetterName, None)(outSetterType).map(_ -> setter)
         }
         .toList
         .pipe(DerivationResult.sequence(_))
         .map(ProductGeneratorData.JavaBean(defaultConstructor, _))
         .logSuccess(gen => s"Case generation: $gen")
+  }
+
+  // In the product derivation, the logic is driven by `Out` type:
+  // - every field of Out should have an assigned value
+  // - so we are iterating over the list of fields in Out and check the configuration for them
+  // - additional fields in In can be safely ignored
+  // - field by default are matched by their position
+  private def matchFieldsByPosition(
+    inData:   ProductInData,
+    outData:  ProductOutData,
+    settings: Settings
+  ): DerivationResult[ProductGeneratorData] = outData match {
+    case ProductOutData.CaseClass(caller, listOfParamsList) =>
+      listOfParamsList
+        .map(
+          _.values.zipWithIndex
+            .map { case (ProductOutData.ConstructorParam(outParamName, outParamType), index) =>
+              OutFieldLogic.resolveField(settings, inData, outParamName, Some(index))(outParamType)
+            }
+            .toList
+            .pipe(DerivationResult.sequence(_))
+        )
+        .pipe(DerivationResult.sequence(_))
+        .map(ProductGeneratorData.CaseClass(caller, _))
+        .logSuccess(gen => s"Case generation: $gen")
+
+    case ProductOutData.JavaBean(_, _) =>
+      DerivationResult.fail(
+        DerivationError.InvalidConfiguration(
+          "Conversion from tuple can only be performed into another tuple or case class"
+        )
+      )
   }
 
   // if inField <:< outField then (in, ctx) => pure(in : OutField)

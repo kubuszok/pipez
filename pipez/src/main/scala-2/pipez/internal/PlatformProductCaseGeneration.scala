@@ -14,6 +14,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   import c.universe.*
 
+  final def isTuple[A: Type]: Boolean =
+    typeOf[A].typeSymbol.fullName.startsWith("scala.Tuple")
+
   final def isCaseClass[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
     sym.isClass && sym.asClass.isCaseClass

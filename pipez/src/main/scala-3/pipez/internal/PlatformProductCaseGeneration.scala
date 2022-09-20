@@ -12,16 +12,22 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   import quotes.*
   import quotes.reflect.*
 
+  final def isTuple[A: Type]: Boolean =
+    TypeRepr.of[A].typeSymbol.fullName.startsWith("scala.Tuple")
+
   final def isCaseClass[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
     sym.isClassDef && sym.flags.is(Flags.Case)
+
   final def isCaseObject[A: Type]: Boolean =
     TypeRepr.of[A].typeSymbol.flags.is(Flags.Module) && isCaseClass[A]
+
   final def isJavaBean[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
     sym.isClassDef &&
     sym.declaredMethods.exists(m => m.name.toLowerCase.startsWith("set")) &&
     sym.declarations.exists(m => m.isClassConstructor && m.paramSymss.flatten.isEmpty) // TODO: check for public?
+
   final def isInstantiable[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
     !sym.flags.is(Flags.Abstract) && sym.primaryConstructor != Symbol.noSymbol // TODO: check for public?

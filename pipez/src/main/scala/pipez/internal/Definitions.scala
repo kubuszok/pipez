@@ -305,5 +305,5 @@ object Definitions {
   type Context
 
   /** Can be used instead of pipeDerivation.Result[O] to avoid path-dependent types */
-  type Result[O]
+  type Result[+O]
 }

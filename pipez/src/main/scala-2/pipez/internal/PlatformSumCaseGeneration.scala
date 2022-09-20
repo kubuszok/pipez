@@ -50,14 +50,12 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
     def cases(in: Expr[In], ctx: Expr[Context]) = subtypes
       .map {
-        case EnumGeneratorData.InputSubtype.Convert(inSubtype, _, pipe, path) =>
-          val arg  = c.freshName(TermName("arg"))
-          val code = unlift(pipe, c.Expr[In](q"$arg"), updateContext(ctx, pathCode(path)))
-          cq"""$arg : $inSubtype => $code.asInstanceOf[${Result[Out]}]"""
-        case EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
-          val arg  = c.freshName(TermName("arg"))
-          val code = unlift(pipe, c.Expr[In](q"$arg"), updateContext(ctx, pathCode(path)))
-          cq"""$arg : $inSubtype => $code"""
+        case convert @ EnumGeneratorData.InputSubtype.Convert(inSubtype, _, _, _) =>
+          val arg = c.freshName(TermName("arg"))
+          cq"""$arg : $inSubtype => ${convert.unlifted(c.Expr[In](q"$arg"), ctx)}.asInstanceOf[${Result[Out]}]"""
+        case handle @ EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
+          val arg = c.freshName(TermName("arg"))
+          cq"""$arg : $inSubtype => ${handle.unlifted(c.Expr[In](q"$arg"), ctx)}"""
       }
       .pipe(c => q"$in match { case ..$c }")
       .pipe(c.Expr[Out](_))

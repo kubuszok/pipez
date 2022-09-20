@@ -1,5 +1,6 @@
 package pipez.internal
 
+import pipez.internal.Definitions.{ Context, Result }
 import pipez.internal.SumCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
@@ -118,7 +119,29 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
   final case class EnumGeneratorData(subtypes: ListMap[String, EnumGeneratorData.InputSubtype])
   object EnumGeneratorData {
 
-    sealed trait InputSubtype extends Product with Serializable
+    type InSubtype <: In
+    type OutSubtype <: Out
+
+    sealed trait InputSubtype extends Product with Serializable {
+
+      def unlifted: (Expr[In], Expr[Context]) => Expr[Result[Out]] = this match {
+        case convert @ InputSubtype.Convert(_, _, _, _) =>
+          val InputSubtype.Convert(inSubtype, outSubtype, pipe, path) =
+            convert.asInstanceOf[InputSubtype.Convert[InSubtype, OutSubtype]]
+          (in: Expr[In], ctx: Expr[Context]) =>
+            unlift[InSubtype, OutSubtype](pipe, in.asInstanceOf[Expr[InSubtype]], updateContext(ctx, pathCode(path)))(
+              inSubtype,
+              outSubtype
+            ).asInstanceOf[Expr[Result[Out]]]
+        case handle @ InputSubtype.Handle(_, _, _) =>
+          val InputSubtype.Handle(inSubtype, pipe, path) = handle.asInstanceOf[InputSubtype.Handle[InSubtype]]
+          (in: Expr[In], ctx: Expr[Context]) =>
+            unlift[InSubtype, Out](pipe, in.asInstanceOf[Expr[InSubtype]], updateContext(ctx, pathCode(path)))(
+              inSubtype,
+              Out
+            )
+      }
+    }
     object InputSubtype {
 
       final case class Convert[InSubtype <: In, OutSubtype <: Out](

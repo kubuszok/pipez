@@ -31,12 +31,34 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
         extractSubclasses(TypeRepr.of[A].typeSymbol).map { subtypeType =>
-          EnumData.Case(
-            subtypeType.name,
-            subtypeType.typeRef.asType.asInstanceOf[Type[A]],
-            isCaseObject = subtypeType.flags.is(Flags.Module),
-            path = Path.Subtype(Path.Root, subtypeType.name)
-          )
+          subtypeType.primaryConstructor.paramSymss match {
+            // subtype takes type parameters
+            case typeParamSymbols :: _ if typeParamSymbols.exists(_.isType) =>
+              // we have to figure how subtypes type params map to parent type params
+              val appliedTypeByParam: Map[Symbol, TypeRepr] =
+                subtypeType.typeRef
+                  .baseType(TypeRepr.of[A].typeSymbol)
+                  .typeArgs
+                  .map(_.typeSymbol)
+                  .zip(TypeRepr.of[A].typeArgs)
+                  .toMap
+              // TODO: some better error message if child has an extra type param that doesn't come from the parent
+              val typeParamReprs: List[TypeRepr] = typeParamSymbols.map(appliedTypeByParam)
+              EnumData.Case(
+                subtypeType.name,
+                subtypeType.typeRef.appliedTo(typeParamReprs).asType.asInstanceOf[Type[A]],
+                isCaseObject = subtypeType.flags.is(Flags.Module),
+                path = Path.Subtype(Path.Root, subtypeType.name)
+              )
+            // subtype is monomorphic
+            case _ =>
+              EnumData.Case(
+                subtypeType.name,
+                subtypeType.typeRef.asType.asInstanceOf[Type[A]],
+                isCaseObject = subtypeType.flags.is(Flags.Module),
+                path = Path.Subtype(Path.Root, subtypeType.name)
+              )
+          }
         }
       )
     )(_ =>

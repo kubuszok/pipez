@@ -33,8 +33,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     !typeOf[A].typeSymbol.isAbstract && typeOf[A].members.exists(m => m.isPublic && m.isConstructor)
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
-    In.members // we fetch ALL members, even those that might have been inherited
+    In.members
       .to(List)
+      .filterNot(isGarbage)
       .collect {
         case member
             if member.isMethod && (member.asMethod.isGetter || member.name.toString.toLowerCase.startsWith(
@@ -42,7 +43,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             ) || member.name.toString.toLowerCase.startsWith("get")) =>
           member.name.toString -> ProductInData.Getter[Any](
             name = member.name.toString,
-            tpe = member.asMethod.returnType.asInstanceOf[Type[Any]],
+            tpe = resolveTypeArgsForMethodReturnType(In, member).asInstanceOf[Type[Any]],
             get =
               if (member.asMethod.paramLists.isEmpty)
                 (in: Expr[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
@@ -52,15 +53,17 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       }
       .to(ListMap)
       .pipe(ProductInData(_))
-      .pipe(DerivationResult.pure)
+      .pipe(DerivationResult.pure(_))
       .logSuccess(data => s"Resolved input: $data")
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean[Out]) {
       // Java Bean case
 
+      // TODO: handle generics
+
       val defaultConstructor = DerivationResult.fromOption(
-        Out.decls.collectFirst {
+        Out.decls.filterNot(isGarbage).collectFirst {
           case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
             c.Expr[Out](q"new $Out()")
         }
@@ -68,6 +71,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       val setters = Out.decls
         .to(List)
+        .filterNot(isGarbage)
         .collect {
           case method
               if method.isPublic && method.isMethod && method.name.toString.toLowerCase.startsWith(
@@ -99,27 +103,24 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     } else {
       // case class case
 
-      Out.decls
-        .to(List)
-        .collectFirst {
-          case member if member.isPublic && member.isConstructor =>
-            ProductOutData.CaseClass(
-              params => c.Expr(q"new $Out(...$params)"),
-              member.asMethod.paramLists.map { params =>
-                params
-                  .map { param =>
-                    param.name.toString -> ProductOutData.ConstructorParam(
-                      name = param.name.toString,
-                      tpe = param.typeSignature.asInstanceOf[Type[Any]]
-                    )
-                  }
-                  .to(ListMap)
-              }
-            )
+      (for {
+        primaryConstructor <- DerivationResult.fromOption(
+          Out.decls.to(List).filterNot(isGarbage).collectFirst { case m if m.isPublic && m.isConstructor => m }
+        )(DerivationError.MissingPublicConstructor)
+        typeByName = resolveTypeArgsForMethodArguments(Out, primaryConstructor)
+      } yield ProductOutData.CaseClass(
+        params => c.Expr(q"new $Out(...$params)"),
+        primaryConstructor.asMethod.paramLists.map { params =>
+          params
+            .map { param =>
+              param.name.toString -> ProductOutData.ConstructorParam(
+                name = param.name.toString,
+                tpe = typeByName(param.name).asInstanceOf[Type[Any]]
+              )
+            }
+            .to(ListMap)
         }
-        .get
-        .pipe(DerivationResult.pure(_))
-        .logSuccess(data => s"Resolved case class output: $data")
+      )).logSuccess(data => s"Resolved case class output: $data")
     }
 
   final def generateProductCode(generatorData: ProductGeneratorData): DerivationResult[Expr[Pipe[In, Out]]] =
@@ -297,5 +298,40 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       .pure(body)
       .log(s"Java Beans derivation, setters: $outputSettersList")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
+  }
+
+  private val garbage = Set(
+    // product methods
+    "productElementName",
+    "productIterator",
+    "canEqual",
+    "productElement",
+    "productArity",
+    "productPrefix",
+    "productElementNames",
+    // object methods
+    "synchronized",
+    "wait",
+    "equals",
+    "hashCode",
+    "getClass",
+    "asInstanceOf",
+    "isInstanceOf"
+  )
+  private val isGarbage: Symbol => Boolean = s => garbage(s.name.toString)
+
+  private val resolveTypeArgsForMethodReturnType = (tpe: c.Type, method: c.Symbol) =>
+    method.typeSignatureIn(tpe).finalResultType
+
+  private val resolveTypeArgsForMethodArguments = (tpe: c.Type, method: c.Symbol) => {
+    val typeArgs                = tpe.typeArgs
+    val typeArgumentByTypeParam = tpe.typeConstructor.typeParams.map(_.asType.toType).zip(typeArgs).toMap
+    method.asMethod.paramLists.flatten.map { param =>
+      param.name -> typeArgumentByTypeParam
+        .collectFirst {
+          case (alias, tpe) if alias.typeSymbol.name == param.typeSignature.typeSymbol.name => tpe
+        }
+        .getOrElse(param.typeSignature)
+    }.toMap
   }
 }

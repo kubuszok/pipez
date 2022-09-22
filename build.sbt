@@ -30,6 +30,7 @@ val noPublishSettings = Seq(
   publishArtifact := false
 )
 
+// 2.13 only since apparently my way of doing Java Beans (@BeanProperty) have slightly different behavior in 3.x
 val testCases = project
   .in(file("testcases"))
   .settings(

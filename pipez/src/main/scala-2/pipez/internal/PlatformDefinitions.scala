@@ -111,6 +111,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
       // matches {cfg}.fieldMatchingCaseInsensitive
       case Select(expr, TermName("fieldMatchingCaseInsensitive")) =>
         extract(expr, ConfigEntry.FieldCaseInsensitive :: acc)
+      // matches {cfg}.enableFallbackToDefaults
+      case Select(expr, TermName("enableFallbackToDefaults")) =>
+        extract(expr, ConfigEntry.EnableFallbackToDefaults :: acc)
       // matches {cfg}.removeSubtype[InSubtype](pipe)
       case Apply(TypeApply(Select(expr, TermName("removeSubtype")), List(inputSubtype)), List(pipe)) =>
         for {

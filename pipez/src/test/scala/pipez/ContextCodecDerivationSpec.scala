@@ -595,6 +595,29 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("transformation of tuples should use position for field matching") {
+    // case class -> tuple
+    assertEquals(
+      ContextCodec
+        .derive(
+          ContextCodec
+            .Config[(Int, String, Double), CaseParamOutExt[Double]]
+            .addField(_.x, (i, _, _) => Right(i._1.toDouble))
+        )
+        .decode((5, "test", 10.0), shouldFailFast = false, "root"),
+      Right(CaseParamOutExt(5, "test", 10.0, 5.0))
+    )
+    // tuple -> case class
+    assertEquals(
+      ContextCodec
+        .derive(
+          ContextCodec.Config[CaseParamIn[Double], (Int, String, Double, Int)].addField(_._4, (i, _, _) => Right(i.a))
+        )
+        .decode(CaseParamIn(5, "test", 10.0), shouldFailFast = false, "root"),
+      Right((5, "test", 10.0, 5))
+    )
+  }
+
   test("errors should appear in Left enriched with Path information") {
     import ContextCodec.Auto.* // for recursive derivation
     implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>

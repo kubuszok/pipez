@@ -43,6 +43,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
     val sym = TypeRepr.of[In].typeSymbol
     (sym.caseFields ++ sym.declaredMethods.filter(isJavaGetter))
+      .filterNot(_.name.endsWith(" ")) // apparently each case fiels is duplicated: "a" and "a ", "_1" and "_1" o_0
       .map { method =>
         method.name.toString -> ProductInData.Getter[Any](
           name = method.name.toString,
@@ -62,8 +63,6 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean[Out]) {
       // Java Bean case
-
-      // TODO: handle generics
 
       val sym = TypeRepr.of[Out].typeSymbol
 
@@ -104,7 +103,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
           setter.name -> ProductOutData.Setter[Any](
             name = setter.name.toString,
             tpe = {
-              val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(setter): @unchecked // TODO: adapt out
+              val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(setter): @unchecked
               tpe.asType.asInstanceOf[Type[Any]]
             },
             set = (out: Expr[Out], value: Expr[Any]) =>

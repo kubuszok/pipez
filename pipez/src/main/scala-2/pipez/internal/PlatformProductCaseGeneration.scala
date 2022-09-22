@@ -51,7 +51,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       setter.isPublic
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
-    In.members
+    In.decls
       .to(List)
       .filterNot(isGarbage)
       .filter(m => isCaseClassField(m) || isJavaGetter(m))

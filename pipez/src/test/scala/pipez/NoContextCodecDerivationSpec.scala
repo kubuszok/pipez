@@ -3,10 +3,9 @@ package pipez
 import scala.util.chaining.*
 
 // TODO: test backticked names like `a b`
-// TODO: test conversion for types with type parameters
 
 class NoContextCodecDerivationSpec extends munit.FunSuite {
-  /*
+
   test("no config, no conversion -> use matching fields names") {
     // default constructor -> default constructor
     assertEquals(
@@ -433,5 +432,37 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTUpper.CCC(1))
     )
   }
-   */
+
+  test("generic types -> types should be resolved") {
+    implicit val aCodec: NoContextCodec[String, Int] = (string: String) =>
+      scala.util.Try(string.toInt).fold(_ => Left(List(s"$string cannot be converted to Int")), Right(_))
+    // case class -> case class
+    assertEquals(
+      NoContextCodec
+        .derive(NoContextCodec.Config[CaseParamIn[String], CaseParamOutExt[Int]].addField(_.x, i => Right(i.a)))
+        .decode(CaseParamIn(5, "test", "10")),
+      Right(CaseParamOutExt(5, "test", 10, 5))
+    )
+    // case class -> Java Beans
+    assertEquals(
+      NoContextCodec
+        .derive(NoContextCodec.Config[CaseParamIn[String], BeanPolyOutExt[Int]].addField(_.getX(), i => Right(i.a)))
+        .decode(CaseParamIn(5, "test", "10")),
+      Right(new BeanPolyOutExt[Int]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC(10)).tap(_.setX(5)))
+    )
+    // Java Beans -> case class
+    assertEquals(
+      NoContextCodec
+        .derive(NoContextCodec.Config[BeanPolyIn[String], CaseParamOutExt[Int]].addField(_.x, i => Right(i.a)))
+        .decode(new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10"))),
+      Right(CaseParamOutExt(5, "test", 10, 5))
+    )
+    // Java Beans -> Java Beans
+    assertEquals(
+      NoContextCodec
+        .derive(NoContextCodec.Config[BeanPolyIn[String], BeanPolyOutExt[Int]].addField(_.getX(), i => Right(i.a)))
+        .decode(new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10"))),
+      Right(new BeanPolyOutExt[Int]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC(10)).tap(_.setX(5)))
+    )
+  }
 }

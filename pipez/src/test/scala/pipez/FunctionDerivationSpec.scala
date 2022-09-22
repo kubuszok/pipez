@@ -3,7 +3,7 @@ package pipez
 import scala.util.chaining.*
 
 class FunctionDerivationSpec extends munit.FunSuite {
-  /*
+
   test("In => Out derivation should work out of the box") {
     // default constructor -> default constructor
     assertEquals(
@@ -146,5 +146,4 @@ class FunctionDerivationSpec extends munit.FunSuite {
       new BeanManyOutMod().tap(_.setA("1")).tap(_.setB("a")).tap(_.setC(2L))
     )
   }
-   */
 }

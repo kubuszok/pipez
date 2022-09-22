@@ -28,9 +28,9 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
       else List(t)
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
-        extractSubclasses(typeOf[A].typeSymbol.asType).tap(println(_)).map { subtypeType: TypeSymbol =>
+        extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType: TypeSymbol =>
           EnumData.Case(
-            name = subtypeType.fullName,
+            name = subtypeType.name.toString,
             tpe = subtypeTypeOf(typeOf[A], subtypeType.toType).asInstanceOf[Type[A]],
             isCaseObject = subtypeType.asClass.isModule,
             path = Path.Subtype(Path.Root, subtypeType.fullName)

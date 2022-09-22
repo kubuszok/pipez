@@ -17,36 +17,43 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   final def isCaseClass[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
-    sym.isClassDef && sym.flags.is(Flags.Case)
+    sym.isClassDef && sym.flags.is(Flags.Case) && !sym.flags.is(Flags.Abstract) && isPublic(sym.primaryConstructor)
 
   final def isCaseObject[A: Type]: Boolean =
-    TypeRepr.of[A].typeSymbol.flags.is(Flags.Module) && isCaseClass[A]
+    val sym = TypeRepr.of[A].typeSymbol
+    sym.flags.is(Flags.Module) && sym.flags.is(Flags.Case) && isPublic(sym)
 
   final def isJavaBean[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
-    sym.isClassDef &&
-    sym.declaredMethods.exists(m => m.name.toLowerCase.startsWith("set")) &&
-    sym.declarations.exists(m => m.isClassConstructor && m.paramSymss.flatten.isEmpty) // TODO: check for public?
+    sym.isClassDef && !sym.flags.is(Flags.Abstract) && sym.declaredMethods.exists(isJavaSetter) && sym.declarations
+      .exists(isDefaultConstructor)
 
-  final def isInstantiable[A: Type]: Boolean =
-    val sym = TypeRepr.of[A].typeSymbol
-    !sym.flags.is(Flags.Abstract) && sym.primaryConstructor != Symbol.noSymbol // TODO: check for public?
+  private def isPublic(sym: Symbol): Boolean =
+    !sym.flags.is(Flags.Private) && !sym.flags.is(Flags.PrivateLocal) && !sym.flags.is(Flags.Protected)
+
+  private def isDefaultConstructor(ctor: Symbol): Boolean =
+    ctor.isClassConstructor && ctor.paramSymss.filterNot(_.exists(_.isType)).flatten.isEmpty && isPublic(ctor)
+
+  private def isJavaGetter(getter: Symbol): Boolean =
+    ProductCaseGeneration.isGetterName(getter.name) && getter.paramSymss.flatten.isEmpty && isPublic(getter)
+
+  private def isJavaSetter(setter: Symbol): Boolean =
+    ProductCaseGeneration.isSetterName(setter.name) && setter.paramSymss.flatten.size == 1 && isPublic(setter)
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
     val sym = TypeRepr.of[In].typeSymbol
-    (sym.caseFields ++ sym.declaredMethods.filter { m =>
-      val n = m.name.toLowerCase
-      (n.startsWith("is") || n.startsWith("get")) && m.paramSymss.flatten.isEmpty
-    }).map { method =>
-      method.name.toString -> ProductInData.Getter[Any](
-        name = method.name.toString,
-        tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
-        get =
-          if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
-          else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
-        path = Path.Field(Path.Root, method.name.toString)
-      )
-    }.to(ListMap)
+    (sym.caseFields ++ sym.declaredMethods.filter(isJavaGetter))
+      .map { method =>
+        method.name.toString -> ProductInData.Getter[Any](
+          name = method.name.toString,
+          tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
+          get =
+            if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
+            else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
+          path = Path.Field(Path.Root, method.name.toString)
+        )
+      }
+      .to(ListMap)
       .pipe(ProductInData(_))
       .pipe(DerivationResult.pure)
       .logSuccess(data => s"Resolved input: $data")
@@ -61,25 +68,48 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       val sym = TypeRepr.of[Out].typeSymbol
 
       val defaultConstructor = DerivationResult.fromOption(
-        sym.declarations.collectFirst {
-          case member if member.isClassConstructor && member.paramSymss.flatten.isEmpty =>
-            if (member.paramSymss.isEmpty) New(TypeTree.of[Out]).select(member).appliedToArgss(Nil).asExpr.asExprOf[Out]
-            else New(TypeTree.of[Out]).select(member).appliedToNone.asExpr.asExprOf[Out]
+        sym.declarations.find(isDefaultConstructor).map { ctor =>
+          ctor.paramSymss match {
+            // new Bean[...]
+            case typeArgs :: Nil if typeArgs.exists(_.isType) =>
+              New(TypeTree.of[Out])
+                .select(ctor)
+                .appliedToTypes(TypeRepr.of[Out].typeArgs)
+                .appliedToArgss(Nil)
+                .asExpr
+                .asExprOf[Out]
+            // new Bean[...]()
+            case typeArgs :: Nil :: Nil if typeArgs.exists(_.isType) =>
+              New(TypeTree.of[Out])
+                .select(ctor)
+                .appliedToTypes(TypeRepr.of[Out].typeArgs)
+                .appliedToNone
+                .asExpr
+                .asExprOf[Out]
+            // new Bean
+            case Nil =>
+              New(TypeTree.of[Out]).select(ctor).appliedToArgss(Nil).asExpr.asExprOf[Out]
+            // new Bean()
+            case Nil :: Nil =>
+              New(TypeTree.of[Out]).select(ctor).appliedToNone.asExpr.asExprOf[Out]
+            case _ =>
+              ??? // should never happen due to isDefaultConstructor filtering
+          }
         }
       )(DerivationError.MissingPublicConstructor)
 
       val setters = sym.declaredMethods
-        .collect {
-          case method if method.name.toLowerCase.startsWith("set") && method.paramSymss.flatten.size == 1 =>
-            method.name -> ProductOutData.Setter[Any](
-              name = method.name.toString,
-              tpe = {
-                val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(method): @unchecked
-                tpe.asType.asInstanceOf[Type[Any]]
-              },
-              set = (out: Expr[Out], value: Expr[Any]) =>
-                out.asTerm.select(method).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
-            )
+        .filter(isJavaSetter)
+        .map { setter =>
+          setter.name -> ProductOutData.Setter[Any](
+            name = setter.name.toString,
+            tpe = {
+              val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(setter): @unchecked // TODO: adapt out
+              tpe.asType.asInstanceOf[Type[Any]]
+            },
+            set = (out: Expr[Out], value: Expr[Any]) =>
+              out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
+          )
         }
         .to(ListMap)
         .pipe(DerivationResult.pure(_))
@@ -153,7 +183,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       )
 
     val arrSize = Literal(IntConstant(paramToIdx.size)).asExpr.asExprOf[Int]
-    val initialValue: Expr[Result[Array[Any]]] = pureResult('{ scala.Array[scala.Any]($arrSize) })
+    val initialValue: Expr[Result[Array[Any]]] = pureResult('{ scala.Array.ofDim[scala.Any]($arrSize) })
 
     @scala.annotation.tailrec
     def generateBody(
@@ -274,7 +304,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         DerivationResult.pure(typeArgumentByName -> typeArgs)
       // polymorphic
       case PolyType(_, _, MethodType(names, types, AppliedType(_, typeRefs))) =>
-        // TODO: check if types of constructor match passes to Out
+        // TODO: check if types of constructor match types passed to Out
         val typeArgs: List[TypeRepr] = TypeRepr.of[Out].typeArgs
         val typeArgumentByAlias = typeRefs.zip(typeArgs).toMap
         val typeArgumentByName: Map[String, TypeRepr] = names

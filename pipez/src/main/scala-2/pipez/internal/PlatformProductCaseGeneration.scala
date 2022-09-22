@@ -19,28 +19,42 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   final def isCaseClass[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
-    sym.isClass && sym.asClass.isCaseClass
+    val mem = typeOf[A].members
+    sym.isClass && sym.asClass.isCaseClass && !sym.isAbstract && mem.exists(m => m.isConstructor && m.isPublic)
   }
   final def isCaseObject[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
-    sym.isModuleClass && sym.asClass.isCaseClass
+    sym.isModuleClass && sym.asClass.isCaseClass && sym.isPublic
   }
-  final def isJavaBean[A: Type]: Boolean =
-    typeOf[A].typeSymbol.isClass &&
-      typeOf[A].members.exists(m => m.isPublic && m.isMethod && m.asMethod.isSetter) &&
-      typeOf[A].members.exists(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
-  final def isInstantiable[A: Type]: Boolean =
-    !typeOf[A].typeSymbol.isAbstract && typeOf[A].members.exists(m => m.isPublic && m.isConstructor)
+  final def isJavaBean[A: Type]: Boolean = {
+    val sym = typeOf[A].typeSymbol
+    val mem = typeOf[A].members
+    sym.isClass && !sym.isAbstract && mem.exists(isDefaultConstructor) && mem.exists(isJavaSetter)
+  }
+
+  private def isDefaultConstructor(ctor: Symbol): Boolean =
+    ctor.isConstructor && ctor.asMethod.paramLists.flatten.isEmpty && ctor.isPublic
+
+  private def isCaseClassField(field: Symbol): Boolean =
+    field.isMethod && field.asMethod.isGetter
+
+  private def isJavaGetter(getter: Symbol): Boolean =
+    getter.isMethod &&
+      ProductCaseGeneration.isGetterName(getter.asMethod.name.toString) &&
+      getter.asMethod.paramLists.flatten.isEmpty &&
+      getter.isPublic
+
+  private def isJavaSetter(setter: Symbol): Boolean =
+    setter.isMethod &&
+      ProductCaseGeneration.isSetterName(setter.asMethod.name.toString) &&
+      setter.asMethod.paramLists.flatten.size == 1 &&
+      setter.isPublic
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
     In.members
       .to(List)
       .filterNot(isGarbage)
-      .filter(m =>
-        m.isMethod &&
-          (m.asMethod.isGetter || m.name.toString.toLowerCase.startsWith("is") ||
-            m.name.toString.toLowerCase.startsWith("get"))
-      )
+      .filter(m => isCaseClassField(m) || isJavaGetter(m))
       .map { getter =>
         getter.name.toString -> ProductInData.Getter[Any](
           name = getter.name.toString,
@@ -62,24 +76,17 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       // Java Bean case
 
       val defaultConstructor = DerivationResult.fromOption(
-        Out.decls
-          .filterNot(isGarbage)
-          .find(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
-          .map(_ => c.Expr[Out](q"new $Out()"))
+        Out.decls.filterNot(isGarbage).find(isDefaultConstructor).map(_ => c.Expr[Out](q"new $Out()"))
       )(DerivationError.MissingPublicConstructor)
 
       val setters = Out.decls
         .to(List)
         .filterNot(isGarbage)
-        .filter(m =>
-          m.isPublic && m.isMethod &&
-            m.name.toString.toLowerCase.startsWith("set") &&
-            m.asMethod.paramLists.flatten.size == 1
-        )
+        .filter(isJavaSetter)
         .map { setter =>
           setter.name.toString -> ProductOutData.Setter(
             name = setter.name.toString,
-            tpe = paramListsOf(Out, setter).flatten.head.asInstanceOf[Type[Any]],
+            tpe = paramListsOf(Out, setter).flatten.head.typeSignature.asInstanceOf[Type[Any]],
             set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.${setter.asMethod.name.toTermName}($value)")
           )
         }
@@ -148,7 +155,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
       )
 
     val arrSize = Constant(paramToIdx.size)
-    val initialValue: Expr[Result[Array[Any]]] = pureResult(c.Expr(q"scala.Array[scala.Any]($arrSize)"))
+    val initialValue: Expr[Result[Array[Any]]] = pureResult(c.Expr(q"scala.Array.ofDim[scala.Any]($arrSize)"))
 
     @scala.annotation.tailrec
     def generateBody(

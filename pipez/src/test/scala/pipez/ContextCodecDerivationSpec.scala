@@ -3,10 +3,9 @@ package pipez
 import scala.util.chaining.*
 
 // TODO: test backticked names like `a b`
-// TODO: test conversion for types with type parameters
 
 class ContextCodecDerivationSpec extends munit.FunSuite {
-  /*
+
   test("no config, no conversion -> use matching fields names") {
     // default constructor -> default constructor
     assertEquals(
@@ -538,8 +537,65 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTUpper.CCC(1))
     )
   }
-   */
-  test("Errors should appear in Left enriched with Path information") {
+
+  test("generic types -> types should be resolved") {
+    implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>
+      scala.util.Try(string.toInt).fold(_ => Left(List(s"$path cannot be converted to Int")), Right(_))
+    // case class -> case class
+    assertEquals(
+      ContextCodec
+        .derive(
+          ContextCodec.Config[CaseParamIn[String], CaseParamOutExt[Int]].addField(_.x, (i, _, _) => Right(i.a))
+        )
+        .decode(CaseParamIn(5, "test", "10"), shouldFailFast = false, path = "root"),
+      Right(CaseParamOutExt(5, "test", 10, 5))
+    )
+    // case class -> Java Beans
+    assertEquals(
+      ContextCodec
+        .derive(
+          ContextCodec.Config[CaseParamIn[String], BeanPolyOutExt[Int]].addField(_.getX(), (i, _, _) => Right(i.a))
+        )
+        .decode(CaseParamIn(5, "test", "10"), shouldFailFast = false, path = "root"),
+      Right(new BeanPolyOutExt[Int]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC(10)).tap(_.setX(5)))
+    )
+    // Java Beans -> case class
+    assertEquals(
+      ContextCodec
+        .derive(
+          ContextCodec.Config[BeanPolyIn[String], CaseParamOutExt[Int]].addField(_.x, (i, _, _) => Right(i.a))
+        )
+        .decode(new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10")),
+                shouldFailFast = false,
+                path = "root"
+        ),
+      Right(CaseParamOutExt(5, "test", 10, 5))
+    )
+    // Java Beans -> Java Beans
+    assertEquals(
+      ContextCodec
+        .derive(
+          ContextCodec.Config[BeanPolyIn[String], BeanPolyOutExt[Int]].addField(_.getX(), (i, _, _) => Right(i.a))
+        )
+        .decode(new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10")),
+                shouldFailFast = false,
+                path = "root"
+        ),
+      Right(new BeanPolyOutExt[Int]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC(10)).tap(_.setX(5)))
+    )
+    // type parameter used during derivation
+    def test[In, Out](out: Out)(implicit
+      contextCodec:        ContextCodec[In, Out]
+    ): ContextCodec[CaseParamIn[In], CaseParamOutExt[Out]] = ContextCodec.derive(
+      ContextCodec.Config[CaseParamIn[In], CaseParamOutExt[Out]].addField(_.x, (_, _, _) => Right(out))
+    )
+    assertEquals(
+      test[String, Int](5).decode(CaseParamIn(5, "test", "10"), shouldFailFast = false, path = "root"),
+      Right(CaseParamOutExt(5, "test", 10, 5))
+    )
+  }
+
+  test("errors should appear in Left enriched with Path information") {
     import ContextCodec.Auto.* // for recursive derivation
     implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>
       scala.util.Try(string.toInt).fold(_ => Left(List(s"$path cannot be converted to Int")), Right(_))

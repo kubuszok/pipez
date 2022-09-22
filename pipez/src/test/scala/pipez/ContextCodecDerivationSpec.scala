@@ -6,7 +6,7 @@ import scala.util.chaining.*
 // TODO: test conversion for types with type parameters
 
 class ContextCodecDerivationSpec extends munit.FunSuite {
-
+  /*
   test("no config, no conversion -> use matching fields names") {
     // default constructor -> default constructor
     assertEquals(
@@ -538,26 +538,26 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTUpper.CCC(1))
     )
   }
-
+   */
   test("Errors should appear in Left enriched with Path information") {
     import ContextCodec.Auto.* // for recursive derivation
     implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>
       scala.util.Try(string.toInt).fold(_ => Left(List(s"$path cannot be converted to Int")), Right(_))
-    // TODO: delete the code below after fixing type params
-    ContextCodec.derive(ContextCodec.Config[Left[String, String], Left[Int, Int]].enableDiagnostics)
-    assertEquals(
-      ContextCodec.derive[Either[String, String], Either[Int, Int]].decode(Left("10x"), false, Left("10x").toString),
-      Left(
-        List("(Left(10x): scala.util.Left[scala.Predef.String, scala.Predef.String]).value cannot be converted to Int")
-      )
+    val codec: ContextCodec[Either[String, String], Either[Int, Int]] = ContextCodec.derive
+    val l = Left("10x")
+    val r = Right("10x")
+    // Scala 2 and Scala 3 type fullName have different approach to primitives and spaces in type arguments
+    assert(
+      Set[Either[List[String], Either[Int, Int]]](
+        Left(List(s"($l: scala.util.Left[String,String]).value cannot be converted to Int")),
+        Left(List(s"($l: scala.util.Left[scala.Predef.String, scala.Predef.String]).value cannot be converted to Int"))
+      ).contains(codec.decode(l, false, l.toString))
     )
-    assertEquals(
-      ContextCodec.derive[Either[String, String], Either[Int, Int]].decode(Right("10x"), false, Right("10x").toString),
-      Left(
-        List(
-          "(Right(10x): scala.util.Right[scala.Predef.String, scala.Predef.String]).value cannot be converted to Int"
-        )
-      )
+    assert(
+      Set[Either[List[String], Either[Int, Int]]](
+        Left(List(s"($r: scala.util.Right[String,String]).value cannot be converted to Int")),
+        Left(List(s"($r: scala.util.Right[scala.Predef.String, scala.Predef.String]).value cannot be converted to Int"))
+      ).contains(codec.decode(r, false, r.toString))
     )
   }
 }

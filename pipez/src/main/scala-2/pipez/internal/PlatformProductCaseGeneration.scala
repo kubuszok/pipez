@@ -36,20 +36,21 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     In.members
       .to(List)
       .filterNot(isGarbage)
-      .collect {
-        case member
-            if member.isMethod && (member.asMethod.isGetter || member.name.toString.toLowerCase.startsWith(
-              "is"
-            ) || member.name.toString.toLowerCase.startsWith("get")) =>
-          member.name.toString -> ProductInData.Getter[Any](
-            name = member.name.toString,
-            tpe = resolveTypeArgsForMethodReturnType(In, member).asInstanceOf[Type[Any]],
-            get =
-              if (member.asMethod.paramLists.isEmpty)
-                (in: Expr[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}")
-              else (in: Expr[In]) => c.Expr[Any](q"$in.${member.asMethod.name.toTermName}()"),
-            path = Path.Field(Path.Root, member.name.toString)
-          )
+      .filter(m =>
+        m.isMethod &&
+          (m.asMethod.isGetter || m.name.toString.toLowerCase.startsWith("is") ||
+            m.name.toString.toLowerCase.startsWith("get"))
+      )
+      .map { getter =>
+        getter.name.toString -> ProductInData.Getter[Any](
+          name = getter.name.toString,
+          tpe = returnTypeOf(In, getter).asInstanceOf[Type[Any]],
+          get =
+            if (getter.asMethod.paramLists.isEmpty)
+              (in: Expr[In]) => c.Expr[Any](q"$in.${getter.asMethod.name.toTermName}")
+            else (in: Expr[In]) => c.Expr[Any](q"$in.${getter.asMethod.name.toTermName}()"),
+          path = Path.Field(Path.Root, getter.name.toString)
+        )
       }
       .to(ListMap)
       .pipe(ProductInData(_))
@@ -60,29 +61,27 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
     if (isJavaBean[Out]) {
       // Java Bean case
 
-      // TODO: handle generics
-
       val defaultConstructor = DerivationResult.fromOption(
-        Out.decls.filterNot(isGarbage).collectFirst {
-          case member if member.isPublic && member.isConstructor && member.asMethod.paramLists.flatten.isEmpty =>
-            c.Expr[Out](q"new $Out()")
-        }
+        Out.decls
+          .filterNot(isGarbage)
+          .find(m => m.isPublic && m.isConstructor && m.asMethod.paramLists.flatten.isEmpty)
+          .map(_ => c.Expr[Out](q"new $Out()"))
       )(DerivationError.MissingPublicConstructor)
 
       val setters = Out.decls
         .to(List)
         .filterNot(isGarbage)
-        .collect {
-          case method
-              if method.isPublic && method.isMethod && method.name.toString.toLowerCase.startsWith(
-                "set"
-              ) && method.asMethod.paramLists.flatten.size == 1 =>
-            method.name.toString -> ProductOutData.Setter(
-              name = method.name.toString,
-              tpe = method.asMethod.paramLists.flatten.head.typeSignature.asInstanceOf[Type[Any]],
-              set =
-                (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.${method.asMethod.name.toTermName}($value)")
-            )
+        .filter(m =>
+          m.isPublic && m.isMethod &&
+            m.name.toString.toLowerCase.startsWith("set") &&
+            m.asMethod.paramLists.flatten.size == 1
+        )
+        .map { setter =>
+          setter.name.toString -> ProductOutData.Setter(
+            name = setter.name.toString,
+            tpe = paramListsOf(Out, setter).flatten.head.asInstanceOf[Type[Any]],
+            set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.${setter.asMethod.name.toTermName}($value)")
+          )
         }
         .to(ListMap)
         .pipe(DerivationResult.pure(_))
@@ -95,8 +94,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       ProductOutData
         .CaseClass(
-          params => c.Expr(q"${Out.typeSymbol.asClass.module}"),
-          List.empty
+          caller = params => c.Expr(q"${Out.typeSymbol.asClass.module}"),
+          params = List.empty
         )
         .pipe(DerivationResult.pure(_))
         .logSuccess(data => s"Resolved case object output: $data")
@@ -105,17 +104,16 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
       (for {
         primaryConstructor <- DerivationResult.fromOption(
-          Out.decls.to(List).filterNot(isGarbage).collectFirst { case m if m.isPublic && m.isConstructor => m }
+          Out.decls.to(List).filterNot(isGarbage).find(m => m.isPublic && m.isConstructor)
         )(DerivationError.MissingPublicConstructor)
-        typeByName = resolveTypeArgsForMethodArguments(Out, primaryConstructor)
       } yield ProductOutData.CaseClass(
-        params => c.Expr(q"new $Out(...$params)"),
-        primaryConstructor.asMethod.paramLists.map { params =>
+        caller = params => c.Expr(q"new $Out(...$params)"),
+        params = paramListsOf(Out, primaryConstructor).map { params =>
           params
             .map { param =>
               param.name.toString -> ProductOutData.ConstructorParam(
                 name = param.name.toString,
-                tpe = typeByName(param.name).asInstanceOf[Type[Any]]
+                tpe = param.typeSignature.asInstanceOf[Type[Any]]
               )
             }
             .to(ListMap)
@@ -320,18 +318,9 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   )
   private val isGarbage: Symbol => Boolean = s => garbage(s.name.toString)
 
-  private val resolveTypeArgsForMethodReturnType = (tpe: c.Type, method: c.Symbol) =>
-    method.typeSignatureIn(tpe).finalResultType
+  /** Applies type arguments obtained from tpe to the type parameters in method's parameters' types */
+  private val paramListsOf = (tpe: c.Type, method: c.Symbol) => method.asMethod.typeSignatureIn(tpe).paramLists
 
-  private val resolveTypeArgsForMethodArguments = (tpe: c.Type, method: c.Symbol) => {
-    val typeArgs                = tpe.typeArgs
-    val typeArgumentByTypeParam = tpe.typeConstructor.typeParams.map(_.asType.toType).zip(typeArgs).toMap
-    method.asMethod.paramLists.flatten.map { param =>
-      param.name -> typeArgumentByTypeParam
-        .collectFirst {
-          case (alias, tpe) if alias.typeSymbol.name == param.typeSignature.typeSymbol.name => tpe
-        }
-        .getOrElse(param.typeSignature)
-    }.toMap
-  }
+  /** Applies type arguments obtained from tpe to the type parameters in method's return type */
+  private val returnTypeOf = (tpe: c.Type, method: c.Symbol) => method.typeSignatureIn(tpe).finalResultType
 }

@@ -22,6 +22,9 @@ final case class CaseManyOutExt(a: Int, b: String, c: Long, x: String)
 final case class CaseLower(aaa: Int, bbb: String, ccc: Long)
 final case class CaseUpper(AAA: Int, BBB: String, CCC: Long)
 
+final case class CaseParamIn[A](a: Int, b: String, c: A)
+final case class CaseParamOutExt[A](a: Int, b: String, c: A, x: A)
+
 // Java Beans (as inputs, we rely on their getters, as output, we rely on their default constructor and setters)
 
 import scala.beans.BeanProperty
@@ -79,6 +82,18 @@ final case class BeanUpper private (
   @BeanProperty var BBB: String,
   @BeanProperty var CCC: Long
 ) { def this() = this(0, "", 0L) }
+
+final case class BeanPolyIn[A] private (
+  @BeanProperty var a: Int,
+  @BeanProperty var b: String,
+  @BeanProperty var c: A
+) { def this() = this(0, "", null.asInstanceOf[A]) }
+final case class BeanPolyOutExt[A] private (
+  @BeanProperty var a: Int,
+  @BeanProperty var b: String,
+  @BeanProperty var c: A,
+  @BeanProperty var x: A
+) { def this() = this(0, "", null.asInstanceOf[A], null.asInstanceOf[A]) }
 
 // ADT
 

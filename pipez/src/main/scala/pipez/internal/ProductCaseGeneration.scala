@@ -13,21 +13,18 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   /** True iff `A` is a tuple */
   def isTuple[A: Type]: Boolean
 
-  /** True iff `A` is defined as `case class` */
+  /** True iff `A` is defined as `case class`, is NOT abstract and has a public constructor */
   def isCaseClass[A: Type]: Boolean
 
-  /** True iff `A` is defined as `case object` */
+  /** True iff `A` is defined as `case object`, and is public */
   def isCaseObject[A: Type]: Boolean
 
   /** True iff `A` has a (public) default constructor and at least one (public) method starting with `set` */
   def isJavaBean[A: Type]: Boolean
 
-  /** True iff `A` is not abstract */
-  def isInstantiable[A: Type]: Boolean
-
   /** Whether `Out` type could be constructed as "product case" */
   final def isUsableAsProductOutput: Boolean =
-    (isCaseClass[Out] || isCaseObject[Out] || isJavaBean[Out]) && isInstantiable[Out]
+    isCaseClass[Out] || isCaseObject[Out] || isJavaBean[Out]
 
   /** Should create `Out` expression from the constructor arguments grouped in parameter lists */
   type Constructor = List[List[Expr[Any]]] => Expr[Out]
@@ -452,19 +449,21 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 }
 object ProductCaseGeneration {
 
-  private val getAccessor = raw"get(.)(.*)".r
-  private val isAccessor  = raw"is(.)(.*)".r
+  private val getAccessor = raw"(?i)get(.)(.*)".r
+  private val isAccessor  = raw"(?i)is(.)(.*)".r
   private val dropGetIs: String => String = {
     case getAccessor(head, tail) => head.toLowerCase + tail
     case isAccessor(head, tail)  => head.toLowerCase + tail
     case other                   => other
   }
+  val isGetterName: String => Boolean = name => getAccessor.matches(name) || isAccessor.matches(name)
 
-  private val setAccessor = raw"set(.)(.*)".r
+  private val setAccessor = raw"(?i)set(.)(.*)".r
   private val dropSet: String => String = {
     case setAccessor(head, tail) => head.toLowerCase + tail
     case other                   => other
   }
+  val isSetterName: String => Boolean = name => setAccessor.matches(name)
 
   private def inputNameMatchesOutputName(
     inFieldName:     String,

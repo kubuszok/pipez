@@ -42,8 +42,8 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
     val sym = TypeRepr.of[In].typeSymbol
-    (sym.caseFields ++ sym.declaredMethods.filter(isJavaGetter))
-      .filterNot(_.name.endsWith(" ")) // apparently each case fiels is duplicated: "a" and "a ", "_1" and "_1" o_0
+    // apparently each case field is duplicated: "a" and "a ", "_1" and "_1" o_0 - the first is method, the other val
+    (sym.caseFields.filter(_.isDefDef) ++ sym.declaredMethods.filter(isJavaGetter))
       .map { method =>
         method.name.toString -> ProductInData.Getter[Any](
           name = method.name.toString,
@@ -133,6 +133,20 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         primaryConstructor <- DerivationResult.pure(TypeRepr.of[Out].typeSymbol.primaryConstructor)
         pair <- resolveTypeArgsForMethodArguments(TypeRepr.of[Out], primaryConstructor)
         (typeByName, typeParams) = pair
+        // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
+        defaults = primaryConstructor.paramSymss
+          .pipe(if (typeParams.nonEmpty) ps => ps.tail else ps => ps)
+          .headOption
+          .toList
+          .flatten
+          .zipWithIndex
+          .collect {
+            case (param, idx) if param.flags.is(Flags.HasDefault) =>
+              val mod = TypeRepr.of[Out].typeSymbol.companionModule
+              val sym = mod.declaredMethod("apply$default$" + (idx + 1)).head
+              param.name -> Ref(mod).select(sym).appliedToNone.asExpr.asInstanceOf[Expr[Any]]
+          }
+          .toMap
       } yield ProductOutData.CaseClass(
         params =>
           New(TypeTree.of[Out])
@@ -144,9 +158,10 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         primaryConstructor.paramSymss.pipe(if (typeParams.nonEmpty) ps => ps.tail else ps => ps).map { params =>
           params
             .map { param =>
-              param.name.toString -> ProductOutData.ConstructorParam(
+              param.name -> ProductOutData.ConstructorParam(
                 name = param.name,
-                tpe = typeByName(param.name).asType.asInstanceOf[Type[Any]]
+                tpe = typeByName(param.name).asType.asInstanceOf[Type[Any]],
+                default = defaults.get(param.name)
               )
             }
             .to(ListMap)
@@ -163,7 +178,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   private def generateCaseClass(
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
-  ) = {
+  ): DerivationResult[Expr[Pipe[In, Out]]] = {
     val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Expr[Int]] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
       .zipWithIndex
@@ -236,7 +251,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   private def generateJavaBean(
     defaultConstructor: Expr[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
-  ) = {
+  ): DerivationResult[Expr[Pipe[In, Out]]] = {
     def pureValues(in: Expr[In], ctx: Expr[Context], result: Expr[Out]): List[Expr[Unit]] =
       outputSettersList.collect { case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
         setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx).asInstanceOf[Expr[Unit]])

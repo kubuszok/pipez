@@ -94,6 +94,8 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
 
     case object FieldCaseInsensitive extends ConfigEntry
 
+    case object EnableFallbackToDefaults extends ConfigEntry
+
     final case class RemoveSubtype[InSubtype <: In](
       inputSubtype:     Path,
       inputSubtypeType: Type[InSubtype],
@@ -137,6 +139,8 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
     lazy val isFieldCaseInsensitive: Boolean = entries.contains(FieldCaseInsensitive)
 
     lazy val isEnumCaseInsensitive: Boolean = entries.contains(EnumCaseInsensitive)
+
+    lazy val isFallbackToDefaultEnabled: Boolean = entries.contains(EnableFallbackToDefaults)
 
     def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
       (a, entry) => overrideWhen.applyOrElse[ConfigEntry, A](entry, _ => a)

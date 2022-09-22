@@ -66,8 +66,9 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
   object ProductOutData {
 
     final case class ConstructorParam[OutField](
-      name: String,
-      tpe:  Type[OutField]
+      name:    String,
+      tpe:     Type[OutField],
+      default: Option[Expr[OutField]]
     )
     final case class CaseClass(
       caller: Constructor,
@@ -151,7 +152,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       settings:     Settings,
       inData:       ProductInData,
       outParamName: String,
-      indexOpt:     Option[Int]
+      indexOpt:     Option[Int],
+      default:      Option[Expr[OutField]]
     ): DerivationResult[ProductGeneratorData.OutputValue] = resolve[OutField](settings, outParamName) match {
       case DefaultField() =>
         // if inField (same name as out - same index if tuple) not found then error
@@ -168,6 +170,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             implicit val tpe: Type[InField] = getter.tpe
             fromFieldConstructorParam[InField, OutField](getter)
           }
+          // TODO: recover with default if Some and settings.enableFallbackToDefauls
           .log(
             s"Field $outParamName uses default resolution (${
                 if (indexOpt.isEmpty) "matching input name" else "matching field position"
@@ -359,8 +362,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       listOfParamsList
         .map(
           _.values
-            .map { case ProductOutData.ConstructorParam(outParamName, outParamType) =>
-              OutFieldLogic.resolveField(settings, inData, outParamName, None)(outParamType)
+            .map { case ProductOutData.ConstructorParam(outParamName, outParamType, default) =>
+              OutFieldLogic.resolveField(settings, inData, outParamName, None, default)(outParamType)
             }
             .toList
             .pipe(DerivationResult.sequence(_))
@@ -372,7 +375,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     case ProductOutData.JavaBean(defaultConstructor, setters) =>
       setters.values
         .map { case setter @ ProductOutData.Setter(outSetterName, outSetterType, _) =>
-          OutFieldLogic.resolveField(settings, inData, outSetterName, None)(outSetterType).map(_ -> setter)
+          OutFieldLogic.resolveField(settings, inData, outSetterName, None, None)(outSetterType).map(_ -> setter)
         }
         .toList
         .pipe(DerivationResult.sequence(_))
@@ -394,8 +397,8 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       listOfParamsList
         .map(
           _.values.zipWithIndex
-            .map { case (ProductOutData.ConstructorParam(outParamName, outParamType), index) =>
-              OutFieldLogic.resolveField(settings, inData, outParamName, Some(index))(outParamType)
+            .map { case (ProductOutData.ConstructorParam(outParamName, outParamType, default), index) =>
+              OutFieldLogic.resolveField(settings, inData, outParamName, Some(index), default)(outParamType)
             }
             .toList
             .pipe(DerivationResult.sequence(_))

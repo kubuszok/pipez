@@ -113,14 +113,21 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
         primaryConstructor <- DerivationResult.fromOption(
           Out.decls.to(List).filterNot(isGarbage).find(m => m.isPublic && m.isConstructor)
         )(DerivationError.MissingPublicConstructor)
+        // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
+        defaults = primaryConstructor.typeSignature.paramLists.headOption.toList.flatten.zipWithIndex.collect {
+          case (param, idx) if param.asTerm.isParamWithDefault =>
+            param.name.toString -> c.Expr[Any](q"${Out.typeSymbol.companion}.${TermName("apply$default$" + (idx + 1))}")
+        }.toMap
       } yield ProductOutData.CaseClass(
         caller = params => c.Expr(q"new $Out(...$params)"),
         params = paramListsOf(Out, primaryConstructor).map { params =>
           params
             .map { param =>
-              param.name.toString -> ProductOutData.ConstructorParam(
-                name = param.name.toString,
-                tpe = param.typeSignature.asInstanceOf[Type[Any]]
+              val name = param.name.toString
+              name -> ProductOutData.ConstructorParam(
+                name = name,
+                tpe = param.typeSignature.asInstanceOf[Type[Any]],
+                default = defaults.get(name)
               )
             }
             .to(ListMap)
@@ -137,7 +144,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   private def generateCaseClass(
     constructor:          Constructor,
     outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
-  ) = {
+  ): DerivationResult[Expr[Pipe[In, Out]]] = {
     val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Constant] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
       .zipWithIndex
@@ -226,7 +233,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
   private def generateJavaBean(
     defaultConstructor: Expr[Out],
     outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
-  ) = {
+  ): DerivationResult[Expr[Pipe[In, Out]]] = {
     def pureValues(in: Expr[In], ctx: Expr[Context], result: Expr[Out]): List[Expr[Unit]] =
       outputSettersList.collect { case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
         setter.asInstanceOf[ProductOutData.Setter[Any]].set(result, caller(in, ctx))

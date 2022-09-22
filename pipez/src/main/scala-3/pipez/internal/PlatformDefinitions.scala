@@ -113,6 +113,9 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
       // matches {cfg}.fieldMatchingCaseInsensitive
       case Select(expr, "fieldMatchingCaseInsensitive") =>
         extract(expr, ConfigEntry.FieldCaseInsensitive :: acc)
+      // matches {cfg}.enableFallbackToDefaults
+      case Select(expr, "enableFallbackToDefaults") =>
+        extract(expr, ConfigEntry.EnableFallbackToDefaults :: acc)
       // matches {cfg}.removeSubtype[InSubtype](pipe)
       case Apply(TypeApply(Select(expr, "removeSubtype"), List(inputSubtype)), List(pipe)) =>
         for {

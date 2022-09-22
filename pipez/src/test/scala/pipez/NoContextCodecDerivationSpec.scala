@@ -6,7 +6,7 @@ import scala.util.chaining.*
 // TODO: test conversion for types with type parameters
 
 class NoContextCodecDerivationSpec extends munit.FunSuite {
-
+  /*
   test("no config, no conversion -> use matching fields names") {
     // default constructor -> default constructor
     assertEquals(
@@ -433,4 +433,5 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTUpper.CCC(1))
     )
   }
+   */
 }

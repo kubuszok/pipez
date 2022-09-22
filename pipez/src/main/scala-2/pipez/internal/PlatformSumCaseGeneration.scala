@@ -28,12 +28,12 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
       else List(t)
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
-        extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType =>
+        extractSubclasses(typeOf[A].typeSymbol.asType).tap(println(_)).map { subtypeType: TypeSymbol =>
           EnumData.Case(
-            subtypeType.name.toString,
-            subtypeType.toType.asInstanceOf[Type[A]],
+            name = subtypeType.fullName,
+            tpe = subtypeTypeOf(typeOf[A], subtypeType.toType).asInstanceOf[Type[A]],
             isCaseObject = subtypeType.asClass.isModule,
-            path = Path.Subtype(Path.Root, subtypeType.name.toString)
+            path = Path.Subtype(Path.Root, subtypeType.fullName)
           )
         }
       )
@@ -76,5 +76,11 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
       .pure(body)
       .log(s"Sum types derivation, subtypes: $subtypes")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
+  }
+
+  private def subtypeTypeOf(parentType: c.Type, subtypeType: c.Type): c.Type = {
+    val sEta = subtypeType.etaExpand
+    sEta.finalResultType
+      .substituteTypes(sEta.baseType(parentType.typeSymbol).typeArgs.map(_.typeSymbol), parentType.typeArgs)
   }
 }

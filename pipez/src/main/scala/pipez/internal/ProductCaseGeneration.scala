@@ -168,7 +168,11 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             implicit val tpe: Type[InField] = getter.tpe
             fromFieldConstructorParam[InField, OutField](getter)
           }
-          .log(s"Field $outParamName uses default resolution (matching input name, summoning)")
+          .log(
+            s"Field $outParamName uses default resolution (${
+                if (indexOpt.isEmpty) "matching input name" else "matching field position"
+              }, summoning)"
+          )
       case FieldAdded(pipe) =>
         // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
         DerivationResult

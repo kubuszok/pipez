@@ -465,4 +465,25 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(new BeanPolyOutExt[Int]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC(10)).tap(_.setX(5)))
     )
   }
+
+  test("transformation of tuples should use position for field matching") {
+    // case class -> tuple
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec.Config[(Int, String, Double), CaseParamOutExt[Double]].addField(_.x, i => Right(i._1.toDouble))
+        )
+        .decode((5, "test", 10.0)),
+      Right(CaseParamOutExt(5, "test", 10.0, 5.0))
+    )
+    // tuple -> case class
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec.Config[CaseParamIn[Double], (Int, String, Double, Int)].addField(_._4, i => Right(i.a))
+        )
+        .decode(CaseParamIn(5, "test", 10.0)),
+      Right((5, "test", 10.0, 5))
+    )
+  }
 }

@@ -168,3 +168,16 @@ object ADTUpper {
   final case class BBB(b: Int) extends ADTUpper
   final case class CCC(c: Int) extends ADTUpper
 }
+
+sealed trait `Backtick ADT In` extends Product with Serializable
+object `Backtick ADT In` {
+  
+  final case class `Case Class`(`a field`: String) extends `Backtick ADT In`
+  case object `Case Object` extends `Backtick ADT In`
+}
+sealed trait `Backtick ADT Out` extends Product with Serializable
+object `Backtick ADT Out` {
+  
+  final case class `Case Class`(`a field`: String) extends `Backtick ADT Out`
+  case object `Case Object` extends `Backtick ADT Out`
+}

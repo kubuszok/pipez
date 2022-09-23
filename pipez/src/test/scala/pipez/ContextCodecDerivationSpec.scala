@@ -2,8 +2,6 @@ package pipez
 
 import scala.util.chaining.*
 
-// TODO: test backticked names like `a b`
-
 class ContextCodecDerivationSpec extends munit.FunSuite {
 
   test("no config, no conversion -> use matching fields names") {
@@ -624,6 +622,22 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
         )
         .decode(CaseParamIn(5, "test", 10.0), shouldFailFast = false, "root"),
       Right((5, "test", 10.0, 5))
+    )
+  }
+
+  test("transformation should handle backticks in names") {
+    import ContextCodec.Auto.* // for recursive derivation
+    assertEquals(
+      ContextCodec
+        .derive[`Backtick ADT In`, `Backtick ADT Out`]
+        .decode(`Backtick ADT In`.`Case Class`("test"), shouldFailFast = false, "root"),
+      Right(`Backtick ADT Out`.`Case Class`("test"))
+    )
+    assertEquals(
+      ContextCodec
+        .derive[`Backtick ADT In`, `Backtick ADT Out`]
+        .decode(`Backtick ADT In`.`Case Class`("test"), shouldFailFast = false, "root"),
+      Right(`Backtick ADT Out`.`Case Class`("test"))
     )
   }
 

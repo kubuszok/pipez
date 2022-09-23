@@ -1,7 +1,5 @@
 package pipez.dsl
 
-import pipez.PipeDerivation
-
 import scala.collection.Factory
 
 trait Converter[From, To] {
@@ -11,7 +9,9 @@ trait Converter[From, To] {
 object Converter
     extends pipez.PipeAutoSupport[Converter]
     with pipez.PipeSemiautoConfiguredSupport[Converter]
-    with ConvertInstances0 {
+    with ConverterInstances0 {
+
+  def instance[From, To](f: From => To): Converter[From, To] = f(_)
 
   object unsafe {
 
@@ -19,14 +19,9 @@ object Converter
       option => safe.convert(option.get)
   }
 
-  implicit val pipeDerivation: PipeDerivation[Converter] = new PipeDerivation.Simple[Converter] {
-
-    override def simpleLift[In, Out](f: In => Out): Converter[In, Out] = f(_)
-
-    override def simpleUnlift[In, Out](pipe: Converter[In, Out], in: In): Out = pipe.convert(in)
-  }
+  implicit val pipeDerivation: pipez.PipeDerivation[Converter] = ConverterDerivationDefinition
 }
-private[dsl] trait ConvertInstances0 extends ConvertInstances1 { self: Converter.type =>
+private[dsl] trait ConverterInstances0 extends ConverterInstances1 { self: Converter.type =>
 
   implicit def convertEither[FromLeft, FromRight, ToLeft, ToRight, FromEither[L, R] <: Either[L, R]](implicit
     left:  Converter[FromLeft, ToLeft],
@@ -81,12 +76,18 @@ private[dsl] trait ConvertInstances0 extends ConvertInstances1 { self: Converter
     builder.result()
   }
 }
-private[dsl] trait ConvertInstances1 extends ConvertInstances2 { self: Converter.type =>
+private[dsl] trait ConverterInstances1 extends ConverterInstances2 { self: Converter.type =>
 
   implicit def convertToOption[From, To](implicit converter: Converter[From, To]): Converter[From, Option[To]] =
     from => Some(converter.convert(from))
 }
-private[dsl] trait ConvertInstances2 { self: Converter.type =>
+private[dsl] trait ConverterInstances2 { self: Converter.type =>
 
   implicit def convertToSelf[A, B >: A]: Converter[A, B] = a => a
+}
+private[dsl] object ConverterDerivationDefinition extends pipez.PipeDerivation.Simple[Converter] {
+  import Converter._
+
+  override def simpleLift[In, Out](f: In => Out):                       Converter[In, Out] = f(_)
+  override def simpleUnlift[In, Out](pipe: Converter[In, Out], in: In): Out                = pipe.convert(in)
 }

@@ -2,8 +2,6 @@ package pipez
 
 import scala.util.chaining.*
 
-// TODO: test backticked names like `a b`
-
 class NoContextCodecDerivationSpec extends munit.FunSuite {
 
   test("no config, no conversion -> use matching fields names") {
@@ -328,6 +326,15 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("enableFallbackToDefaults, no manual override -> fields with no source should use defaults") {
+    assertEquals(
+      NoContextCodec
+        .derive(NoContextCodec.Config[CaseManyIn, CaseManyOutExt].enableFallbackToDefaults)
+        .decode(CaseManyIn(1, "a", 2L)),
+      Right(CaseManyOutExt(1, "a", 2L, "test"))
+    )
+  }
+
   test("no config, auto summon elements -> use matching subtypes") {
     import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
@@ -484,6 +491,18 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
         )
         .decode(CaseParamIn(5, "test", 10.0)),
       Right((5, "test", 10.0, 5))
+    )
+  }
+
+  test("transformation should handle backticks in names") {
+    import NoContextCodec.Auto.* // for recursive derivation
+    assertEquals(
+      NoContextCodec.derive[`Backtick ADT In`, `Backtick ADT Out`].decode(`Backtick ADT In`.`Case Class`("test")),
+      Right(`Backtick ADT Out`.`Case Class`("test"))
+    )
+    assertEquals(
+      NoContextCodec.derive[`Backtick ADT In`, `Backtick ADT Out`].decode(`Backtick ADT In`.`Case Class`("test")),
+      Right(`Backtick ADT Out`.`Case Class`("test"))
     )
   }
 }

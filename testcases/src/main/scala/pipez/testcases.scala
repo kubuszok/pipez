@@ -17,7 +17,7 @@ final case class CaseOnesOutExt(a: Int, x: String)
 final case class CaseManyIn(a: Int, b: String, c: Long)
 final case class CaseManyOut(a: Int, b: String, c: Long)
 final case class CaseManyOutMod(a: String, b: String, c: Long)
-final case class CaseManyOutExt(a: Int, b: String, c: Long, x: String)
+final case class CaseManyOutExt(a: Int, b: String, c: Long, x: String = "test")
 
 final case class CaseLower(aaa: Int, bbb: String, ccc: Long)
 final case class CaseUpper(AAA: Int, BBB: String, CCC: Long)

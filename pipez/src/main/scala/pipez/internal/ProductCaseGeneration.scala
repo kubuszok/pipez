@@ -1,7 +1,7 @@
 package pipez.internal
 
 import pipez.internal.Definitions.{ Context, Result }
-import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
+import pipez.internal.ProductCaseGeneration.{ inputNameMatchesOutputName, setAccessor }
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
@@ -170,7 +170,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
             implicit val tpe: Type[InField] = getter.tpe
             fromFieldConstructorParam[InField, OutField](getter)
           }
-          // TODO: recover with default if Some and settings.enableFallbackToDefauls
+          .orElse(fallbackOnDefault(outParamName, default, settings))
           .log(
             s"Field $outParamName uses default resolution (${
                 if (indexOpt.isEmpty) "matching input name" else "matching field position"
@@ -453,6 +453,30 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
       typeOf[OutField],
       (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
     )
+
+  private def fallbackOnDefault[OutField: Type](
+    outParamName: String,
+    default:      Option[Expr[OutField]],
+    settings:     Settings
+  ): DerivationResult[ProductGeneratorData.OutputValue] =
+    if (settings.isFallbackToDefaultEnabled)
+      DerivationResult
+        .fromOption(default)(
+          DerivationError.InvalidConfiguration(
+            s"No default defined for $outParamName, fallback on default is impossible"
+          )
+        )
+        .map(code => ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code))
+    else if (default.isDefined)
+      DerivationResult.fail(
+        DerivationError.InvalidConfiguration(
+          s"No value could be resolve for field $outParamName, although it has a default so you might try enableFallbackToDefaults option"
+        )
+      )
+    else
+      DerivationResult.fail(
+        DerivationError.InvalidConfiguration(s"Couldn't fallback on default value for $outParamName")
+      )
 }
 object ProductCaseGeneration {
 

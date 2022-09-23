@@ -31,35 +31,38 @@ trait Generators[Pipe[_, _], In, Out]
   def reportDiagnostics[A](result: DerivationResult[A]): Unit
 
   /** Generates error message to be returned from macro on ERROR level */
-  final def errorMessage(errors: List[DerivationError]): String = "Pipe couldn't be generated due to errors:\n" + errors
-    .map {
-      case DerivationError.MissingPublicConstructor =>
-        s"${previewType[Out]} is missing a public constructor that could be used to initiate its value"
-      case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
-        s"Couldn't find implicit of type ${previewType(PipeOf(inFieldType, outFieldType))}"
-      case DerivationError.MissingPublicSource(outFieldName) =>
-        s"Couldn't find a field/method which could be used as a source for $outFieldName from ${previewType[Out]}; use config to provide it manually"
-      case DerivationError.MissingMatchingSubType(inSubtypeType) =>
-        s"Couldn't find corresponding subtype for $inSubtypeType"
-      case DerivationError.MissingMatchingValue(inValue) =>
-        s"Couldn't find corresponding value for $inValue"
-      case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
-        s"Couldn't find an implicit value converting $inFieldType to ${previewType(
-            outFieldType
-          )}, required by ${previewType[In]}.$inField to ${previewType[Out]}.$outField conversion; provide the right implicit or configuration"
-      case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
-        s"Couldn't convert ${previewType[In]} (${
-            if (isInSumType) "sum type" else "value enumeration"
-          }) into ${previewType[Out]} (${if (isOutSumType) "sum type" else "value enumeration"})"
-      case DerivationError.NotYetSupported =>
-        s"Your setup is valid, but the library doesn't support it yet; if you think it's a bug contact library authors"
-      case DerivationError.InvalidConfiguration(msg) =>
-        s"The configuration you provided was incorrect: $msg"
-      case DerivationError.NotYetImplemented(msg) =>
-        s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
-    }
-    .map(" - " + _)
-    .mkString("\n")
+  final def errorMessage(errors: List[DerivationError]): String = {
+    val pipeType = previewType(PipeOf[In, Out])
+    val inType   = previewType[In]
+    val outType  = previewType[Out]
+    s"$pipeType couldn't be generated due to errors:\n" + errors
+      .map {
+        case DerivationError.MissingPublicConstructor =>
+          s"$outType is missing a public constructor that could be used to initiate its value"
+        case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
+          s"Couldn't find implicit of type ${previewType(PipeOf(inFieldType, outFieldType))}"
+        case DerivationError.MissingPublicSource(outFieldName) =>
+          s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
+        case DerivationError.MissingMatchingSubType(inSubtypeType) =>
+          s"Couldn't find corresponding subtype for $inSubtypeType}"
+        case DerivationError.MissingMatchingValue(inValue) =>
+          s"Couldn't find corresponding value for $inValue"
+        case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
+          s"Couldn't find an implicit value converting ${previewType(inFieldType)} to ${previewType(outFieldType)}, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
+        case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
+          s"Couldn't convert $inType (${if (isInSumType) "sum type" else "value enumeration"}) into $outType (${
+              if (isOutSumType) "sum type" else "value enumeration"
+            })"
+        case DerivationError.NotYetSupported =>
+          s"Derivation is only supported for conversions: case class/Java Bean <=> case class/Java Bean, case class <=> tuple, ADT <=> ADT - types $inType => $outType don't match this requirement, consider providing $pipeType yourself"
+        case DerivationError.InvalidConfiguration(msg) =>
+          s"The configuration you provided was incorrect: $msg"
+        case DerivationError.NotYetImplemented(msg) =>
+          s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
+      }
+      .map(" - " + _)
+      .mkString("\n")
+  }
 
   /** Should use platform-specific way of reporting errors from macro */
   def reportError(errors: List[DerivationError]): Nothing

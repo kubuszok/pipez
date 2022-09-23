@@ -534,7 +534,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTClassesRemovedOut.A(1))
     )
   }
-
   test("enumMatchingCaseInsensitive, auto summon elements -> match subtypes by name ignoring cases") {
     import ContextCodec.Auto.* // for recursive derivation
     assertEquals(

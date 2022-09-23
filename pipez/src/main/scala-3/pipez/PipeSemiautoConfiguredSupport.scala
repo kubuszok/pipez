@@ -4,8 +4,8 @@ package pipez
 trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
 
   /** Derives `Pipe[In, Out]` using provided settings */
-  inline def derive[Pipe[_, _], In, Out](
-    inline config: PipeDerivationConfig[Pipe, In, Out]
+  inline def derive[In, Out](
+    inline config: Config[In, Out]
   )(using
     pipeDerivation: PipeDerivation[Pipe]
   ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveConfigured[Pipe, In, Out]('{ config })('{ pipeDerivation }) }
@@ -19,4 +19,5 @@ trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
     /** Initiates the config object. Should be used ONLY within `TypeClass.derive(...)` */
     def apply[In, Out]: PipeDerivationConfig[Pipe, In, Out] = ???
   }
+  type Config[In, Out] = PipeDerivationConfig[Pipe, In, Out]
 }

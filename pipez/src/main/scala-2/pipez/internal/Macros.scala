@@ -55,17 +55,23 @@ final class Macro(val c: blackbox.Context) {
   )
 
   // I messed up something with the types of generated Trees - shape is almost identical to the last working version
-  // before I started working on Scala 3 and making adjustments, but without this, it produces "type mismatch error".
+  // before I started working on Scala 3 and making adjustments, but without this, it produces "type mismatch error" in
+  // one test case:
+  //
+  //    def test[In, Out](out: Out)(implicit
+  //      contextCodec:        ContextCodec[In, Out]
+  //    ): ContextCodec[CaseParamIn[In], CaseParamOutExt[Out]] = ContextCodec.derive(
+  //      ContextCodec.Config[CaseParamIn[In], CaseParamOutExt[Out]].addField(_.x, (_, _, _) => Right(out))
+  //    )
+  //
+  // If we figured it out, we could remove this fix, as it only fails this case as far as I can tell.
   private def fixTypes[Pipe[_, _]: ConstructorWeakTypeTag, Out](
     expr:           blackbox.Context#Expr[Out],
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Out] = try
     c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree.asInstanceOf[c.Tree])))
   catch {
-    case TypecheckException(_, msg) if msg.startsWith("stable identifier required") =>
-      val tc = c.weakTypeOf[Pipe[Any, Nothing]].typeConstructor
-      val pd = showCode(pipeDerivation.tree)
-      c.abort(c.enclosingPosition, s"Macro requires the implicit PipeDerivation[$tc] to be a stable val, given $pd")
+    case TypecheckException(_, msg) => c.abort(c.enclosingPosition, msg)
   }
 
   /** Called with `macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]` */

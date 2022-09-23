@@ -19,6 +19,10 @@ trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
   object Config {
 
     /** Initiates the config object. Should be used ONLY within `TypeClass.derive(...)` */
-    def apply[In, Out]: PipeDerivationConfig[Pipe, In, Out] = ???
+    def apply[In, Out]: Config[In, Out] = ???
+
+    /** Initiates the config object. Should be used ONLY within `TypeClass.derive(...)` */
+    def empty[In, Out]: Config[In, Out] = ???
   }
+  type Config[In, Out] = PipeDerivationConfig[Pipe, In, Out]
 }

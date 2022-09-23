@@ -429,6 +429,15 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("enableFallbackToDefaults, no manual override -> fields with no source should use defaults") {
+    assertEquals(
+      ContextCodec
+        .derive(ContextCodec.Config[CaseManyIn, CaseManyOutExt].enableFallbackToDefaults)
+        .decode(CaseManyIn(1, "a", 2L), shouldFailFast = false, path = "root"),
+      Right(CaseManyOutExt(1, "a", 2L, "test"))
+    )
+  }
+
   test("no config, auto summon elements -> use matching subtypes") {
     import ContextCodec.Auto.* // for recursive derivation
     // case object only in ADT

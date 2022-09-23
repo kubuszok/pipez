@@ -144,7 +144,7 @@ trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGene
             case (param, idx) if param.flags.is(Flags.HasDefault) =>
               val mod = TypeRepr.of[Out].typeSymbol.companionModule
               val sym = mod.declaredMethod("apply$default$" + (idx + 1)).head
-              param.name -> Ref(mod).select(sym).appliedToNone.asExpr.asInstanceOf[Expr[Any]]
+              param.name -> Ref(mod).select(sym).asExpr.asInstanceOf[Expr[Any]]
           }
           .toMap
       } yield ProductOutData.CaseClass(

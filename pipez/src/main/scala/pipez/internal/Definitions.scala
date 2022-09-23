@@ -215,6 +215,15 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
 
     final def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = map2(other)(_ -> _)
 
+    def orElse[A1 >: A](result: => DerivationResult[A1]): DerivationResult[A1] = this match {
+      case success @ Success(_, _) => success
+      case Failure(errors1, diagnostic1) =>
+        result match {
+          case Success(value, diagnostic2)   => Success(value, diagnostic2)
+          case Failure(errors2, diagnostic2) => Failure(errors1 ++ errors2, diagnostic1 ++ diagnostic2)
+        }
+    }
+
     final def fold[B](success: A => B)(failure: List[DerivationError] => B): B = this match {
       case Success(value, _)  => success(value)
       case Failure(errors, _) => failure(errors)

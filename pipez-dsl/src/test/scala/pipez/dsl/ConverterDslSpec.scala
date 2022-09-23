@@ -4,13 +4,13 @@ import scala.collection.immutable.{ HashMap, ListMap }
 
 class ConverterDslSpec extends munit.FunSuite {
 
-  test("from.convertTo[To] should handle identity mapping (From <:< To)") {
+  test("from.convertInto[To] should handle identity mapping (From <:< To)") {
     assertEquals(10.convertInto[Int], 10)
     assertEquals("test".convertInto[String], "test")
     assertEquals(15L.convertInto[AnyVal], 15L)
   }
 
-  test("from.toConvert[To] should handle Options") {
+  test("from.convertInto[To] should handle Options") {
     implicit val intToSting: Converter[Int, String] = _.toString
     assertEquals(10.convertInto[Option[String]], Some("10"))
     assertEquals(Option(10).convertInto[Option[String]], Some("10"))
@@ -24,7 +24,7 @@ class ConverterDslSpec extends munit.FunSuite {
     )
   }
 
-  test("from.toConvert[To] should handle Eithers") {
+  test("from.convertInto[To] should handle Eithers") {
     implicit val intToSting: Converter[Int, String] = _.toString
     assertEquals((Left(10): Either[Int, Int]).convertInto[Either[String, String]], Left("10"))
     assertEquals((Right(10): Either[Int, Int]).convertInto[Either[String, String]], Right("10"))
@@ -32,7 +32,7 @@ class ConverterDslSpec extends munit.FunSuite {
     assertEquals(Right(10).convertInto[Right[Nothing, String]], Right("10"))
   }
 
-  test("from.toConvert[To] should handle collections") {
+  test("from.convertInto[To] should handle collections") {
     implicit val intToSting: Converter[Int, String] = _.toString
     assertEquals(
       List(1, 2, 3, 4).convertInto[Vector[String]],
@@ -40,7 +40,7 @@ class ConverterDslSpec extends munit.FunSuite {
     )
   }
 
-  test("from.toConvert[To] should handle maps") {
+  test("from.convertInto[To] should handle maps") {
     implicit val intToSting: Converter[Int, String] = _.toString
     assertEquals(
       HashMap(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4).convertInto[ListMap[String, String]],
@@ -48,7 +48,7 @@ class ConverterDslSpec extends munit.FunSuite {
     )
   }
 
-  test("from.toConvert[To] should handle automatic derivation") {
+  test("from.convertInto[To] should handle automatic derivation") {
     import pipez.{ `Backtick ADT In`, `Backtick ADT Out` }
     assertEquals(
       (`Backtick ADT In`.`Case Class`("test"): `Backtick ADT In`).convertInto[`Backtick ADT Out`],
@@ -56,7 +56,7 @@ class ConverterDslSpec extends munit.FunSuite {
     )
   }
 
-  test("from.toConvert[To] should handle configured derivation") {
+  test("from.convertInto[To] should handle configured derivation") {
     import pipez.{ CaseParamIn, CaseParamOutExt }
     implicit val intToSting: Converter[Int, String] = _.toString
     assertEquals(

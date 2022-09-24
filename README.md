@@ -1,8 +1,12 @@
 # Pipez
 
+[![Pipez JVM](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=jvm)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
+[![Pipez JS](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=sjs1)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
+[![Pipez Native](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=native0.4)](https://search.maven.org/artifact/com.kubuszok/pipez_3)
+
+[![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc%202.13.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
+[![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_3/scaladoc%203.svg)](https://javadoc.io/doc/com.kubuszok/pipez_3)
 ![CI build](https://github.com/MateuszKubuszok/pipez/workflows/CI%20build/badge.svg)
-[![Maven Central](https://img.shields.io/maven-central/v/com.kubuszok/pipez_2.13.svg)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
-[![Javadoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
 [![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 Library oriented about deriving (generating by type) functions:
@@ -14,12 +18,14 @@ Library oriented about deriving (generating by type) functions:
 as well as all type classes that could be converted to/from such functions, so that all the boring
 part of converting type on input to the very similar type on output could be automatically generated.
 
-**Example**:
-
 ```scala
 // add in sbt, released for 2.13.8 and 3.2.0
 libraryDependencies += "com.kubuszok" %% "pipez" % "<version>"
+// use this if you are using Scala.js or Scala Native (the latter only for 3)
+libraryDependencies += "com.kubuszok" %%% "pipez" % "<version>"
 ```
+
+**Example**:
 
 ```scala
 // When turning Foo to Bar, field a has to be converted and field b can be copied
@@ -43,6 +49,63 @@ println(derived2(Foo(1.0, 2), Ctx("%.2f")))
 
 // Derivation of type classes or functions returning F[Out] require writing PipeDerivation instance
 ```
+
+**DSL**:
+
+What can be achieved with derivation shows pipez DSL, which recreates a fraction of
+[Chimney](https://github.com/scalalandio/chimney) abilities:
+
+```scala
+// Add this to you project to access DSL
+libraryDependencies += "com.kubuszok" %% "pipez-dsl" % "<version>"
+```
+
+```scala
+import pipez.dsl.*
+
+// Convert[From, To] is similar to Transformer[Source, Target] from Chimney
+implicit val intToSting: Converter[Int, String] = _.toString
+
+// Here we can use Convert[Int, String] to translate HashMap of Ints into ListMap of String
+HashMap(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4).convertInto[ListMap[String, String]]
+
+// Or, we can convert case classes by converting their corresponding fields
+case class In(a: Int, b: Int)
+case class Out(a: String, b: String)
+In(1, 2).convertInto[Out]
+
+// Parser[From, To] is similar to TransformerF[Either[Vector[String], *], In, Out]
+implicit val stringToInt: Parser[String, Int] =
+  Parser.instance(i => scala.util.Try(i.toInt).toEither.left.map(_ => Vector(s"$i is not integer")))
+
+// We can use Parse[String, Int] to parse keys and values of HashMap into ListMap with fail fast mechanism
+HashMap("1" -> "1", "2" -> "2", "3" -> "3", "4" -> "4").parseFastInto[ListMap[String, String]]
+
+// Or, we can parse corresponding fields of case classes to turn one into another aggregating all parsing errors
+case class In2(a: String, b: String)
+case class Out2(a: Int, b: Int)
+In2("a", "a").parseFullInto[Out2]
+```
+
+### Features
+
+* conversion between case classes/Java Beans and case classes/Java Beans based on corresponding field names
+* conversion between case classes and tuples based on value position
+* conversion between ADTs based on corresponding subtypes' names
+* ability to customize derivation
+  * handling extra field on output side (`addField`)
+  * handling fields with mismatching names (`renameField`)
+  * manually converting specified field's value into another specified field (`plugInField`)
+  * opt-in case-insensitive matching of field names (`fieldMatchingCaseInsensitive`)
+  * opt-in fallback on default values if present (`enableFallbackToDefaults`)
+  * handling ADT input subtype without corresponding output subtype (`removeSubtype`)
+  * handling mismatched subtypes' names (`renameSubtype`)
+  * manually converting input subtype into output subtype (`plugInSubtype`)
+  * opt-in case-insensitive matching of subtype names (`enumMatchingCaseInsensitive`)
+  * debug printing how macro decided on derivation strategy (`enableDiagnostics`)
+* user can configure how conversion results will be merged and if input should carry some additional information
+* additional input information can be enriched with path from value to the field/subtype
+  (e.g. for improving error messages)
 
 ## Motivation
 
@@ -163,6 +226,8 @@ PipeDerivation.derive(
     .plugInField(_.in: In2, _.out: Out2, codec: Codec[In2, Out2])
     // don't match names in case sensitive way
     .fieldMatchingCaseInsensitive
+    // if there is no other source but target field has a default value - use it
+    .enableFallbackToDefaults
 )
 ```
 

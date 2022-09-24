@@ -1,17 +1,7 @@
 import commandmatrix.extra._
 import Settings._
 
-// 2.13 only since apparently my way of doing Java Beans (@BeanProperty) have slightly different behavior in 3.x
-val testCases = projectMatrix
-  .in(file("testcases"))
-  .allVariations(
-    List(scala2_13version),
-    List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
-  )
-  .settings(name := "testcases")
-  .settings(commonSettings)
-  .settings(publishSettings)
-  .settings(noPublishSettings)
+// Scala Native 2.13 seem to generate linking errors so we're disabling it for now
 
 val pipez = projectMatrix
   .in(file("pipez"))
@@ -22,15 +12,10 @@ val pipez = projectMatrix
   .enablePlugins(GitVersioning)
   .settings(name := "pipez")
   .settings(commonSettings: _*)
-  .settings(publishSettings: _*)
-  .dependsOn(testCases % "test->compile")
   .settings(
-    excludeDependencies ++= Seq(
-      ExclusionRule().withName("testcases_3"),
-      ExclusionRule().withName("testcases_sjs1_3"),
-      ExclusionRule().withName("testcases_native0.4_3")
-    )
+    libraryDependencies += ("com.kubuszok" %%% "pipez-testcases" % "0.1.0").cross(CrossVersion.for3Use2_13) % Test
   )
+  .settings(publishSettings: _*)
 
 val pipezDsl = projectMatrix
   .in(file("pipez-dsl"))
@@ -41,15 +26,11 @@ val pipezDsl = projectMatrix
   .enablePlugins(GitVersioning)
   .settings(name := "pipez-dsl")
   .settings(commonSettings: _*)
-  .settings(publishSettings: _*)
-  .dependsOn(testCases % "compile->test", pipez)
   .settings(
-    excludeDependencies ++= Seq(
-      ExclusionRule().withName("testcases_3"),
-      ExclusionRule().withName("testcases_sjs1_3"),
-      ExclusionRule().withName("testcases_native0.4_3")
-    )
+    libraryDependencies += ("com.kubuszok" %%% "pipez-testcases" % "0.1.0").cross(CrossVersion.for3Use2_13) % Test
   )
+  .settings(publishSettings: _*)
+  .dependsOn(pipez)
 
 val root = project
   .in(file("."))

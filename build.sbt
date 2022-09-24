@@ -15,10 +15,10 @@ val testCases = projectMatrix
 
 val pipez = projectMatrix
   .in(file("pipez"))
-  .allVariations(
+  .someVariations(
     List(scala2_13version, scala3version),
     List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
-  )
+  )(MatrixAction((s, a) => s.isScala2 && a.contains(VirtualAxis.native)).Skip)
   .enablePlugins(GitVersioning)
   .settings(name := "pipez")
   .settings(commonSettings: _*)
@@ -34,10 +34,10 @@ val pipez = projectMatrix
 
 val pipezDsl = projectMatrix
   .in(file("pipez-dsl"))
-  .allVariations(
+  .someVariations(
     List(scala2_13version, scala3version),
     List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
-  )
+  )(MatrixAction((s, a) => s.isScala2 && a.contains(VirtualAxis.native)).Skip)
   .enablePlugins(GitVersioning)
   .settings(name := "pipez-dsl")
   .settings(commonSettings: _*)

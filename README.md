@@ -1,8 +1,8 @@
 # Pipez
 
 [![Pipez JVM](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=jvm)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
-[![Pipez JS](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=sjs1)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
-[![Pipez Native](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=native0.4)](https://search.maven.org/artifact/com.kubuszok/pipez_3)
+[![Pipez JS](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=sjs1)](https://search.maven.org/artifact/com.kubuszok:pipez_sjs1_2.13)
+[![Pipez Native](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=native0.4)](https://search.maven.org/artifact/com.kubuszok/pipez_native0.4_3)
 
 [![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc%202.13.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
 [![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_3/scaladoc%203.svg)](https://javadoc.io/doc/com.kubuszok/pipez_3)

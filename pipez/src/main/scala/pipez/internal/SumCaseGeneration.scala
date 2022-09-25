@@ -8,7 +8,8 @@ import scala.collection.immutable.ListMap
 import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
+private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
+  self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
   /** True iff `A` is `sealed` */
   def isADT[A: Type]: Boolean
@@ -93,7 +94,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
       case DefaultSubtype() =>
         outData
           .findSubtype(inSubtypeName, settings.isEnumCaseInsensitive)
-          .flatMap(outSubtype => fromOutputSubtype(typeOf[InSubtype], outSubtype.tpe))
+          .flatMap(outSubtype => fromOutputSubtype(settings)(typeOf[InSubtype], outSubtype.tpe))
           .log(s"Subtype ${previewType(typeOf[InSubtype])} uses default resolution (matching output name, summoning)")
       case SubtypeRemoved(pipe) =>
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[Out] }
@@ -103,7 +104,7 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
       case SubtypeRenamed(outSubtypeType) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
-        fromOutputSubtype(typeOf[InSubtype], outSubtypeType).log(
+        fromOutputSubtype(settings)(typeOf[InSubtype], outSubtypeType).log(
           s"Subtype ${previewType(typeOf[InSubtype])} considered renamed to $outSubtypeType, uses summoning"
         )
       case PipeProvided(outSubtypeType, pipe) =>
@@ -233,9 +234,9 @@ trait SumCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] 
 
   // OutSubtype - name provided
   // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, updateContext(ctx, path)): Result[OutSubtype] }
-  private def fromOutputSubtype[InSubtype <: In: Type, OutSubtype <: Out: Type]: DerivationResult[
+  private def fromOutputSubtype[InSubtype <: In: Type, OutSubtype <: Out: Type](settings: Settings): DerivationResult[
     EnumGeneratorData.InputSubtype
-  ] = summonPipe[InSubtype, OutSubtype].map(
+  ] = summonOrDerive[InSubtype, OutSubtype](settings).map(
     EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype],
                                            typeOf[OutSubtype],
                                            _,

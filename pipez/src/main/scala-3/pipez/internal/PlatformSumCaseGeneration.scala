@@ -6,7 +6,7 @@ import scala.annotation.unused
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
-trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
+private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
   import quotes.*
@@ -62,7 +62,7 @@ trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[P
         }
       )
     )(_ =>
-      DerivationError.InvalidConfiguration(
+      DerivationError.NotYetImplemented(
         s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes"
       )
     )

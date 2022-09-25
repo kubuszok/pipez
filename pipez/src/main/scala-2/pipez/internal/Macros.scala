@@ -25,6 +25,20 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
       .appliedType(pipeTpe.typeSymbol.asInstanceOf[c.Symbol], typeOf[I], typeOf[O])
       .asInstanceOf[Type[Pipe[I, O]]]
 
+  def derivePipe[Input: Type, Output: Type](settings: Settings): DerivationResult[Expr[Pipe[Input, Output]]] = {
+    val m = new MacrosImpl[Pipe, Input, Output](c)(
+      pipeTpe = pipeTpe,
+      inTpe = typeOf[Input],
+      outTpe = typeOf[Output],
+      pd = pd
+    )
+    val filteredSettings = settings.stripSpecificsToCurrentDerivation.asInstanceOf[m.Settings]
+    val result           = m.derive(filteredSettings).asInstanceOf[DerivationResult[Expr[Pipe[Input, Output]]]]
+    result.fold(DerivationResult.pure)(errors =>
+      DerivationResult.fail(DerivationError.RecursiveDerivationFailed(typeOf[Input], typeOf[Output], errors))
+    )
+  }
+
   import c.universe.*
 
   val pipeDerivation: Expr[PipeDerivation.Aux[Pipe, Context, Result]] = {
@@ -34,6 +48,7 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
       q"""$expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$Pipe, $Context, ${Result[Any].typeConstructor}]]"""
     )
   }
+
   val previewPipeDerivation: String = previewCode(pd.asInstanceOf[Expr[PipeDerivation[Pipe]]])
 }
 

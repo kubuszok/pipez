@@ -8,7 +8,8 @@ import scala.collection.immutable.ListMap
 import scala.util.chaining.*
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
+private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
+  self: Definitions[Pipe, In, Out] & Generators[Pipe, In, Out] =>
 
   /** True iff `A` is a tuple */
   def isTuple[A: Type]: Boolean
@@ -409,7 +410,7 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
 
     case ProductOutData.JavaBean(_, _) =>
       DerivationResult.fail(
-        DerivationError.InvalidConfiguration(
+        DerivationError.InvalidInput(
           "Conversion from tuple can only be performed into another tuple or case class"
         )
       )
@@ -462,20 +463,20 @@ trait ProductCaseGeneration[Pipe[_, _], In, Out] { self: Definitions[Pipe, In, O
     if (settings.isFallbackToDefaultEnabled)
       DerivationResult
         .fromOption(default)(
-          DerivationError.InvalidConfiguration(
+          DerivationError.InvalidInput(
             s"No default defined for $outParamName, fallback on default is impossible"
           )
         )
         .map(code => ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code))
     else if (default.isDefined)
       DerivationResult.fail(
-        DerivationError.InvalidConfiguration(
+        DerivationError.InvalidInput(
           s"No value could be resolve for field $outParamName, although it has a default so you might try enableFallbackToDefaults option"
         )
       )
     else
       DerivationResult.fail(
-        DerivationError.InvalidConfiguration(s"Couldn't fallback on default value for $outParamName")
+        DerivationError.InvalidInput(s"Couldn't fallback on default value for $outParamName")
       )
 }
 object ProductCaseGeneration {

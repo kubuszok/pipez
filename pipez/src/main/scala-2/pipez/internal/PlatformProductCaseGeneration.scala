@@ -9,7 +9,8 @@ import scala.util.chaining.*
 import scala.language.existentials
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] {
+private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
+    extends ProductCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
   import c.universe.*

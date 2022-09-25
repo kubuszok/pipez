@@ -7,13 +7,16 @@ import scala.annotation.{ nowarn, unused }
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
-trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends Definitions[Pipe, In, Out] {
+private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes)
+    extends Definitions[Pipe, In, Out] {
 
   import quotes.*
   import quotes.reflect.*
 
   override type Type[A] = scala.quoted.Type[A]
   override type Expr[A] = scala.quoted.Expr[A]
+
+  // def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] is defined in MacrosImpl
 
   final def previewType[A: Type]: String =
     val repr = TypeRepr.of[A]
@@ -32,6 +35,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes) extends
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
+
+  // def derivePipe[Input: Type, Output: Type](Settings): DerivationResult[Expr[Pipe[Input, Output]]] is defined in MacrosImpl
 
   final def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM] =
     val SAM = typeOf[SAM]

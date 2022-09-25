@@ -437,7 +437,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("no config, auto summon elements -> use matching subtypes") {
-    import ContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       ContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B, shouldFailFast = false, path = "root"),
@@ -451,7 +450,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("removeSubtype, auto summon elements -> for removed use pipe, for others use matching subtypes") {
-    import ContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       ContextCodec
@@ -477,7 +475,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("renameSubtype, auto summon elements -> for renamed summon by new name, for others use matching subtypes") {
-    import ContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       ContextCodec
@@ -506,7 +503,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("plugInSubtype, auto summon elements -> for selected use pipe, for others use matching subtypes") {
-    import ContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       ContextCodec
@@ -535,7 +531,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
   test("enumMatchingCaseInsensitive, auto summon elements -> match subtypes by name ignoring cases") {
-    import ContextCodec.Auto.* // for recursive derivation
     assertEquals(
       ContextCodec
         .derive(ContextCodec.Config[ADTLower, ADTUpper].enumMatchingCaseInsensitive)
@@ -625,7 +620,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("transformation should handle backticks in names") {
-    import ContextCodec.Auto.* // for recursive derivation
     assertEquals(
       ContextCodec
         .derive[`Backtick ADT In`, `Backtick ADT Out`]
@@ -641,7 +635,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("errors should appear in Left enriched with Path information") {
-    import ContextCodec.Auto.* // for recursive derivation
     implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>
       scala.util.Try(string.toInt).fold(_ => Left(List(s"$path cannot be converted to Int")), Right(_))
     val codec: ContextCodec[Either[String, String], Either[Int, Int]] = ContextCodec.derive

@@ -3,11 +3,11 @@ package pipez.internal
 import pipez.PipeDerivationConfig
 import pipez.internal.Definitions.{ Context, Result }
 
-import scala.annotation.{ nowarn, unused }
+import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
+private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
 
   val c: blackbox.Context
 
@@ -18,6 +18,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
 
   override type Type[A] = c.Type @@ A
   override type Expr[A] = c.Expr[A]
+
+  // def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] is defined in MacrosImpl
 
   final def previewType[A: Type]: String = typeOf[A].toString
 
@@ -35,6 +37,8 @@ trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out
         DerivationError.RequiredImplicitNotFound(typeOf[Input], typeOf[Output])
       )
       .logSuccess(i => s"Summoned implicit value: ${previewCode(i)}")
+
+  // def derivePipe[Input: Type, Output: Type](Settings): DerivationResult[Expr[Pipe[Input, Output]]] is defined in MacrosImpl
 
   final def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM] =
     c.Expr(q"_root_.scala.Predef.identity[${typeOf[SAM]}]($code)")

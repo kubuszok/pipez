@@ -16,7 +16,7 @@ import scala.collection.Factory
   *   output type of the type class we are deriving
   */
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Definitions[Pipe[_, _], In, Out] { self =>
+private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
 
   /** Platform-specific type representation (c.universe.Type in 2, scala.quoted.Type[A] in 3) */
   type Type[A]
@@ -45,7 +45,7 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Like previewCode(pipeDerivation) but allowing hiding some shenanigans we do */
   def previewPipeDerivation: String
 
-  /** Translates `Path` as seen in macro to runtime value we can pass to updateContext` */
+  /** Translates `Path` as seen in macro to runtime value we can pass to `updateContext` */
   def pathCode(path: Path): Expr[pipez.Path]
 
   /** Type representing how we got the specific value from the `in: In` argument */
@@ -142,9 +142,18 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
 
     lazy val isFallbackToDefaultEnabled: Boolean = entries.contains(EnableFallbackToDefaults)
 
-    def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
+    final def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
       (a, entry) => overrideWhen.applyOrElse[ConfigEntry, A](entry, _ => a)
     }
+
+    final def stripSpecificsToCurrentDerivation: Settings = new Settings(
+      entries.collect {
+        case ConfigEntry.EnableDiagnostics        => ConfigEntry.EnableDiagnostics
+        case ConfigEntry.FieldCaseInsensitive     => ConfigEntry.FieldCaseInsensitive
+        case ConfigEntry.EnableFallbackToDefaults => ConfigEntry.EnableFallbackToDefaults
+        case ConfigEntry.EnumCaseInsensitive      => ConfigEntry.EnumCaseInsensitive
+      }
+    )
 
     override def toString: String = s"Settings(${entries.mkString(", ")})"
   }
@@ -172,6 +181,12 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       outFieldType: Type[O]
     ) extends DerivationError
 
+    final case class RecursiveDerivationFailed[I, O](
+      inType:  Type[I],
+      outType: Type[O],
+      errors:  List[DerivationError]
+    ) extends DerivationError
+
     final case class NotSupportedFieldConversion[I, O](
       inField:      String,
       inFieldType:  Type[I],
@@ -184,9 +199,11 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
       isOutSumType: Boolean
     ) extends DerivationError
 
-    case object NotYetSupported extends DerivationError
-
     final case class InvalidConfiguration(msg: String) extends DerivationError
+
+    final case class InvalidInput(msg: String) extends DerivationError
+
+    case object NotYetSupported extends DerivationError
 
     final case class NotYetImplemented(msg: String) extends DerivationError
   }
@@ -291,6 +308,14 @@ trait Definitions[Pipe[_, _], In, Out] { self =>
 
   /** Allows summoning the type class in platform-independent way */
   def summonPipe[Input: Type, Output: Type]: DerivationResult[Expr[Pipe[Input, Output]]]
+
+  /** Allows recursively deriving the type class in platform-independent way */
+  def derivePipe[Input: Type, Output: Type](settings: Settings): DerivationResult[Expr[Pipe[Input, Output]]]
+
+  // TODO: use it
+  /** Attempts to summon the type class and on failure fallbacks to deriving it */
+  def summonOrDerive[Input: Type, Output: Type](settings: Settings): DerivationResult[Expr[Pipe[Input, Output]]] =
+    summonPipe[Input, Output].orElse(derivePipe[Input, Output](settings))
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
     * hint

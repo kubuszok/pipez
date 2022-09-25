@@ -336,7 +336,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("no config, auto summon elements -> use matching subtypes") {
-    import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       NoContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B),
@@ -350,7 +349,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("removeSubtype, auto summon elements -> for removed use pipe, for others use matching subtypes") {
-    import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       NoContextCodec
@@ -405,7 +403,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("plugInSubtype, auto summon elements -> for selected use pipe, for others use matching subtypes") {
-    import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       NoContextCodec
@@ -431,7 +428,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("enumMatchingCaseInsensitive, auto summon elements -> match subtypes by name ignoring cases") {
-    import NoContextCodec.Auto.* // for recursive derivation
     assertEquals(
       NoContextCodec
         .derive(NoContextCodec.Config[ADTLower, ADTUpper].enumMatchingCaseInsensitive)
@@ -495,7 +491,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("transformation should handle backticks in names") {
-    import NoContextCodec.Auto.* // for recursive derivation
     assertEquals(
       NoContextCodec.derive[`Backtick ADT In`, `Backtick ADT Out`].decode(`Backtick ADT In`.`Case Class`("test")),
       Right(`Backtick ADT Out`.`Case Class`("test"))

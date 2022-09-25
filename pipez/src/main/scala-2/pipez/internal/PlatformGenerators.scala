@@ -2,7 +2,7 @@ package pipez.internal
 
 import pipez.internal.Definitions.{ Context, Result }
 
-trait PlatformGenerators[Pipe[_, _], In, Out]
+private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
     extends Generators[Pipe, In, Out]
     with PlatformProductCaseGeneration[Pipe, In, Out]
     with PlatformSumCaseGeneration[Pipe, In, Out] {

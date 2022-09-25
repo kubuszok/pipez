@@ -33,14 +33,15 @@ trait Generators[Pipe[_, _], In, Out]
   /** Generates error message to be returned from macro on ERROR level */
   final def errorMessage(errors: List[DerivationError]): String = {
     val pipeType = previewType(PipeOf[In, Out])
-    val inType   = previewType[In]
-    val outType  = previewType[Out]
-    s"$pipeType couldn't be generated due to errors:\n" + errors
+    def generateErrorsFor(inType: String, outType: String, errors: List[DerivationError]): List[String] = errors
       .map {
         case DerivationError.MissingPublicConstructor =>
           s"$outType is missing a public constructor that could be used to initiate its value"
         case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
           s"Couldn't find implicit of type ${previewType(PipeOf(inFieldType, outFieldType))}"
+        case DerivationError.RecursiveDerivationFailed(inField, outField, errors) =>
+          s"Couldn't derive instance of type ${previewType(PipeOf(inField, outField))} due to errors:\n" +
+            generateErrorsFor(inType, outType, errors).map("  " + _).mkString("\n")
         case DerivationError.MissingPublicSource(outFieldName) =>
           s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
         case DerivationError.MissingMatchingSubType(inSubtypeType) =>
@@ -53,14 +54,17 @@ trait Generators[Pipe[_, _], In, Out]
           s"Couldn't convert $inType (${if (isInSumType) "sum type" else "value enumeration"}) into $outType (${
               if (isOutSumType) "sum type" else "value enumeration"
             })"
-        case DerivationError.NotYetSupported =>
-          s"Derivation is only supported for conversions: case class/Java Bean <=> case class/Java Bean, case class <=> tuple, ADT <=> ADT - types $inType => $outType don't match this requirement, consider providing $pipeType yourself"
         case DerivationError.InvalidConfiguration(msg) =>
           s"The configuration you provided was incorrect: $msg"
+        case DerivationError.InvalidInput(msg) =>
+          msg
+        case DerivationError.NotYetSupported =>
+          s"Derivation is only supported for conversions: case class/Java Bean <=> case class/Java Bean, case class <=> tuple, ADT <=> ADT - types $inType => $outType don't match this requirement, consider providing $pipeType yourself"
         case DerivationError.NotYetImplemented(msg) =>
           s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
       }
       .map(" - " + _)
+    s"$pipeType couldn't be generated due to errors:\n" + generateErrorsFor(previewType[In], previewType[Out], errors)
       .mkString("\n")
   }
 
@@ -96,21 +100,27 @@ trait Generators[Pipe[_, _], In, Out]
     f:       Expr[(A, B) => C]
   ): Expr[Result[C]]
 
+  /** Used by `derive(Option[Expr[PipeDerivationConfig[Pipe, In, Out]]])` and `derivePipe[Input: Type, Output: Type]` */
+  def derive(config: Settings): DerivationResult[Expr[Pipe[In, Out]]] = {
+    val isDiagnosticsEnabled = config.isDiagnosticsEnabled
+    lazy val startTime       = java.time.Instant.now()
+    if (isDiagnosticsEnabled) {
+      startTime.hashCode
+    }
+    val result = resolveConversion(config)
+    if (isDiagnosticsEnabled) {
+      val stopTime = java.time.Instant.now()
+      val duration = java.time.Duration.between(startTime, stopTime)
+      result.log(f"Derivation took ${duration.getSeconds}%d.${duration.getNano}%09d s")
+    } else result
+  }
+
   private def derive(configurationCode: Option[Expr[PipeDerivationConfig[Pipe, In, Out]]]): Expr[Pipe[In, Out]] = {
     var isDiagnosticsEnabled = false
     readSettingsIfGiven(configurationCode)
       .flatMap { config =>
         isDiagnosticsEnabled = config.isDiagnosticsEnabled
-        lazy val startTime = java.time.Instant.now()
-        if (isDiagnosticsEnabled) {
-          startTime.hashCode
-        }
-        val result = resolveConversion(config)
-        if (isDiagnosticsEnabled) {
-          val stopTime = java.time.Instant.now()
-          val duration = java.time.Duration.between(startTime, stopTime)
-          result.log(f"Derivation took ${duration.getSeconds}%d.${duration.getNano}%09d s")
-        } else result
+        derive(config)
       }
       .tap { result =>
         if (isDiagnosticsEnabled) {

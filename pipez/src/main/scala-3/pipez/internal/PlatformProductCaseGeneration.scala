@@ -6,7 +6,8 @@ import scala.collection.immutable.ListMap
 import scala.util.chaining.*
 import scala.quoted.{ Type as _, * }
 
-trait PlatformProductCaseGeneration[Pipe[_, _], In, Out] extends ProductCaseGeneration[Pipe, In, Out] {
+private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
+    extends ProductCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
 
   import quotes.*

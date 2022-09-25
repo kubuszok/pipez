@@ -25,25 +25,28 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
   private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
     def extractSubclasses(sym: Symbol): List[Symbol] =
       if (sym.flags.is(Flags.Sealed)) sym.children.flatMap(extractSubclasses)
+      else if (sym.flags.is(Flags.Enum)) List(sym.typeRef.typeSymbol)
       else if (sym.flags.is(Flags.Module)) List(sym.companionModule.moduleClass)
       else List(sym)
 
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
         extractSubclasses(TypeRepr.of[A].typeSymbol).map { subtypeType =>
+          println(subtypeType)
+          println(subtypeType.typeRef.show)
           subtypeType.primaryConstructor.paramSymss match {
             // subtype takes type parameters
             case typeParamSymbols :: _ if typeParamSymbols.exists(_.isType) =>
               // we have to figure how subtypes type params map to parent type params
-              val appliedTypeByParam: Map[Symbol, TypeRepr] =
+              val appliedTypeByParam: Map[String, TypeRepr] =
                 subtypeType.typeRef
                   .baseType(TypeRepr.of[A].typeSymbol)
                   .typeArgs
-                  .map(_.typeSymbol)
+                  .map(_.typeSymbol.name)
                   .zip(TypeRepr.of[A].typeArgs)
                   .toMap
               // TODO: some better error message if child has an extra type param that doesn't come from the parent
-              val typeParamReprs: List[TypeRepr] = typeParamSymbols.map(appliedTypeByParam)
+              val typeParamReprs: List[TypeRepr] = typeParamSymbols.map(_.name).map(appliedTypeByParam)
               EnumData.Case(
                 subtypeType.name,
                 subtypeType.typeRef.appliedTo(typeParamReprs).asType.asInstanceOf[Type[A]],
@@ -61,9 +64,9 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
           }
         }
       )
-    )(_ =>
+    )(err =>
       DerivationError.NotYetImplemented(
-        s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes"
+        s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes: ${err.getMessage} ${err.getStackTrace.toList}"
       )
     )
 

@@ -33,9 +33,34 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
       pd = pd
     )
     val filteredSettings = settings.stripSpecificsToCurrentDerivation.asInstanceOf[m.Settings]
-    val result           = m.derive(filteredSettings).asInstanceOf[DerivationResult[Expr[Pipe[Input, Output]]]]
-    result.fold(DerivationResult.pure)(errors =>
-      DerivationResult.fail(DerivationError.RecursiveDerivationFailed(typeOf[Input], typeOf[Output], errors))
+    val result           = m.derive(filteredSettings)
+    val mError           = m.DerivationError
+    import DerivationError._
+    // pattern matching is done through companion objects - which differ when objects exists in different MacroImpls
+    def fixErrors(errors: List[m.DerivationError]): List[DerivationError] = errors.map {
+      case mError.MissingPublicConstructor            => MissingPublicConstructor
+      case mError.MissingPublicSource(outFieldName)   => MissingPublicSource(outFieldName)
+      case mError.MissingMatchingSubType(subtypeName) => MissingMatchingSubType(subtypeName)
+      case mError.MissingMatchingValue(valueName)     => MissingMatchingValue(valueName)
+      case mError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
+        RequiredImplicitNotFound(inFieldType.asInstanceOf[Type[Any]], outFieldType.asInstanceOf[Type[Any]])
+      case mError.RecursiveDerivationFailed(inType, outType, errors) =>
+        RecursiveDerivationFailed(inType.asInstanceOf[Type[Any]], outType.asInstanceOf[Type[Any]], fixErrors(errors))
+      case mError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
+        NotSupportedFieldConversion(inField,
+                                    inFieldType.asInstanceOf[Type[Any]],
+                                    outField,
+                                    outFieldType.asInstanceOf[Type[Any]]
+        )
+      case mError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
+        NotSupportedEnumConversion(isInSumType, isOutSumType)
+      case mError.InvalidConfiguration(msg) => InvalidConfiguration(msg)
+      case mError.InvalidInput(msg)         => InvalidInput(msg)
+      case mError.NotYetSupported           => NotYetSupported
+      case mError.NotYetImplemented(msg)    => NotYetImplemented(msg)
+    }
+    result.fold(expr => DerivationResult.pure(expr.asInstanceOf[Expr[Pipe[Input, Output]]]))(errors =>
+      DerivationResult.fail(DerivationError.RecursiveDerivationFailed(typeOf[Input], typeOf[Output], fixErrors(errors)))
     )
   }
 

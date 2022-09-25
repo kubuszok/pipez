@@ -19,8 +19,7 @@ trait Generators[Pipe[_, _], In, Out]
   final val resolveConversion: Settings => DerivationResult[Expr[Pipe[In, Out]]] = {
     case ProductTypeConversion(generatedCode) => generatedCode
     case SumTypeConversion(generatedCode)     => generatedCode
-    case _ =>
-      DerivationResult.fail(DerivationError.NotYetSupported) // TODO: better error message
+    case _                                    => DerivationResult.fail(DerivationError.NotYetSupported)
   }
 
   /** Generate message to be displayed by macro on INFO level (if requested by config) */
@@ -39,9 +38,9 @@ trait Generators[Pipe[_, _], In, Out]
           s"$outType is missing a public constructor that could be used to initiate its value"
         case DerivationError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
           s"Couldn't find implicit of type ${previewType(PipeOf(inFieldType, outFieldType))}"
-        case DerivationError.RecursiveDerivationFailed(inField, outField, errors) =>
-          s"Couldn't derive instance of type ${previewType(PipeOf(inField, outField))} due to errors:\n" +
-            generateErrorsFor(inType, outType, errors).map("  " + _).mkString("\n")
+        case DerivationError.RecursiveDerivationFailed(recInType, recOutType, errors) =>
+          s"Couldn't derive instance of type ${previewType(PipeOf(recInType, recOutType))} due to errors:\n" +
+            generateErrorsFor(previewType(recInType), previewType(recOutType), errors).map("  " + _).mkString("\n")
         case DerivationError.MissingPublicSource(outFieldName) =>
           s"Couldn't find a field/method which could be used as a source for $outFieldName from $outType; use config to provide it manually"
         case DerivationError.MissingMatchingSubType(inSubtypeType) =>

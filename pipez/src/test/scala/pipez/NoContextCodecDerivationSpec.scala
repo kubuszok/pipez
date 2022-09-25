@@ -335,7 +335,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  test("no config, auto summon elements -> use matching subtypes") {
+  test("no config, auto derive elements -> use matching subtypes") {
     // case object only in ADT
     assertEquals(
       NoContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B),
@@ -345,6 +345,11 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       NoContextCodec.derive[ADTClassesIn, ADTClassesOut].decode(ADTClassesIn.B(1)),
       Right(ADTClassesOut.B(1))
+    )
+    // scala 3 enum
+    assertEquals(
+      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, path = "root"),
+      Right(EnumOut.B(1))
     )
   }
 
@@ -374,7 +379,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
   }
 
   test("renameSubtype, auto summon elements -> for renamed summon by new name, for others use matching subtypes") {
-    import NoContextCodec.Auto.* // for recursive derivation
     // case object only in ADT
     assertEquals(
       NoContextCodec

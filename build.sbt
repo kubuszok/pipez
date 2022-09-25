@@ -1,6 +1,8 @@
 import commandmatrix.extra._
 import Settings._
 
+val testCasesVersion = "0.1.0-SNAPSHOT"
+
 // Scala Native 2.13 seem to generate linking errors so we're disabling it for now
 val skip2_13Native = MatrixAction((s, a) => s.isScala2 && a.contains(VirtualAxis.native)).Skip
 
@@ -22,7 +24,10 @@ val pipez = projectMatrix
   .settings(name := "pipez")
   .settings(commonSettings: _*)
   .settings(
-    libraryDependencies += ("com.kubuszok" %%% "pipez-testcases" % "0.1.0").cross(CrossVersion.for3Use2_13) % Test
+    libraryDependencies ++= Seq(
+      ("com.kubuszok" %%% "pipez-testcases" % testCasesVersion).cross(CrossVersion.for3Use2_13) % Test,
+      ("com.kubuszok" %%% "pipez-testcases-scala3" % testCasesVersion).cross(CrossVersion.for2_13Use3) % Test,
+    )
   )
   .settings(publishSettings: _*)
 
@@ -36,7 +41,10 @@ val pipezDsl = projectMatrix
   .settings(name := "pipez-dsl")
   .settings(commonSettings: _*)
   .settings(
-    libraryDependencies += ("com.kubuszok" %%% "pipez-testcases" % "0.1.0").cross(CrossVersion.for3Use2_13) % Test
+    libraryDependencies ++= Seq(
+      ("com.kubuszok" %%% "pipez-testcases" % testCasesVersion).cross(CrossVersion.for3Use2_13) % Test,
+      ("com.kubuszok" %%% "pipez-testcases-scala3" % testCasesVersion).cross(CrossVersion.for2_13Use3) % Test,
+    )
   )
   .settings(publishSettings: _*)
   .dependsOn(pipez)

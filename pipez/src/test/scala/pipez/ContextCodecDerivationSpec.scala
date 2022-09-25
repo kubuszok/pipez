@@ -436,7 +436,7 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  test("no config, auto summon elements -> use matching subtypes") {
+  test("no config, auto derive elements -> use matching subtypes") {
     // case object only in ADT
     assertEquals(
       ContextCodec.derive[ADTObjectsIn, ADTObjectsOut].decode(ADTObjectsIn.B, shouldFailFast = false, path = "root"),
@@ -446,6 +446,13 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec.derive[ADTClassesIn, ADTClassesOut].decode(ADTClassesIn.B(1), shouldFailFast = false, path = "root"),
       Right(ADTClassesOut.B(1))
+    )
+    // scala 3 enum
+    assertEquals(
+      ContextCodec
+        .derive(ContextCodec.Config[EnumIn[Int], EnumOut[Int]].enableDiagnostics)
+        .decode(EnumIn.B(1), shouldFailFast = false, path = "root"),
+      Right(EnumOut.B(1))
     )
   }
 

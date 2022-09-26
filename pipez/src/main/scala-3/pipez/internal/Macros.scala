@@ -51,7 +51,11 @@ class MacrosImpl[Pipe[_, _], In, Out](q: Quotes)(
       case mError.NotYetSupported           => NotYetSupported
       case mError.NotYetImplemented(msg)    => NotYetImplemented(msg)
     }
-    result.fold(DerivationResult.pure)(errors =>
+    result.fold(expr =>
+      DerivationResult
+        .pure(expr)
+        .log("Nested derivation's diagnostics:\n" + result.diagnostic.map("   - " + _).mkString("\n"))
+    )(errors =>
       DerivationResult.fail(DerivationError.RecursiveDerivationFailed(typeOf[Input], typeOf[Output], fixErrors(errors)))
     )
   }

@@ -59,7 +59,11 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
       case mError.NotYetSupported           => NotYetSupported
       case mError.NotYetImplemented(msg)    => NotYetImplemented(msg)
     }
-    result.fold(expr => DerivationResult.pure(expr.asInstanceOf[Expr[Pipe[Input, Output]]]))(errors =>
+    result.fold(expr =>
+      DerivationResult
+        .pure(expr.asInstanceOf[Expr[Pipe[Input, Output]]])
+        .log("Nested derivation's diagnostics:\n" + result.diagnostic.map("   - " + _).mkString("\n"))
+    )(errors =>
       DerivationResult.fail(DerivationError.RecursiveDerivationFailed(typeOf[Input], typeOf[Output], fixErrors(errors)))
     )
   }

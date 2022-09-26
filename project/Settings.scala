@@ -6,7 +6,7 @@ import commandmatrix.extra._
 
 object Settings {
 
-  val scala2_13version = "2.13.8"
+  val scala2_13version = "2.13.9"
   val scala3version    = "3.2.0"
 
   // compiling
@@ -14,7 +14,7 @@ object Settings {
   val commonSettings = Seq(
     scalacOptions ++= {
       CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, 13)) => Seq("-deprecation", "-feature", "-Xsource:3", "-P:kind-projector:underscore-placeholders")
+        case Some((2, 13)) => Seq("-deprecation", "-feature", "-Xsource:3", "-Ytasty-reader", "-P:kind-projector:underscore-placeholders")
         case Some((3, 2))  => Seq("-explain", "-rewrite", "-source", "3.2-migration", "-Ykind-projector:underscores")
         case _             => Seq.empty
       }

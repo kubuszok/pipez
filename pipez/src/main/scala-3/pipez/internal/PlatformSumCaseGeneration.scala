@@ -31,36 +31,39 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
 
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
-        extractSubclasses(TypeRepr.of[A].typeSymbol).map { subtypeType =>
-          subtypeType.primaryConstructor.paramSymss match {
-            // subtype takes type parameters
-            case typeParamSymbols :: _ if typeParamSymbols.exists(_.isType) =>
-              // we have to figure how subtypes type params map to parent type params
-              val appliedTypeByParam: Map[String, TypeRepr] =
-                subtypeType.typeRef
-                  .baseType(TypeRepr.of[A].typeSymbol)
-                  .typeArgs
-                  .map(_.typeSymbol.name)
-                  .zip(TypeRepr.of[A].typeArgs)
-                  .toMap
-              // TODO: some better error message if child has an extra type param that doesn't come from the parent
-              val typeParamReprs: List[TypeRepr] = typeParamSymbols.map(_.name).map(appliedTypeByParam)
-              EnumData.Case(
-                subtypeType.name,
-                subtypeType.typeRef.appliedTo(typeParamReprs).asType.asInstanceOf[Type[A]],
-                isCaseObject = subtypeType.flags.is(Flags.Module),
-                path = Path.Subtype(Path.Root, subtypeType.name)
-              )
-            // subtype is monomorphic
-            case _ =>
-              EnumData.Case(
-                subtypeType.name,
-                subtypeType.typeRef.asType.asInstanceOf[Type[A]],
-                isCaseObject = subtypeType.flags.is(Flags.Module),
-                path = Path.Subtype(Path.Root, subtypeType.name)
-              )
+        extractSubclasses(TypeRepr.of[A].typeSymbol)
+          .map { subtypeType =>
+            subtypeType.primaryConstructor.paramSymss match {
+              // subtype takes type parameters
+              case typeParamSymbols :: _ if typeParamSymbols.exists(_.isType) =>
+                // we have to figure how subtypes type params map to parent type params
+                val appliedTypeByParam: Map[String, TypeRepr] =
+                  subtypeType.typeRef
+                    .baseType(TypeRepr.of[A].typeSymbol)
+                    .typeArgs
+                    .map(_.typeSymbol.name)
+                    .zip(TypeRepr.of[A].typeArgs)
+                    .toMap
+                // TODO: some better error message if child has an extra type param that doesn't come from the parent
+                val typeParamReprs: List[TypeRepr] = typeParamSymbols.map(_.name).map(appliedTypeByParam)
+                subtypeType -> subtypeType.typeRef.appliedTo(typeParamReprs).asType.asInstanceOf[Type[A]]
+              // subtype is monomorphic
+              case _ =>
+                subtypeType -> subtypeType.typeRef.asType.asInstanceOf[Type[A]]
+            }
           }
-        }
+          .filter { case (_, subtypeTypeParamsFixed) =>
+            // with GADT we can have subtypes that shouldn't appear in pattern matching
+            TypeRepr.of(using subtypeTypeParamsFixed) <:< TypeRepr.of[A]
+          }
+          .map { case (subtypeType, subtypeTypeParamsFixed) =>
+            EnumData.Case(
+              name = subtypeType.name,
+              tpe = subtypeTypeParamsFixed,
+              isCaseObject = subtypeType.flags.is(Flags.Module),
+              path = Path.Subtype(Path.Root, subtypeType.name)
+            )
+          }
       )
     )(err =>
       DerivationError.NotYetImplemented(

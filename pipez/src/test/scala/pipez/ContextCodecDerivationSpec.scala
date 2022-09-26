@@ -448,12 +448,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
       Right(ADTClassesOut.B(1))
     )
     // scala 3 enum
-    assertEquals(
-      ContextCodec
-        .derive(ContextCodec.Config[EnumIn[Int], EnumOut[Int]].enableDiagnostics)
-        .decode(EnumIn.B(1), shouldFailFast = false, path = "root"),
-      Right(EnumOut.B(1))
-    )
+//    assertEquals(
+//      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, path = "root"),
+//      Right(EnumOut.B(1))
+//    )
   }
 
   test("removeSubtype, auto summon elements -> for removed use pipe, for others use matching subtypes") {

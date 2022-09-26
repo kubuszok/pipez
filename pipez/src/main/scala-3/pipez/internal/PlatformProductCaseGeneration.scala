@@ -21,8 +21,10 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     sym.isClassDef && sym.flags.is(Flags.Case) && !sym.flags.is(Flags.Abstract) && isPublic(sym.primaryConstructor)
 
   final def isCaseObject[A: Type]: Boolean =
-    val sym = TypeRepr.of[A].typeSymbol
-    sym.flags.is(Flags.Module) && sym.flags.is(Flags.Case) && isPublic(sym)
+    val sym          = TypeRepr.of[A].typeSymbol
+    def isScala2Enum = sym.flags.is(Flags.Case | Flags.Module)
+    def isScala3Enum = sym.flags.is(Flags.Case | Flags.Enum | Flags.JavaStatic)
+    (isScala2Enum || isScala3Enum) && isPublic(sym)
 
   final def isJavaBean[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
@@ -44,18 +46,19 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
     val sym = TypeRepr.of[In].typeSymbol
     // apparently each case field is duplicated: "a" and "a ", "_1" and "_1" o_0 - the first is method, the other val
-    (sym.caseFields.filter(_.isDefDef) ++ sym.declaredMethods.filter(isJavaGetter))
-      .map { method =>
-        method.name.toString -> ProductInData.Getter[Any](
-          name = method.name.toString,
-          tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
-          get =
-            if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
-            else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
-          path = Path.Field(Path.Root, method.name.toString)
-        )
-      }
-      .to(ListMap)
+    // the exceptions are cases in Scala 3 enum: they only have vals
+    (sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef) ++ sym.declaredMethods.filter(
+      isJavaGetter
+    )).map { method =>
+      method.name.toString -> ProductInData.Getter[Any](
+        name = method.name.toString,
+        tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
+        get =
+          if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
+          else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
+        path = Path.Field(Path.Root, method.name.toString)
+      )
+    }.to(ListMap)
       .pipe(ProductInData(_))
       .pipe(DerivationResult.pure)
       .logSuccess(data => s"Resolved input: $data")
@@ -120,9 +123,17 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     } else if (isCaseObject[Out]) {
       // case object case
 
+      val sym = TypeRepr.of[Out].typeSymbol
+
       ProductOutData
         .CaseClass(
-          params => Ref(TypeRepr.of[Out].typeSymbol.companionModule).asExpr.asExprOf[Out],
+          if (sym.flags.is(Flags.Case | Flags.Enum | Flags.JavaStatic)) {
+            // Scala 3 case object (enum's case without parameters)
+            params => Ref(sym).asExpr.asExprOf[Out]
+          } else {
+            // Scala 2 case object
+            params => Ref(sym.companionModule).asExpr.asExprOf[Out]
+          },
           List.empty
         )
         .pipe(DerivationResult.pure(_))

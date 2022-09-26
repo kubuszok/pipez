@@ -26,14 +26,12 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
     def extractSubclasses(sym: Symbol): List[Symbol] =
       if (sym.flags.is(Flags.Sealed)) sym.children.flatMap(extractSubclasses)
       else if (sym.flags.is(Flags.Enum)) List(sym.typeRef.typeSymbol)
-      else if (sym.flags.is(Flags.Module)) List(sym.companionModule.moduleClass)
+      else if (sym.flags.is(Flags.Module)) List(sym.typeRef.typeSymbol.moduleClass)
       else List(sym)
 
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
         extractSubclasses(TypeRepr.of[A].typeSymbol).map { subtypeType =>
-          println(subtypeType)
-          println(subtypeType.typeRef.show)
           subtypeType.primaryConstructor.paramSymss match {
             // subtype takes type parameters
             case typeParamSymbols :: _ if typeParamSymbols.exists(_.isType) =>
@@ -66,7 +64,7 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
       )
     )(err =>
       DerivationError.NotYetImplemented(
-        s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes: ${err.getMessage} ${err.getStackTrace.toList}"
+        s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes: ${err.getMessage}"
       )
     )
 
@@ -76,15 +74,19 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
     def cases(in: Expr[In], ctx: Expr[Context]) = subtypes
       .map {
-        case convert @ EnumGeneratorData.InputSubtype.Convert(inSubtype, _, _, _) =>
-          implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
-          val arg  = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
-          val body = convert.unlifted(Ident(arg.termRef).asExpr.asInstanceOf[Expr[In]], ctx)
-          CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
-        case handle @ EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
-          implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
-          val arg  = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
-          val body = handle.unlifted(Ident(arg.termRef).asExpr.asInstanceOf[Expr[In]], ctx)
+        case convert @ EnumGeneratorData.InputSubtype.Convert(inSubtype, _, _, _) => convert -> inSubtype
+        case handle @ EnumGeneratorData.InputSubtype.Handle(inSubtype, _, _)      => handle -> inSubtype
+      }
+      .map { case (generator, inSubtype) =>
+        implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
+        val arg  = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
+        val argE = Ident(arg.termRef).asExpr.asInstanceOf[Expr[In]]
+        val body = '{ ${ generator.unlifted(argE, ctx) }.asInstanceOf[Result[Out]] }
+
+        // Scala 3's enums' parameterless cases are vals with type erased, so w have to match them by value
+        if (TypeRepr.of[In].typeSymbol.flags.is(Flags.Enum | Flags.JavaStatic))
+          CaseDef(Bind(arg, Ident(TypeRepr.of[In].typeSymbol.termRef)), None, body.asTerm)
+        else
           CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
       }
       .pipe(Match(in.asTerm, _))

@@ -25,7 +25,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   }
   final def isCaseObject[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
-    sym.isModuleClass && sym.asClass.isCaseClass && sym.isPublic
+    // removed check for sym.asClass.isCaseClass since Scala 3 enums' without parameters didn't fulfill it
+    sym.isModuleClass && sym.isPublic
   }
   final def isJavaBean[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol

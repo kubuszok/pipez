@@ -28,14 +28,22 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
       else List(t)
     DerivationResult.unsafe[EnumData[A]](
       EnumData(
-        extractSubclasses(typeOf[A].typeSymbol.asType).map { subtypeType: TypeSymbol =>
-          EnumData.Case(
-            name = subtypeType.name.toString,
-            tpe = subtypeTypeOf(typeOf[A], subtypeType.toType).asInstanceOf[Type[A]],
-            isCaseObject = subtypeType.asClass.isModule,
-            path = Path.Subtype(Path.Root, subtypeType.fullName)
-          )
-        }
+        extractSubclasses(typeOf[A].typeSymbol.asType)
+          .map { subtypeType =>
+            subtypeType -> subtypeTypeOf(typeOf[A], subtypeType.toType).asInstanceOf[Type[A]]
+          }
+          .filter { case (_, subtypeTypeParamsFixed) =>
+            // with GADT we can have subtypes that shouldn't appear in pattern matching
+            subtypeTypeParamsFixed <:< typeOf[A]
+          }
+          .map { case (subtypeType, subtypeTypeParamsFixed) =>
+            EnumData.Case(
+              name = subtypeType.name.toString,
+              tpe = subtypeTypeParamsFixed,
+              isCaseObject = subtypeType.asClass.isModule,
+              path = Path.Subtype(Path.Root, subtypeType.fullName)
+            )
+          }
       )
     )(_ =>
       DerivationError.InvalidConfiguration(
@@ -50,12 +58,12 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
   private def generateSubtypes(subtypes: List[EnumGeneratorData.InputSubtype]) = {
     def cases(in: Expr[In], ctx: Expr[Context]) = subtypes
       .map {
-        case convert @ EnumGeneratorData.InputSubtype.Convert(inSubtype, _, _, _) =>
-          val arg = c.freshName(TermName("arg"))
-          cq"""$arg : $inSubtype => ${convert.unlifted(c.Expr[In](q"$arg"), ctx)}.asInstanceOf[${Result[Out]}]"""
-        case handle @ EnumGeneratorData.InputSubtype.Handle(inSubtype, pipe, path) =>
-          val arg = c.freshName(TermName("arg"))
-          cq"""$arg : $inSubtype => ${handle.unlifted(c.Expr[In](q"$arg"), ctx)}"""
+        case convert @ EnumGeneratorData.InputSubtype.Convert(inSubtype, _, _, _) => convert -> inSubtype
+        case handle @ EnumGeneratorData.InputSubtype.Handle(inSubtype, _, _)      => handle -> inSubtype
+      }
+      .map { case (generator, inSubtype) =>
+        val arg = c.freshName(TermName("arg"))
+        cq"""$arg : $inSubtype => ${generator.unlifted(c.Expr[In](q"$arg"), ctx)}.asInstanceOf[${Result[Out]}]"""
       }
       .pipe(c => q"$in match { case ..$c }")
       .pipe(c.Expr[Out](_))

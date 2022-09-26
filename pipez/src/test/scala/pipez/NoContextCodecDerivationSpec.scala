@@ -348,7 +348,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
     // scala 3 enum
     assertEquals(
-      NoContextCodec.derive(NoContextCodec.Config[EnumIn[Int], EnumOut[Int]].enableDiagnostics).decode(EnumIn.B(1)),
+      NoContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1)),
       Right(EnumOut.B(1))
     )
   }

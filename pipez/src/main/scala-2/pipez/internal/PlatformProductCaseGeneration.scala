@@ -5,7 +5,6 @@ import pipez.internal.Definitions.{ Context, Result }
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
-
 import scala.language.existentials
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
@@ -31,7 +30,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   final def isJavaBean[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
     val mem = typeOf[A].members
-    sym.isClass && !sym.isAbstract && mem.exists(isDefaultConstructor) && mem.exists(isJavaSetter)
+    sym.isClass && !sym.isAbstract && mem.exists(isDefaultConstructor) &&
+    (mem.exists(isJavaSetter) || mem.exists(isVar))
   }
 
   private def isDefaultConstructor(ctor: Symbol): Boolean =
@@ -52,20 +52,24 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       setter.asMethod.paramLists.flatten.size == 1 &&
       setter.isPublic
 
+  private def isVar(setter: Symbol): Boolean =
+    setter.isTerm && setter.asTerm.name.toString.endsWith("_$eq") && setter.isPublic
+
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
     In.decls
       .to(List)
       .filterNot(isGarbage)
       .filter(m => isCaseClassField(m) || isJavaGetter(m))
       .map { getter =>
-        getter.name.toString -> ProductInData.Getter[Any](
-          name = getter.name.toString,
+        val name     = getter.name.toString
+        val termName = getter.asMethod.name.toTermName
+        name -> ProductInData.Getter[Any](
+          name = name,
           tpe = returnTypeOf(In, getter).asInstanceOf[Type[Any]],
           get =
-            if (getter.asMethod.paramLists.isEmpty)
-              (in: Expr[In]) => c.Expr[Any](q"$in.${getter.asMethod.name.toTermName}")
-            else (in: Expr[In]) => c.Expr[Any](q"$in.${getter.asMethod.name.toTermName}()"),
-          path = Path.Field(Path.Root, getter.name.toString)
+            if (getter.asMethod.paramLists.isEmpty) (in: Expr[In]) => c.Expr[Any](q"$in.$termName")
+            else (in: Expr[In]) => c.Expr[Any](q"$in.$termName()"),
+          path = Path.Field(Path.Root, name)
         )
       }
       .to(ListMap)
@@ -84,12 +88,16 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       val setters = Out.decls
         .to(List)
         .filterNot(isGarbage)
-        .filter(isJavaSetter)
+        .filter(s => isJavaSetter(s) || isVar(s))
         .map { setter =>
-          setter.name.toString -> ProductOutData.Setter(
-            name = setter.name.toString,
+          val name = setter.name.toString.pipe { n =>
+            if (isVar(setter)) n.substring(0, n.length - "_$eq".length) else n
+          }
+          val termName = setter.asTerm.name.toTermName
+          name -> ProductOutData.Setter(
+            name = name,
             tpe = paramListsOf(Out, setter).flatten.head.typeSignature.asInstanceOf[Type[Any]],
-            set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.${setter.asMethod.name.toTermName}($value)")
+            set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.$termName($value)")
           )
         }
         .to(ListMap)

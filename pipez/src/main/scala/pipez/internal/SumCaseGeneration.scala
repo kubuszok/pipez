@@ -236,7 +236,7 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
   // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, updateContext(ctx, path)): Result[OutSubtype] }
   private def fromOutputSubtype[InSubtype <: In: Type, OutSubtype <: Out: Type](settings: Settings): DerivationResult[
     EnumGeneratorData.InputSubtype
-  ] = summonOrDerive[InSubtype, OutSubtype](settings).map(
+  ] = summonOrDerive[InSubtype, OutSubtype](settings, alwaysAllowDerivation = true).map(
     EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype],
                                            typeOf[OutSubtype],
                                            _,

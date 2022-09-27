@@ -177,6 +177,9 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
       // matches {cfg}.enumMatchingCaseInsensitive
       case Select(expr, "enumMatchingCaseInsensitive") =>
         extract(expr, ConfigEntry.EnumCaseInsensitive :: acc)
+      // matches {cfg}.enumMatchingCaseInsensitive
+      case Select(expr, "recursiveDerivation") =>
+        extract(expr, ConfigEntry.EnableRecursiveDerivation :: acc)
       case els =>
         Left(s"${previewCode(code)} is not a right PipeDerivationConfig")
     }

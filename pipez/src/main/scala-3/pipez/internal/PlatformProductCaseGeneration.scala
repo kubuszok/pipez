@@ -28,8 +28,9 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
 
   final def isJavaBean[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
-    sym.isClassDef && !sym.flags.is(Flags.Abstract) && sym.declaredMethods.exists(isJavaSetter) && sym.declarations
-      .exists(isDefaultConstructor)
+    sym.isClassDef && !sym.flags.is(Flags.Abstract) && sym.declarations.exists(
+      isDefaultConstructor
+    ) && (sym.declaredMethods.exists(isJavaSetter) || sym.declaredMethods.exists(isVar))
 
   private def isPublic(sym: Symbol): Boolean =
     !sym.flags.is(Flags.Private) && !sym.flags.is(Flags.PrivateLocal) && !sym.flags.is(Flags.Protected)
@@ -43,6 +44,9 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   private def isJavaSetter(setter: Symbol): Boolean =
     ProductCaseGeneration.isSetterName(setter.name) && setter.paramSymss.flatten.size == 1 && isPublic(setter)
 
+  private def isVar(setter: Symbol): Boolean =
+    setter.isValDef && setter.flags.is(Flags.Mutable)
+
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
     val sym = TypeRepr.of[In].typeSymbol
     // apparently each case field is duplicated: "a" and "a ", "_1" and "_1" o_0 - the first is method, the other val
@@ -50,13 +54,14 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     (sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef) ++ sym.declaredMethods.filter(
       isJavaGetter
     )).map { method =>
-      method.name.toString -> ProductInData.Getter[Any](
-        name = method.name.toString,
+      val name = method.name.toString
+      name -> ProductInData.Getter[Any](
+        name = name,
         tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
         get =
           if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
           else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
-        path = Path.Field(Path.Root, method.name.toString)
+        path = Path.Field(Path.Root, name)
       )
     }.to(ListMap)
       .pipe(ProductInData(_))
@@ -102,16 +107,20 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       )(DerivationError.MissingPublicConstructor)
 
       val setters = sym.declaredMethods
-        .filter(isJavaSetter)
+        .filter(s => isJavaSetter(s) || isVar(s))
         .map { setter =>
-          setter.name -> ProductOutData.Setter[Any](
-            name = setter.name.toString,
+          val name = setter.name
+          name -> ProductOutData.Setter[Any](
+            name = name,
             tpe = {
               val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(setter): @unchecked
               tpe.asType.asInstanceOf[Type[Any]]
             },
-            set = (out: Expr[Out], value: Expr[Any]) =>
-              out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
+            set =
+              // if (isVar(setter)) (out: Expr[Out], value: Expr[Any]) => ???
+              // else
+              (out: Expr[Out], value: Expr[Any]) =>
+                out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
           )
         }
         .to(ListMap)

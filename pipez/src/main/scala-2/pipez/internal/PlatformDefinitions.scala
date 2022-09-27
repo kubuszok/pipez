@@ -172,6 +172,9 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definit
       // matches {cfg}.enumMatchingCaseInsensitive
       case Select(expr, TermName("enumMatchingCaseInsensitive")) =>
         extract(expr, ConfigEntry.EnumCaseInsensitive :: acc)
+      // matches {cfg}.enumMatchingCaseInsensitive
+      case Select(expr, TermName("recursiveDerivation")) =>
+        extract(expr, ConfigEntry.EnableRecursiveDerivation :: acc)
       case els =>
         Left(s"${previewCode(code)} is not a right PipeDerivationConfig")
     }

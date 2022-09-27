@@ -57,11 +57,14 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
             TypeRepr.of(using subtypeTypeParamsFixed) <:< TypeRepr.of[A]
           }
           .map { case (subtypeType, subtypeTypeParamsFixed) =>
+            val name = subtypeType.name.pipe { n =>
+              if (n.endsWith("$")) n.substring(0, n.length - 1) else n
+            }
             EnumData.Case(
-              name = subtypeType.name,
+              name = name,
               tpe = subtypeTypeParamsFixed,
               isCaseObject = subtypeType.flags.is(Flags.Module),
-              path = Path.Subtype(Path.Root, subtypeType.name)
+              path = Path.Subtype(Path.Root, name)
             )
           }
       )

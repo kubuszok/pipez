@@ -2,6 +2,7 @@ package pipez.dsl
 
 import scala.collection.Factory
 
+/** Effect and side-effect free conversion of types */
 trait Converter[From, To] {
 
   def convert(value: From): To
@@ -11,10 +12,12 @@ object Converter
     with pipez.PipeSemiautoConfiguredSupport[Converter]
     with ConverterInstances0 {
 
+  /** Utility to create `Converter` without SAM */
   def instance[From, To](f: From => To): Converter[From, To] = f(_)
 
   object unsafe {
 
+    /** Import if you want to allow conversions from `Option[A]` to `B` by calling `.get` on option */
     implicit def unsafeConvertFromOption[From, To](implicit safe: Converter[From, To]): Converter[Option[From], To] =
       option => safe.convert(option.get)
   }

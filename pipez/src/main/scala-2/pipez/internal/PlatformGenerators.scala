@@ -4,6 +4,7 @@ import pipez.internal.Definitions.{ Context, Result }
 
 private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
     extends Generators[Pipe, In, Out]
+    with PlatformAnyValCaseGeneration[Pipe, In, Out]
     with PlatformProductCaseGeneration[Pipe, In, Out]
     with PlatformSumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] =>

@@ -5,7 +5,7 @@ import pipez.internal.SumCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap
-import scala.util.chaining.scalaUtilChainingOps
+import scala.util.chaining.*
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {

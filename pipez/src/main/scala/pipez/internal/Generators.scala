@@ -8,7 +8,8 @@ import scala.util.chaining.scalaUtilChainingOps
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait Generators[Pipe[_, _], In, Out]
-    extends ProductCaseGeneration[Pipe, In, Out]
+    extends AnyValCaseGeneration[Pipe, In, Out]
+    with ProductCaseGeneration[Pipe, In, Out]
     with SumCaseGeneration[Pipe, In, Out] {
   self: Definitions[Pipe, In, Out] =>
 
@@ -17,6 +18,8 @@ trait Generators[Pipe[_, _], In, Out]
 
   /** Takes `Settings` and passes them to generators, the first which decides it's their case, attempt generation */
   final val resolveConversion: Settings => DerivationResult[Expr[Pipe[In, Out]]] = {
+    // TODO: uncomment once implemented
+    // case AnyValConversion(generatedCode)      => generatedCode
     case ProductTypeConversion(generatedCode) => generatedCode
     case SumTypeConversion(generatedCode)     => generatedCode
     case _                                    => DerivationResult.fail(DerivationError.NotYetSupported)
@@ -58,7 +61,7 @@ trait Generators[Pipe[_, _], In, Out]
         case DerivationError.InvalidInput(msg) =>
           msg
         case DerivationError.NotYetSupported =>
-          s"Derivation is only supported for conversions: case class/Java Bean <=> case class/Java Bean, case class <=> tuple, ADT <=> ADT - types $inType => $outType don't match this requirement, consider providing $pipeType yourself"
+          s"Derivation is only supported for conversions: case class/Java Bean <=> case class/Java Bean, case class <=> tuple, ADT <=> ADT, AnyVal <=> primitives - types $inType => $outType don't match this requirement, consider providing $pipeType yourself"
         case DerivationError.NotYetImplemented(msg) =>
           s"The functionality \"$msg\" is not yet implemented, this message is intended as diagnostic for library authors and you shouldn't have seen it"
       }

@@ -17,10 +17,17 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   /** True iff `A` is defined as `case class`, is NOT abstract and has a public constructor */
   def isCaseClass[A: Type]: Boolean
 
-  /** True iff `A` is defined as `case object`, and is public */
+  /** True iff `A` is defined as `case object`, and is public.
+    *
+    * Exception's are Scala 3's cases without parameters - Scala 3 sees then as vals and Scala as non-case modules
+    */
   def isCaseObject[A: Type]: Boolean
 
-  /** True iff `A` has a (public) default constructor and at least one (public) method starting with `set` */
+  /** True iff `A` has a (public) default constructor and at least one (public) method starting with `set`.
+    *
+    * The exceptions are Java Beans compiled with Scala 3 which expose `@BeanProperty var a: Int` as `var` as opposed to
+    * pair of `getA` and `setA` - for that reason we need a special handling of Scala 3's beans
+    */
   def isJavaBean[A: Type]: Boolean
 
   /** Whether `Out` type could be constructed as "product case" */

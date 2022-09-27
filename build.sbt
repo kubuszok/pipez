@@ -1,7 +1,7 @@
 import commandmatrix.extra._
 import Settings._
 
-val testCasesVersion = "0.2.0"
+val testCasesVersion = "0.2.1"
 
 // Scala Native 2.13 seem to generate linking errors so we're disabling it for now
 val skip2_13Native = MatrixAction((s, a) => s.isScala2 && a.contains(VirtualAxis.native)).Skip

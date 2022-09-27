@@ -346,11 +346,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       NoContextCodec.derive[ADTClassesIn, ADTClassesOut].decode(ADTClassesIn.B(1)),
       Right(ADTClassesOut.B(1))
     )
-    // scala 3 enum
-    assertEquals(
-      NoContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1)),
-      Right(EnumOut.B(1))
-    )
   }
 
   test("removeSubtype, auto summon elements -> for removed use pipe, for others use matching subtypes") {
@@ -502,6 +497,76 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       NoContextCodec.derive[`Backtick ADT In`, `Backtick ADT Out`].decode(`Backtick ADT In`.`Case Class`("test")),
       Right(`Backtick ADT Out`.`Case Class`("test"))
+    )
+  }
+
+  test("transformation should handle 2.13-3 cross-compilation and convert Java Beans") {
+    // @BeanProperty from Scala 2 -> @BeanProperty from Scala 2
+    assertEquals(
+      NoContextCodec
+        .derive[BeanManyIn, BeanManyOut]
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+    // @BeanProperty from Scala 2 -> @BeanProperty from Scala 3
+    assertEquals(
+      NoContextCodec
+        .derive[BeanManyIn, Bean3ManyOut]
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L))),
+      Right(new Bean3ManyOut().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L))
+    )
+    // @BeanProperty from Scala 3 -> @BeanProperty from Scala 2
+    assertEquals(
+      NoContextCodec
+        .derive[Bean3ManyIn, BeanManyOut]
+        .decode(new Bean3ManyIn().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L)),
+      Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+    // @BeanProperty from Scala 3 -> @BeanProperty from Scala 3
+    assertEquals(
+      NoContextCodec
+        .derive[Bean3ManyIn, Bean3ManyOut]
+        .decode(new Bean3ManyIn().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L)),
+      Right(new Bean3ManyOut().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L))
+    )
+  }
+
+  test("transformation should handle 2.13-3 cross-compilation and convert sealed hierarchies and enums") {
+    // scala 2 gadt -> scala 2 gadt
+    assertEquals(
+      NoContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.A),
+      Right(GadtOut.A)
+    )
+    assertEquals(
+      NoContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.B(1)),
+      Right(GadtOut.B(1))
+    )
+    // scala 2 gadt -> scala 3 enum
+    assertEquals(
+      NoContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.A),
+      Right(EnumOut.A)
+    )
+    assertEquals(
+      NoContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.B(1)),
+      Right(EnumOut.B(1))
+    )
+    // scala 3 enum -> scala 2 gadt
+    assertEquals(
+      NoContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.A),
+      Right(GadtOut.A)
+    )
+    assertEquals(
+      NoContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.B(1)),
+      Right(GadtOut.B(1))
+    )
+    // scala 3 enum -> scala 3 enum
+    assertEquals(
+      NoContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.A),
+      Right(EnumOut.A)
+    )
+    assertEquals(
+      NoContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1)),
+      Right(EnumOut.B(1))
     )
   }
 }

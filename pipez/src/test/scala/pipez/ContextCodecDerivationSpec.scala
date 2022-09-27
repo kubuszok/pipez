@@ -639,6 +639,76 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("transformation should handle 2.13-3 cross-compilation and convert Java Beans") {
+    // @BeanProperty from Scala 2 -> @BeanProperty from Scala 2
+    assertEquals(
+      ContextCodec
+        .derive[BeanManyIn, BeanManyOut]
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)), shouldFailFast = false, "root"),
+      Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+    // @BeanProperty from Scala 2 -> @BeanProperty from Scala 3
+    assertEquals(
+      ContextCodec
+        .derive[BeanManyIn, Bean3ManyOut]
+        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)), shouldFailFast = false, "root"),
+      Right(new Bean3ManyOut().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L))
+    )
+    // @BeanProperty from Scala 3 -> @BeanProperty from Scala 2
+    assertEquals(
+      ContextCodec
+        .derive[Bean3ManyIn, BeanManyOut]
+        .decode(new Bean3ManyIn().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L), shouldFailFast = false, "root"),
+      Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
+    )
+    // @BeanProperty from Scala 3 -> @BeanProperty from Scala 3
+    assertEquals(
+      ContextCodec
+        .derive[Bean3ManyIn, Bean3ManyOut]
+        .decode(new Bean3ManyIn().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L), shouldFailFast = false, "root"),
+      Right(new Bean3ManyOut().tap(_.a = 1).tap(_.b = "a").tap(_.c = 2L))
+    )
+  }
+
+  test("transformation should handle 2.13-3 cross-compilation and convert sealed hierarchies and enums") {
+    // scala 2 gadt -> scala 2 gadt
+    assertEquals(
+      ContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.A, shouldFailFast = false, "root"),
+      Right(GadtOut.A)
+    )
+    assertEquals(
+      ContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.B(1), shouldFailFast = false, "root"),
+      Right(GadtOut.B(1))
+    )
+    // scala 2 gadt -> scala 3 enum
+    assertEquals(
+      ContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.A, shouldFailFast = false, "root"),
+      Right(EnumOut.A)
+    )
+    assertEquals(
+      ContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.B(1), shouldFailFast = false, "root"),
+      Right(EnumOut.B(1))
+    )
+    // scala 3 enum -> scala 2 gadt
+    assertEquals(
+      ContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.A, shouldFailFast = false, "root"),
+      Right(GadtOut.A)
+    )
+    assertEquals(
+      ContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, "root"),
+      Right(GadtOut.B(1))
+    )
+    // scala 3 enum -> scala 3 enum
+    assertEquals(
+      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.A, shouldFailFast = false, "root"),
+      Right(EnumOut.A)
+    )
+    assertEquals(
+      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, "root"),
+      Right(EnumOut.B(1))
+    )
+  }
+
   test("errors should appear in Left enriched with Path information") {
     implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>
       scala.util.Try(string.toInt).fold(_ => Left(List(s"$path cannot be converted to Int")), Right(_))

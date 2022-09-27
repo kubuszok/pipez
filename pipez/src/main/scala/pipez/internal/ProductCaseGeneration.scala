@@ -169,7 +169,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
           .flatMap { getter =>
             implicit val tpe: Type[InField] = getter.tpe
-            fromFieldConstructorParam[InField, OutField](getter)
+            fromFieldConstructorParam[InField, OutField](getter, settings)
           }
           .orElse(fallbackOnDefault(outParamName, default, settings))
           .log(
@@ -191,7 +191,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
           .flatMap { getter =>
             implicit val tpe: Type[InField] = getter.tpe
-            fromFieldConstructorParam[InField, OutField](getter)
+            fromFieldConstructorParam[InField, OutField](getter, settings)
           }
           .log(s"Field $outParamName is considered renamed from $inFieldName, uses summoning if types differ")
       case PipeProvided(inFieldName, _, pipe) =>
@@ -419,7 +419,8 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   // if inField <:< outField then (in, ctx) => pure(in : OutField)
   // else (in, ctx) => unlift(summon[InField, OutField])(in.inField, updateContext(ctx, path)) : Result[OutField]
   private def fromFieldConstructorParam[InField: Type, OutField: Type](
-    getter: ProductInData.Getter[InField]
+    getter:   ProductInData.Getter[InField],
+    settings: Settings
   ): DerivationResult[ProductGeneratorData.OutputValue] =
     if (isSubtype[InField, OutField]) {
       DerivationResult.pure(
@@ -429,11 +430,12 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
         )
       )
     } else {
-      summonPipe[InField, OutField].map { (pipe: Expr[Pipe[InField, OutField]]) =>
-        ProductGeneratorData.OutputValue.Result(
-          typeOf[OutField],
-          (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
-        )
+      summonOrDerive[InField, OutField](settings, alwaysAllowDerivation = false).map {
+        (pipe: Expr[Pipe[InField, OutField]]) =>
+          ProductGeneratorData.OutputValue.Result(
+            typeOf[OutField],
+            (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
+          )
       }
     }
 

@@ -127,6 +127,8 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     }
 
     case object EnumCaseInsensitive extends ConfigEntry
+
+    case object EnableRecursiveDerivation extends ConfigEntry
   }
 
   /** Collection of config options obtained after parsing `pipez.PipeDerivationConfig` */
@@ -141,6 +143,8 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     lazy val isEnumCaseInsensitive: Boolean = entries.contains(EnumCaseInsensitive)
 
     lazy val isFallbackToDefaultEnabled: Boolean = entries.contains(EnableFallbackToDefaults)
+
+    lazy val isRecursiveDerivationEnabled: Boolean = entries.contains(EnableRecursiveDerivation)
 
     final def resolve[A](default: A)(overrideWhen: PartialFunction[ConfigEntry, A]): A = entries.foldLeft(default) {
       (a, entry) => overrideWhen.applyOrElse[ConfigEntry, A](entry, _ => a)
@@ -312,10 +316,24 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
   /** Allows recursively deriving the type class in platform-independent way */
   def derivePipe[Input: Type, Output: Type](settings: Settings): DerivationResult[Expr[Pipe[Input, Output]]]
 
-  // TODO: use it
   /** Attempts to summon the type class and on failure fallbacks to deriving it */
-  def summonOrDerive[Input: Type, Output: Type](settings: Settings): DerivationResult[Expr[Pipe[Input, Output]]] =
-    summonPipe[Input, Output].orElse(derivePipe[Input, Output](settings))
+  final def summonOrDerive[Input: Type, Output: Type](
+    settings:              Settings,
+    alwaysAllowDerivation: Boolean
+  ): DerivationResult[Expr[Pipe[Input, Output]]] =
+    summonPipe[Input, Output].orElse {
+      if (alwaysAllowDerivation || settings.isRecursiveDerivationEnabled) derivePipe[Input, Output](settings)
+      else
+        DerivationResult.fail(
+          DerivationError.RecursiveDerivationFailed(
+            typeOf[Input],
+            typeOf[Output],
+            List(
+              DerivationError.InvalidInput("Recursive derivation was not enabled")
+            )
+          )
+        )
+    }
 
   /** If we pass Single Abstract Method as argument, after expansion inference sometimes fails, compiler might need a
     * hint

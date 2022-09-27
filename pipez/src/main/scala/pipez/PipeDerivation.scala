@@ -31,7 +31,7 @@ trait PipeDerivation[Pipe[_, _]] {
   def unlift[In, Out](pipe: Pipe[In, Out], in: In, ctx: Context): Result[Out]
 
   /** Let you inject int information about current Path (extracted field, matched subtypes) into `Context` */
-  def updateContext(context: Context, path: Path): Context
+  def updateContext(context: Context, path: => Path): Context
 
   /** Wraps raw value into `Result` that `Pipe` should return */
   def pureResult[A](a: A): Result[A]
@@ -54,7 +54,7 @@ object PipeDerivation extends PipeDerivationPlatform {
     def simpleUnlift[In, Out](pipe: Pipe[In, Out], in: In): Result[Out]
     final def unlift[In, Out](pipe: Pipe[In, Out], in: In, ctx: Context): Result[Out] = simpleUnlift(pipe, in)
 
-    final def updateContext(context: Context, path: Path): Context = context
+    final def updateContext(context: Context, path: => Path): Context = context
 
     /** Merges `Result`s as if `Context` was not passed around */
     def simpleMergeResults[A, B, C](ra: Result[A], rb: => Result[B], f: (A, B) => C): Result[C]
@@ -97,7 +97,7 @@ object PipeDerivation extends PipeDerivationPlatform {
     final type Context = Ctx
     override def lift[In, Out](f: (In, Context) => Out):                        (In, Ctx) => Out = f
     override def unlift[In, Out](pipe: (In, Ctx) => Out, in: In, ctx: Context): Out              = pipe(in, ctx)
-    override def updateContext(context: Context, path: Path): Context = contextUpdate(context, path)
+    override def updateContext(context: Context, path: => Path): Context = contextUpdate(context, path)
   }
 
   /** Default instance for `(In, Ctx) => Out` with `Ctx` passed around without updating */

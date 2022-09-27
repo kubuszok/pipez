@@ -169,7 +169,7 @@ private[dsl] object ParserDerivationDefinition extends pipez.PipeDerivation[Pars
     (from: In, path: Path, failFast: ShouldFailFast) => f(from, (path, failFast))
   override def unlift[In, Out](pipe: Parser[In, Out], in: In, ctx: Context): Result[Out] =
     pipe.parse(in, ctx._1, ctx._2)
-  override def updateContext(context: Context, path: pipez.Path): Context = {
+  override def updateContext(context: Context, path: => pipez.Path): Context = {
     @scala.annotation.tailrec
     def fromPath(in: pipez.Path, out: Path): Path = in match {
       case pipez.Path.Root                => out

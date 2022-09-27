@@ -116,11 +116,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               val MethodType(_, List(tpe), _) = TypeRepr.of[Out].memberType(setter): @unchecked
               tpe.asType.asInstanceOf[Type[Any]]
             },
-            set =
-              // if (isVar(setter)) (out: Expr[Out], value: Expr[Any]) => ???
-              // else
-              (out: Expr[Out], value: Expr[Any]) =>
-                out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
+            set = (out: Expr[Out], value: Expr[Any]) =>
+              out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
           )
         }
         .to(ListMap)

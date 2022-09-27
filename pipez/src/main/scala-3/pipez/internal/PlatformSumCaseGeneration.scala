@@ -58,6 +58,8 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
           }
           .map { case (subtypeType, subtypeTypeParamsFixed) =>
             val name = subtypeType.name.pipe { n =>
+              // case objects from Scala 2 has names with $ at the end (like all modules) while Scala 3's name
+              // have all these suffixes like "$" or ".type" dropped. We need to align these names to allow comparing
               if (n.endsWith("$")) n.substring(0, n.length - 1) else n
             }
             EnumData.Case(

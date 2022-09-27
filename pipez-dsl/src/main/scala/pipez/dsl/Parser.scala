@@ -3,6 +3,11 @@ package pipez.dsl
 import scala.collection.Factory
 import scala.collection.immutable.ListMap
 
+/** Conversion of types which allow:
+  *   - failure with error messages
+  *   - choosing between fail-fast and full attempt to gather all errors
+  *   - aggregating errors under path to the field which failed
+  */
 trait Parser[From, To] {
 
   def parse(from: From, path: Parser.Path, failFast: Parser.ShouldFailFast): Parser.ParsingResult[To]
@@ -15,9 +20,11 @@ object Parser
     with pipez.PipeSemiautoConfiguredSupport[Parser]
     with ParserInstances0 {
 
+  /** Utility to create `Converter` without SAM */
   def instance[From, To](f: From => Either[Vector[String], To]): Parser[From, To] =
     (from: From, path: Path, _: ShouldFailFast) => f(from).left.map(errors => ListMap(path -> errors))
 
+  /** Element of a `Path` to the failed field */
   sealed trait PathSegment extends Product with Serializable
   object PathSegment {
 

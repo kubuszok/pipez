@@ -88,8 +88,10 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
 
         // Scala 3's enums' parameterless cases are vals with type erased, so w have to match them by value
         if (TypeRepr.of[In].typeSymbol.flags.is(Flags.Enum | Flags.JavaStatic))
+          // case arg @ Enum.Value => ...
           CaseDef(Bind(arg, Ident(TypeRepr.of[In].typeSymbol.termRef)), None, body.asTerm)
         else
+          // case arg : Enum.Value => ...
           CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
       }
       .pipe(Match(in.asTerm, _))

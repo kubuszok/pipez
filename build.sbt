@@ -26,7 +26,7 @@ val pipez = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       ("com.kubuszok" %%% "pipez-testcases" % testCasesVersion).cross(CrossVersion.for3Use2_13) % Test,
-      ("com.kubuszok" %%% "pipez-testcases-scala3" % testCasesVersion).cross(CrossVersion.for2_13Use3) % Test,
+      ("com.kubuszok" %%% "pipez-testcases-scala3" % testCasesVersion).cross(CrossVersion.for2_13Use3) % Test
     )
   )
   .settings(publishSettings: _*)
@@ -43,7 +43,7 @@ val pipezDsl = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       ("com.kubuszok" %%% "pipez-testcases" % testCasesVersion).cross(CrossVersion.for3Use2_13) % Test,
-      ("com.kubuszok" %%% "pipez-testcases-scala3" % testCasesVersion).cross(CrossVersion.for2_13Use3) % Test,
+      ("com.kubuszok" %%% "pipez-testcases-scala3" % testCasesVersion).cross(CrossVersion.for2_13Use3) % Test
     )
   )
   .settings(publishSettings: _*)

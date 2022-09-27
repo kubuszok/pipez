@@ -61,9 +61,21 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
         case convert @ EnumGeneratorData.InputSubtype.Convert(inSubtype, _, _, _) => convert -> inSubtype
         case handle @ EnumGeneratorData.InputSubtype.Handle(inSubtype, _, _)      => handle -> inSubtype
       }
-      .map { case (generator, inSubtype) =>
+      .map { case (gen, inSubtype) =>
         val arg = c.freshName(TermName("arg"))
-        cq"""$arg : $inSubtype => ${generator.unlifted(c.Expr[In](q"$arg"), ctx)}.asInstanceOf[${Result[Out]}]"""
+        val sym = inSubtype.typeSymbol
+        val body =
+          // apparently `case arg @ module =>` widens type
+          if (sym.isModuleClass) gen.unlifted(c.Expr[In](q"$arg.asInstanceOf[$inSubtype]"), ctx)
+          else gen.unlifted(c.Expr[In](q"$arg"), ctx)
+
+        // Scala 3's enums' parameterless cases are vals with type erased, so w have to match them by value
+        if (sym.isModuleClass)
+          // case arg : Enum.Value => ...
+          cq"""$arg @ ${Ident(sym.asClass.module)} => $body.asInstanceOf[${Result[Out]}]"""
+        else
+          // case arg : Enum.Value => ...
+          cq"""$arg : $inSubtype => $body.asInstanceOf[${Result[Out]}]"""
       }
       .pipe(c => q"$in match { case ..$c }")
       .pipe(c.Expr[Out](_))

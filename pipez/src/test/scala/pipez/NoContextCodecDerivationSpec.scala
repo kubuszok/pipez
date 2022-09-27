@@ -335,6 +335,20 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("recursiveDerivation -> derivation for converters of fields doesn't require derivation as implicit") {
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[CaseParamIn[CaseOnesIn], CaseParamOutExt[CaseOnesOut]]
+            .addField(_.x, _ => Right(CaseOnesOut(4)))
+            .recursiveDerivation
+        )
+        .decode(CaseParamIn(1, "a", CaseOnesIn(3))),
+      Right(CaseParamOutExt(1, "a", CaseOnesOut(3), CaseOnesOut(4)))
+    )
+  }
+
   test("no config, auto derive elements -> use matching subtypes") {
     // case object only in ADT
     assertEquals(

@@ -25,7 +25,7 @@ object ContextCodec extends PipeSemiautoSupport[ContextCodec] with PipeSemiautoC
 
     override def pureResult[A](a: A): Either[List[String], A] = Right(a)
 
-    override def updateContext(context: Driver, path: Path): Driver = {
+    override def updateContext(context: Driver, path: => Path): Driver = {
       def newPath(update: Path): String = update match {
         case Path.Root                => context.path
         case Path.Field(from, name)   => s"${newPath(from)}.$name"

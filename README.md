@@ -178,7 +178,7 @@ implicit val codecDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] 
   def mergeResult[A, B, C](ctx: Context, fa: Result[A], fb: => Result[B], f: (A, B) => C): Result[C] =
     for { a <- fa; b <- fb } yield f(a, b)
   // can be used to update Context with Field/Subtype information before passing it into codec
-  def updateContext(context: Context, path: Path) = context
+  def updateContext(context: Context, path: => Path) = context
 }
 ```
 
@@ -303,7 +303,7 @@ Then derivation would pass this extra argument around unchanged if you defined i
 ```scala
 implicit val pipeDerivation: PipeDerivation[Codec] = new PipeDerivation[Codec] {
   type Context = Boolean
-  def updateContext(ctx: Context, path: Path): Context = ctx
+  def updateContext(ctx: Context, path: => Path): Context = ctx
   ...
 }
 ```

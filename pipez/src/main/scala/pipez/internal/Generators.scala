@@ -18,8 +18,7 @@ trait Generators[Pipe[_, _], In, Out]
 
   /** Takes `Settings` and passes them to generators, the first which decides it's their case, attempt generation */
   final val resolveConversion: Settings => DerivationResult[Expr[Pipe[In, Out]]] = {
-    // TODO: uncomment once implemented
-    // case AnyValConversion(generatedCode)      => generatedCode
+    case AnyValConversion(generatedCode)      => generatedCode
     case ProductTypeConversion(generatedCode) => generatedCode
     case SumTypeConversion(generatedCode)     => generatedCode
     case _                                    => DerivationResult.fail(DerivationError.NotYetSupported)

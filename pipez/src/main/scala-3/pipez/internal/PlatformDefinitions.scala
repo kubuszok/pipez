@@ -196,4 +196,33 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
   def returnType[A](typeRepr: TypeRepr): Type[A] = typeRepr.widenByName match
     case MethodType(_, _, out) => returnType[A](out)
     case out                   => out.asType.asInstanceOf[Type[A]]
+
+  val resolveTypeArgsForMethodArguments = (tpe: TypeRepr, method: Symbol) =>
+    tpe.memberType(method) match
+      // monomorphic
+      case MethodType(names, types, _) =>
+        val typeArgs:           List[TypeRepr]        = Nil
+        val typeArgumentByName: Map[String, TypeRepr] = names.zip(types).toMap
+        DerivationResult.pure(typeArgumentByName -> typeArgs)
+      // polymorphic
+      case PolyType(_, _, MethodType(names, types, AppliedType(_, typeRefs))) =>
+        // TODO: check if types of constructor match types passed to Out
+        val typeArgs: List[TypeRepr] = TypeRepr.of[Out].typeArgs
+        val typeArgumentByAlias = typeRefs.zip(typeArgs).toMap
+        val typeArgumentByName: Map[String, TypeRepr] = names
+          .zip(types)
+          .toMap
+          .view
+          .mapValues { tpe =>
+            typeArgumentByAlias.getOrElse(tpe, tpe)
+          }
+          .toMap
+        DerivationResult.pure(typeArgumentByName -> typeArgs)
+      // unknown
+      case tpe =>
+        DerivationResult.fail(
+          DerivationError.NotYetImplemented(
+            s"Constructor of ${previewType[Out]} has unrecognized/unsupported format of type: ${tpe}"
+          )
+        )
 }

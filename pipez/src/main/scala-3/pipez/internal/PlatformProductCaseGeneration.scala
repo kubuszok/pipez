@@ -54,7 +54,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     (sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef) ++ sym.declaredMethods.filter(
       isJavaGetter
     )).map { method =>
-      val name = method.name.toString
+      val name = method.name
       name -> ProductInData.Getter[Any](
         name = name,
         tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
@@ -148,7 +148,9 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       // case class case
 
       (for {
-        primaryConstructor <- DerivationResult.pure(TypeRepr.of[Out].typeSymbol.primaryConstructor)
+        primaryConstructor <- DerivationResult.fromOption(
+          Option(TypeRepr.of[Out].typeSymbol.primaryConstructor).filter(s => !s.isNoSymbol)
+        )(DerivationError.MissingPublicConstructor)
         pair <- resolveTypeArgsForMethodArguments(TypeRepr.of[Out], primaryConstructor)
         (typeByName, typeParams) = pair
         // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
@@ -326,34 +328,4 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       .log(s"Java Beans derivation, setters: $outputSettersList")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
   }
-
-  private val resolveTypeArgsForMethodArguments = (tpe: TypeRepr, method: Symbol) =>
-    tpe.memberType(method) match {
-      // monomorphic
-      case MethodType(names, types, _) =>
-        val typeArgs:           List[TypeRepr]        = Nil
-        val typeArgumentByName: Map[String, TypeRepr] = names.zip(types).toMap
-        DerivationResult.pure(typeArgumentByName -> typeArgs)
-      // polymorphic
-      case PolyType(_, _, MethodType(names, types, AppliedType(_, typeRefs))) =>
-        // TODO: check if types of constructor match types passed to Out
-        val typeArgs: List[TypeRepr] = TypeRepr.of[Out].typeArgs
-        val typeArgumentByAlias = typeRefs.zip(typeArgs).toMap
-        val typeArgumentByName: Map[String, TypeRepr] = names
-          .zip(types)
-          .toMap
-          .view
-          .mapValues { tpe =>
-            typeArgumentByAlias.getOrElse(tpe, tpe)
-          }
-          .toMap
-        DerivationResult.pure(typeArgumentByName -> typeArgs)
-      // unknown
-      case tpe =>
-        DerivationResult.fail(
-          DerivationError.NotYetImplemented(
-            s"Constructor of ${previewType[Out]} has unrecognized/unsupported format of type: ${tpe}"
-          )
-        )
-    }
 }

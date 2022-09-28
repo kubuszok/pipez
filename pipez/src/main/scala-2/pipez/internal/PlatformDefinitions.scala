@@ -7,7 +7,9 @@ import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definitions[Pipe, In, Out] {
+private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
+    extends Definitions[Pipe, In, Out]
+    with PlatformDefinitionsInstances0[Pipe, In, Out] {
 
   val c: blackbox.Context
 
@@ -184,9 +186,13 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out] extends Definit
 
   // Scala 2-macro specific instances
 
-  implicit val AnyT:     Type[Any]        = c.weakTypeOf[Any].asInstanceOf[Type[Any]]
-  implicit val ArrayAny: Type[Array[Any]] = c.weakTypeOf[Array[Any]].asInstanceOf[Type[Array[Any]]]
-  def Context:           Type[Context]    = c.weakTypeOf[Context].asInstanceOf[Type[Context]]
+  def Context: Type[Context] = typeFromTag[Context]
   def Result[A: Type]: Type[Result[A]] =
-    c.universe.appliedType(c.weakTypeOf[Result[Unit]].typeConstructor, typeOf[A]).asInstanceOf[Type[Result[A]]]
+    appliedType(weakTypeOf[Result[Unit]].typeConstructor, typeOf[A]).asInstanceOf[Type[Result[A]]]
+}
+private[internal] trait PlatformDefinitionsInstances0[Pipe[_, _], In, Out] { self: PlatformDefinitions[Pipe, In, Out] =>
+
+  import c.universe.*
+
+  implicit def typeFromTag[A: WeakTypeTag]: Type[A] = weakTypeOf[A].asInstanceOf[Type[A]]
 }

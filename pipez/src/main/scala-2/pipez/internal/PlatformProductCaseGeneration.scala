@@ -323,30 +323,4 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       .log(s"Java Beans derivation, setters: $outputSettersList")
       .logSuccess(code => s"Generated code: ${previewCode(code)}")
   }
-
-  private val garbage = Set(
-    // product methods
-    "productElementName",
-    "productIterator",
-    "canEqual",
-    "productElement",
-    "productArity",
-    "productPrefix",
-    "productElementNames",
-    // object methods
-    "synchronized",
-    "wait",
-    "equals",
-    "hashCode",
-    "getClass",
-    "asInstanceOf",
-    "isInstanceOf"
-  )
-  private val isGarbage: Symbol => Boolean = s => garbage(s.name.toString)
-
-  /** Applies type arguments obtained from tpe to the type parameters in method's parameters' types */
-  private val paramListsOf = (tpe: c.Type, method: c.Symbol) => method.asMethod.typeSignatureIn(tpe).paramLists
-
-  /** Applies type arguments obtained from tpe to the type parameters in method's return type */
-  private val returnTypeOf = (tpe: c.Type, method: c.Symbol) => method.typeSignatureIn(tpe).finalResultType
 }

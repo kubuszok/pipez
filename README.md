@@ -92,6 +92,7 @@ In2("a", "a").parseFullInto[Out2]
 * conversion between case classes/Java Beans and case classes/Java Beans based on corresponding field names
 * conversion between case classes and tuples based on value position
 * conversion between ADTs based on corresponding subtypes' names
+* conversion between AnyVals of the same type or wrapping/unwrapping
 * ability to customize derivation
   * handling extra field on output side (`addField`)
   * handling fields with mismatching names (`renameField`)

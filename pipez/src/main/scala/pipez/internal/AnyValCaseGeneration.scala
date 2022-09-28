@@ -18,7 +18,7 @@ private[internal] trait AnyValCaseGeneration[Pipe[_, _], In, Out] {
     val inAnyVal     = isAnyVal[In]
     val inPrimitive  = isPrimitive[In]
     val outAnyVal    = isAnyVal[Out]
-    val outPrimitive = isAnyVal[Out]
+    val outPrimitive = isPrimitive[Out]
     (inAnyVal || outAnyVal) && (inAnyVal || inPrimitive) && (outAnyVal || outPrimitive)
   }
 

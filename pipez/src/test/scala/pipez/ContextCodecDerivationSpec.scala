@@ -723,6 +723,42 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("transformation should handle packing/unpacking AnyVals into primitives they embed") {
+    // AnyVal -> primitive
+    assertEquals(
+      ContextCodec.derive[AnyVals.ClassIn, String].decode(new AnyVals.ClassIn("test"), shouldFailFast = false, "root"),
+      Right("test")
+    )
+    assertEquals(
+      ContextCodec
+        .derive[AnyVals.CaseClassIn, String]
+        .decode(AnyVals.CaseClassIn("test"), shouldFailFast = false, "root"),
+      Right("test")
+    )
+    // primitive -> AnyVal
+    assertEquals(
+      ContextCodec.derive[String, AnyVals.ClassOut].decode("test", shouldFailFast = false, "root"),
+      Right(new AnyVals.ClassOut("test"))
+    )
+    assertEquals(
+      ContextCodec.derive[String, AnyVals.CaseClassOut].decode("test", shouldFailFast = false, "root"),
+      Right(AnyVals.CaseClassOut("test"))
+    )
+    // AnyVal -> AnyVal
+    assertEquals(
+      ContextCodec
+        .derive[AnyVals.ClassIn, AnyVals.ClassOut]
+        .decode(new AnyVals.ClassIn("test"), shouldFailFast = false, "root"),
+      Right(new AnyVals.ClassOut("test"))
+    )
+    assertEquals(
+      ContextCodec
+        .derive[AnyVals.CaseClassIn, AnyVals.CaseClassOut]
+        .decode(AnyVals.CaseClassIn("test"), shouldFailFast = false, "root"),
+      Right(AnyVals.CaseClassOut("test"))
+    )
+  }
+
   test("errors should appear in Left enriched with Path information") {
     implicit val aCodec: ContextCodec[String, Int] = (string: String, _: Boolean, path: String) =>
       scala.util.Try(string.toInt).fold(_ => Left(List(s"$path cannot be converted to Int")), Right(_))

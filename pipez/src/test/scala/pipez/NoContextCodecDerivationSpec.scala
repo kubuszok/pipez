@@ -583,4 +583,34 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
       Right(EnumOut.B(1))
     )
   }
+
+  test("transformation should handle packing/unpacking AnyVals into primitives they embed") {
+    // AnyVal -> primitive
+    assertEquals(
+      NoContextCodec.derive[AnyVals.ClassIn, String].decode(new AnyVals.ClassIn("test")),
+      Right("test")
+    )
+    assertEquals(
+      NoContextCodec.derive[AnyVals.CaseClassIn, String].decode(AnyVals.CaseClassIn("test")),
+      Right("test")
+    )
+    // primitive -> AnyVal
+    assertEquals(
+      NoContextCodec.derive[String, AnyVals.ClassOut].decode("test"),
+      Right(new AnyVals.ClassOut("test"))
+    )
+    assertEquals(
+      NoContextCodec.derive[String, AnyVals.CaseClassOut].decode("test"),
+      Right(AnyVals.CaseClassOut("test"))
+    )
+    // AnyVal -> AnyVal
+    assertEquals(
+      NoContextCodec.derive[AnyVals.ClassIn, AnyVals.ClassOut].decode(new AnyVals.ClassIn("test")),
+      Right(new AnyVals.ClassOut("test"))
+    )
+    assertEquals(
+      NoContextCodec.derive[AnyVals.CaseClassIn, AnyVals.CaseClassOut].decode(AnyVals.CaseClassIn("test")),
+      Right(AnyVals.CaseClassOut("test"))
+    )
+  }
 }

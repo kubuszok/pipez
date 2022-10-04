@@ -174,7 +174,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       case DefaultField() =>
         // if inField (same name as out - same index if tuple) not found then error
         // else if inField <:< outField then (in, ctx) => pure(in : OutField)
-        // else (in, ctx) => unlift(summon[InField, OutField])(in.outParamName, updateContext(ctx, path)) : Result[OutField]
+        // else (in, ctx) => unlift(summon[InField, OutField], in.outParamName, updateContext(ctx, path)) : Result[OutField]
         indexOpt
           .fold {
             inData.findGetter(outParamName, outParamName, settings.isFieldCaseInsensitive) // match by name
@@ -193,14 +193,14 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
               }, summoning)"
           )
       case FieldAdded(pipe) =>
-        // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
+        // (in, ctx) => unlift(pipe, in, ctx) : Result[OutField]
         DerivationResult
           .pure(fieldAddedConstructorParam[OutField](pipe))
           .log(s"Field $outParamName considered added to output, uses provided pipe")
       case FieldRenamed(inFieldName, _) =>
         // if inField (name provided) not found then error
         // else if inField <:< outField then (in, ctx) => pure(in : OutField)
-        // else (in, ctx) => unlift(summon[InField, OutField])(in.inFieldName, updateContext(ctx, path)) : Result[OutField]
+        // else (in, ctx) => unlift(summon[InField, OutField], in.inFieldName, updateContext(ctx, path)) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -211,7 +211,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
           .log(s"Field $outParamName is considered renamed from $inFieldName, uses summoning if types differ")
       case PipeProvided(inFieldName, _, pipe) =>
         // if inField (name provided) not found then error
-        // else (in, ctx) => unlift(summon[InField, OutField])(in.used, updateContext(ctx, path)) : Result[OutField]
+        // else (in, ctx) => unlift(summon[InField, OutField], in.used, updateContext(ctx, path)) : Result[OutField]
         inData
           .findGetter(inFieldName, outParamName, settings.isFieldCaseInsensitive)
           .map(_.asInstanceOf[ProductInData.Getter[InField]])
@@ -432,7 +432,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   }
 
   // if inField <:< outField then (in, ctx) => pure(in : OutField)
-  // else (in, ctx) => unlift(summon[InField, OutField])(in.inField, updateContext(ctx, path)) : Result[OutField]
+  // else (in, ctx) => unlift(summon[InField, OutField], in.inField, updateContext(ctx, path)) : Result[OutField]
   private def fromFieldConstructorParam[InField: Type, OutField: Type](
     getter:   ProductInData.Getter[InField],
     settings: Settings
@@ -454,7 +454,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       }
     }
 
-  // (in, ctx) => unlift(pipe)(in, ctx) : Result[OutField]
+  // (in, ctx) => unlift(pipe, in, ctx) : Result[OutField]
   private def fieldAddedConstructorParam[OutField: Type](
     pipe: Expr[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
@@ -462,7 +462,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
     (in, ctx) => unlift[In, OutField](pipe, in, ctx)
   )
 
-  // (in, ctx) => unlift(summon[InField, OutField])(in.used, updateContext(ctx, path)) : Result[OutField]
+  // (in, ctx) => unlift(summon[InField, OutField], in.used, updateContext(ctx, path)) : Result[OutField]
   private def pipeProvidedConstructorParam[InField: Type, OutField: Type](
     getter: ProductInData.Getter[InField],
     pipe:   Expr[Pipe[InField, OutField]]
@@ -472,21 +472,23 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
     )
 
-  type FallbackType
+  type FallbackField
   private def fromFallbackValue[OutField: Type](
     outParamName: String,
     fallback:     FieldFallback[OutField],
     settings:     Settings
   ): DerivationResult[ProductGeneratorData.OutputValue] = fallback match {
     case value @ FieldFallback.Value(_, _) =>
-      implicit val fallbackType: Type[FallbackType] = value.tpe.asInstanceOf[Type[FallbackType]]
-      val fallbackValue = value.expr.asInstanceOf[Expr[FallbackType]]
-      if (isSubtype[FallbackType, OutField])
+      implicit val fallbackType: Type[FallbackField] = value.tpe.asInstanceOf[Type[FallbackField]]
+      val fallbackValue = value.expr.asInstanceOf[Expr[FallbackField]]
+      if (isSubtype[FallbackField, OutField])
+        // (in, out) => pure(providedValue.field)
         DerivationResult.pure(
           ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => fallbackValue.asInstanceOf[Expr[OutField]])
         )
       else
-        summonOrDerive[FallbackType, OutField](settings, alwaysAllowDerivation = false).map { pipe =>
+        // (in, out) => unlift(summon[FallbackField, OutField], providedValue.field, ctx)
+        summonOrDerive[FallbackField, OutField](settings, alwaysAllowDerivation = false).map { pipe =>
           ProductGeneratorData.OutputValue.Result(typeOf[OutField], (_, ctx) => unlift(pipe, fallbackValue, ctx))
         }
     case FieldFallback.Default(code) if settings.isFallbackToDefaultEnabled =>

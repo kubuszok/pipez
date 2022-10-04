@@ -25,7 +25,13 @@ sealed trait PipeDerivationConfig[Pipe[_, _], In, Out] {
   /** During derivation field names from In to Out won't be matches exactly but with case-insensitive comparison */
   final def fieldMatchingCaseInsensitive: this.type = this
 
-  /** When no there is corresponding field nor settings providing value, attempts to use the default value */
+  /** When there is no corresponding field nor settings providing value, attempts to find field in value
+    *
+    * Value provided earlier has higher priority, defaults if enabled have the lowest priority.
+    */
+  final def addFallbackToValue[Fallback](fallbackValue: Fallback): this.type = this
+
+  /** When there is no corresponding field nor settings providing value, attempts to use the default value */
   final def enableFallbackToDefaults: this.type = this
 
   /** Let you manually handle removal of a specific subtype of output sum type */

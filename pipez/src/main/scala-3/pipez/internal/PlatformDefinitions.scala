@@ -118,6 +118,14 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
       // matches {cfg}.fieldMatchingCaseInsensitive
       case Select(expr, "fieldMatchingCaseInsensitive") =>
         extract(expr, ConfigEntry.FieldCaseInsensitive :: acc)
+      // matches {cfg}.addFallbackToValue(fallbackValue)
+      case Apply(TypeApply(Select(expr, "addFallbackToValue"), List(fallbackValueType)), List(fallbackValue)) =>
+        extract(
+          expr,
+          ConfigEntry.AddFallbackValue(returnType[Any](fallbackValueType.tpe),
+                                       fallbackValue.asExpr.asInstanceOf[Expr[Any]]
+          ) :: acc
+        )
       // matches {cfg}.enableFallbackToDefaults
       case Select(expr, "enableFallbackToDefaults") =>
         extract(expr, ConfigEntry.EnableFallbackToDefaults :: acc)

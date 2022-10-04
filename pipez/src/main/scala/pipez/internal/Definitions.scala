@@ -94,6 +94,11 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
 
     case object FieldCaseInsensitive extends ConfigEntry
 
+    final case class AddFallbackValue[FallbackValue](
+      fallbackValueType: Type[FallbackValue],
+      fallbackValue:     Expr[FallbackValue]
+    ) extends ConfigEntry
+
     case object EnableFallbackToDefaults extends ConfigEntry
 
     final case class RemoveSubtype[InSubtype <: In](

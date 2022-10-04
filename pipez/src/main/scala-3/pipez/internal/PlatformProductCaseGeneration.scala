@@ -117,7 +117,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               tpe.asType.asInstanceOf[Type[Any]]
             },
             set = (out: Expr[Out], value: Expr[Any]) =>
-              out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit]
+              out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit],
+            fallback = FieldFallback.Unavailable // TODO: .addFallbackValue
           )
         }
         .to(ListMap)
@@ -154,7 +155,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         pair <- resolveTypeArgsForMethodArguments(TypeRepr.of[Out], primaryConstructor)
         (typeByName, typeParams) = pair
         // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
-        defaults = primaryConstructor.paramSymss
+        fallbacks = primaryConstructor.paramSymss
           .pipe(if (typeParams.nonEmpty) ps => ps.tail else ps => ps)
           .headOption
           .toList
@@ -164,9 +165,10 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
             case (param, idx) if param.flags.is(Flags.HasDefault) =>
               val mod = TypeRepr.of[Out].typeSymbol.companionModule
               val sym = mod.declaredMethod("apply$default$" + (idx + 1)).head
-              param.name -> Ref(mod).select(sym).asExpr.asInstanceOf[Expr[Any]]
+              param.name -> FieldFallback.Default(Ref(mod).select(sym).asExpr.asInstanceOf[Expr[Any]])
           }
           .toMap
+          .withDefaultValue(FieldFallback.Unavailable)
       } yield ProductOutData.CaseClass(
         params =>
           New(TypeTree.of[Out])
@@ -181,7 +183,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               param.name -> ProductOutData.ConstructorParam(
                 name = param.name,
                 tpe = typeByName(param.name).asType.asInstanceOf[Type[Any]],
-                default = defaults.get(param.name)
+                fallback = fallbacks(param.name) // TODO: .addFallbackValue
               )
             }
             .to(ListMap)

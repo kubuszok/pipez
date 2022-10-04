@@ -56,12 +56,13 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
       case _ => Left(s"Path ${previewCode(c.Expr(in))} is not in format _.field1.field2")
     }
 
+    val configNames = Set("PipeDerivationConfig", "Config")
     def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
-      // matches PipeDerivationConfig[Pipe, In, Out]
-      case TypeApply(Select(Ident(cfg), TermName("apply")), _) if cfg.decodedName.toString == "PipeDerivationConfig" =>
+      // matches PipeDerivationConfig[Pipe, In, Out] or PipeCompanion.Config[In, Out]
+      case TypeApply(Select(Ident(cfg), TermName("apply")), _) if configNames(cfg.decodedName.toString) =>
         Right(new Settings(acc))
-      // matches PipeCompanion.Config[In, Out]
-      case TypeApply(Select(Select(Ident(_), cfg), TermName("apply")), _) if cfg.decodedName.toString == "Config" =>
+      // matches prefix.PipeDerivationConfig[Pipe, In, Out] or prefix.PipeCompanion.Config[In, Out]
+      case TypeApply(Select(Select(_, cfg), TermName("apply")), _) if configNames(cfg.decodedName.toString) =>
         Right(new Settings(acc))
       // matches {cfg}.enableDiagnostics
       case Select(expr, TermName("enableDiagnostics")) =>

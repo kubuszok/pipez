@@ -60,7 +60,7 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
       case TypeApply(Select(_, "apply"), List(_, _, _)) =>
         Right(new Settings(acc))
       // matches PipeCompanion.Config[In, Out]
-      case TypeApply(Select(Select(Ident(_), "Config"), "apply"), List(_, _)) =>
+      case TypeApply(Select(Select(_, "Config"), "apply"), List(_, _)) =>
         Right(new Settings(acc))
       // matches {cfg}.enableDiagnostics
       case Select(expr, "enableDiagnostics") =>

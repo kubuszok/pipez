@@ -28,6 +28,15 @@ package object dsl {
       config: Parser.Config[From, To]
     ): Parser.ParsingResult[To] = macro dsl.internal.Macros.deriveAndParseFull[From, To]
 
+    /** Updates value with corresponding values from patch value using default configuration */
+    def patchWith[Patch](patch: Patch): From = macro dsl.internal.Macros.deriveAndPatch[From, Patch]
+
+    /** Updates value with corresponding values from patch value using provided configuration */
+    def patchWith[Patch](
+      patch:  Patch,
+      config: PatchApplier.Config[Patch, From]
+    ): From = macro dsl.internal.Macros.deriveAndPatchWithConfig[From, Patch]
+
     @inline def __from: From = from
   }
 }

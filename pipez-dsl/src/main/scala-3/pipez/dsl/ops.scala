@@ -22,4 +22,12 @@ extension [From](from: From)
   /** Converts values with possibility to full-error-aggregation using provided configuration */
   inline def parseFullInto[To](inline config: Parser.Config[From, To]): Parser.ParsingResult[To] =
     ${ internal.Macros.deriveAndParseFull[From, To]('{ from }, '{ config }) }
+
+  /** Updates value with corresponding values from patch value using default configuration */
+  inline def patchWith[Patch](patch: Patch): From =
+    ${ internal.Macros.deriveAndPatch[From, Patch]('{ from }, '{ patch }) }
+
+  /** Updates value with corresponding values from patch value using provided configuration */
+  inline def patchWith[Patch](patch: Patch, inline config: PatchApplier.Config[Patch, From]): From =
+    ${ internal.Macros.deriveAndPatchWithConfig[From, Patch]('{ from }, '{ patch }, '{ config }) }
 end extension

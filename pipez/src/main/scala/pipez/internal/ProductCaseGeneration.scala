@@ -39,7 +39,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 
   sealed trait FieldFallback[+OutField] extends Product with Serializable
   object FieldFallback {
-    final case class Value[OutField, Value](expr: Expr[Value], tpe: Type[Value]) extends FieldFallback[OutField]
+    final case class Value[OutField, Value](tpe: Type[Value], expr: Expr[Value]) extends FieldFallback[OutField]
     final case class Default[OutField](expr: Expr[OutField]) extends FieldFallback[OutField]
     case object Unavailable extends FieldFallback[Nothing]
   }
@@ -525,7 +525,7 @@ object ProductCaseGeneration {
   }
   val isSetterName: String => Boolean = name => setAccessor.matches(name)
 
-  private def inputNameMatchesOutputName(
+  def inputNameMatchesOutputName(
     inFieldName:     String,
     outFieldName:    String,
     caseInsensitive: Boolean

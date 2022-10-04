@@ -112,7 +112,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         .filter(s => isJavaSetter(s) || isVar(s))
         .map { setter =>
           val name = setter.name.toString.pipe { n =>
-            // Scala 3's JB setters _are_ methods neding with _= due to change in @BeanProperty behavior.
+            // Scala 3's JB setters _are_ methods ending with _= due to change in @BeanProperty behavior.
             // We have to drop that suffix to align names, so that comparing is possible.
             if (isVar(setter)) n.substring(0, n.length - "_$eq".length) else n
           }

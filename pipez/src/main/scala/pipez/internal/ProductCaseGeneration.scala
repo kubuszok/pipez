@@ -483,18 +483,26 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       val fallbackValue = value.expr.asInstanceOf[Expr[FallbackField]]
       if (isSubtype[FallbackField, OutField])
         // (in, out) => pure(providedValue.field)
-        DerivationResult.pure(
-          ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => fallbackValue.asInstanceOf[Expr[OutField]])
-        )
+        DerivationResult
+          .pure(
+            ProductGeneratorData.OutputValue
+              .Pure(typeOf[OutField], (_, _) => fallbackValue.asInstanceOf[Expr[OutField]])
+          )
+          .log(s"Successful fallback of $outParamName to provided value ${previewCode(fallbackValue)}")
       else
         // (in, out) => unlift(summon[FallbackField, OutField], providedValue.field, ctx)
-        summonOrDerive[FallbackField, OutField](settings, alwaysAllowDerivation = false).map { pipe =>
-          ProductGeneratorData.OutputValue.Result(typeOf[OutField], (_, ctx) => unlift(pipe, fallbackValue, ctx))
-        }
+        summonOrDerive[FallbackField, OutField](settings, alwaysAllowDerivation = false)
+          .map { pipe =>
+            ProductGeneratorData.OutputValue.Result(typeOf[OutField], (_, ctx) => unlift(pipe, fallbackValue, ctx))
+          }
+          .log(s"Successful fallback of $outParamName to provided value ${previewCode(fallbackValue)} with conversion")
     case FieldFallback.Default(code) if settings.isFallbackToDefaultEnabled =>
-      DerivationResult.pure(
-        ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code.asInstanceOf[Expr[OutField]])
-      )
+      // (in, out) => pure(Out.apply$default$n)
+      DerivationResult
+        .pure(
+          ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code.asInstanceOf[Expr[OutField]])
+        )
+        .log(s"Successful fallback of $outParamName to default value ${previewCode(code)}")
     case FieldFallback.Default(_) =>
       DerivationResult.fail(DerivationError.InvalidInput(s"Couldn't fallback on default value for $outParamName"))
     case FieldFallback.Unavailable if settings.isFallbackToDefaultEnabled =>
@@ -530,7 +538,7 @@ object ProductCaseGeneration {
     outFieldName:    String,
     caseInsensitive: Boolean
   ): Boolean = {
-    val in  = Set(inFieldName, dropGetIs(inFieldName))
+    val in  = Set(inFieldName, dropGetIs(dropSet(inFieldName))) // drop set is used for fallbacks
     val out = Set(outFieldName, dropSet(outFieldName))
     if (caseInsensitive) in.exists(a => out.exists(b => a.equalsIgnoreCase(b)))
     else in.intersect(out).nonEmpty

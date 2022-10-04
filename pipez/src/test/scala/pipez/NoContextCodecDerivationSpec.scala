@@ -295,6 +295,37 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
+  test("renameField config + conversion -> output field taken from: input, the first value, the second") {
+    implicit val aCodec: NoContextCodec[String, Long] =
+      in => scala.util.Try(in.toLong).toEither.left.map(_ => List("err"))
+    // case class
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[CaseOnesIn, CaseParamOutExt[Long]]
+            .addFallbackToValue(CaseZeroOutExt(x = "30"))
+            .addFallbackToValue(CaseManyOutExt(a = 20, b = "bb", c = 20L, x = "20"))
+        )
+        .decode(CaseOnesIn(a = 1)),
+      Right(CaseParamOutExt[Long](a = 1, b = "bb", c = 20L, x = 30L))
+    )
+    // java beans
+    assertEquals(
+      NoContextCodec
+        .derive(
+          NoContextCodec
+            .Config[BeanOnesIn, BeanPolyOutExt[Long]]
+            .addFallbackToValue(new BeanZeroOutExt().tap(_.setX("30")))
+            .addFallbackToValue(
+              new BeanManyOutExt().tap(_.setA(20)).tap(_.setB("bb")).tap(_.setC(20L)).tap(_.setX("20"))
+            )
+        )
+        .decode(new BeanOnesIn().tap(_.setA(1))),
+      Right(new BeanPolyOutExt[Long]().tap(_.setA(1)).tap(_.setB("bb")).tap(_.setC(20L)).tap(_.setX(30L)))
+    )
+  }
+
   test("fieldMatchingCaseInsensitive -> matching of input to output field names is case-insensitive") {
     // case class -> case class
     assertEquals(

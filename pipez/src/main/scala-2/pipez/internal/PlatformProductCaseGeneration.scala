@@ -99,7 +99,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
           name -> ProductOutData.Setter(
             name = name,
             tpe = paramListsOf(Out, setter).flatten.head.typeSignature.asInstanceOf[Type[Any]],
-            set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.$termName($value)")
+            set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.$termName($value)"),
+            fallback = FieldFallback.Unavailable // TODO: .addFallbackValue
           )
         }
         .to(ListMap)
@@ -126,10 +127,15 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
           Out.decls.to(List).filterNot(isGarbage).find(m => m.isPublic && m.isConstructor)
         )(DerivationError.MissingPublicConstructor)
         // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
-        defaults = primaryConstructor.typeSignature.paramLists.headOption.toList.flatten.zipWithIndex.collect {
-          case (param, idx) if param.asTerm.isParamWithDefault =>
-            param.name.toString -> c.Expr[Any](q"${Out.typeSymbol.companion}.${TermName("apply$default$" + (idx + 1))}")
-        }.toMap
+        fallbacks = primaryConstructor.typeSignature.paramLists.headOption.toList.flatten.zipWithIndex
+          .collect {
+            case (param, idx) if param.asTerm.isParamWithDefault =>
+              param.name.toString -> FieldFallback.Default(
+                c.Expr[Any](q"${Out.typeSymbol.companion}.${TermName("apply$default$" + (idx + 1))}")
+              )
+          }
+          .toMap
+          .withDefaultValue(FieldFallback.Unavailable)
       } yield ProductOutData.CaseClass(
         caller = params => c.Expr(q"new $Out(...$params)"),
         params = paramListsOf(Out, primaryConstructor).map { params =>
@@ -139,7 +145,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               name -> ProductOutData.ConstructorParam(
                 name = name,
                 tpe = param.typeSignature.asInstanceOf[Type[Any]],
-                default = defaults.get(name)
+                fallback = fallbacks(name) // TODO: .addFallbackValue
               )
             }
             .to(ListMap)

@@ -37,6 +37,13 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   /** Should create `Out` expression from the constructor arguments grouped in parameter lists */
   type Constructor = List[List[Expr[Any]]] => Expr[Out]
 
+  sealed trait FieldFallback[+OutField] extends Product with Serializable
+  object FieldFallback {
+    final case class Value[OutField, Value](expr: Expr[Value], tpe: Type[Value]) extends FieldFallback[OutField]
+    final case class Default[OutField](expr: Expr[OutField]) extends FieldFallback[OutField]
+    case object Unavailable extends FieldFallback[Nothing]
+  }
+
   /** Stores information how each attribute/getter could be extracted from `In` value */
   final case class ProductInData(getters: ListMap[String, ProductInData.Getter[?]]) {
 
@@ -74,9 +81,9 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   object ProductOutData {
 
     final case class ConstructorParam[OutField](
-      name:    String,
-      tpe:     Type[OutField],
-      default: Option[Expr[OutField]]
+      name:     String,
+      tpe:      Type[OutField],
+      fallback: FieldFallback[OutField]
     )
     final case class CaseClass(
       caller: Constructor,
@@ -88,9 +95,10 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
     }
 
     final case class Setter[OutField](
-      name: String,
-      tpe:  Type[OutField],
-      set:  (Expr[Out], Expr[OutField]) => Expr[Unit]
+      name:     String,
+      tpe:      Type[OutField],
+      set:      (Expr[Out], Expr[OutField]) => Expr[Unit],
+      fallback: FieldFallback[OutField]
     ) {
 
       override def toString: String = s"Setter($name : ${previewType(tpe)})"
@@ -161,7 +169,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       inData:       ProductInData,
       outParamName: String,
       indexOpt:     Option[Int],
-      default:      Option[Expr[OutField]]
+      fallback:     FieldFallback[OutField]
     ): DerivationResult[ProductGeneratorData.OutputValue] = resolve[OutField](settings, outParamName) match {
       case DefaultField() =>
         // if inField (same name as out - same index if tuple) not found then error
@@ -178,7 +186,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
             implicit val tpe: Type[InField] = getter.tpe
             fromFieldConstructorParam[InField, OutField](getter, settings)
           }
-          .orElse(fallbackOnDefault(outParamName, default, settings))
+          .orElse(fromFallbackValue(outParamName, fallback, settings))
           .log(
             s"Field $outParamName uses default resolution (${
                 if (indexOpt.isEmpty) "matching input name" else "matching field position"
@@ -370,8 +378,8 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       listOfParamsList
         .map(
           _.values
-            .map { case ProductOutData.ConstructorParam(outParamName, outParamType, default) =>
-              OutFieldLogic.resolveField(settings, inData, outParamName, None, default)(outParamType)
+            .map { case ProductOutData.ConstructorParam(outParamName, outParamType, fallback) =>
+              OutFieldLogic.resolveField(settings, inData, outParamName, None, fallback)(outParamType)
             }
             .toList
             .pipe(DerivationResult.sequence(_))
@@ -382,8 +390,8 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 
     case ProductOutData.JavaBean(defaultConstructor, setters) =>
       setters.values
-        .map { case setter @ ProductOutData.Setter(outSetterName, outSetterType, _) =>
-          OutFieldLogic.resolveField(settings, inData, outSetterName, None, None)(outSetterType).map(_ -> setter)
+        .map { case setter @ ProductOutData.Setter(outSetterName, outSetterType, _, fallback) =>
+          OutFieldLogic.resolveField(settings, inData, outSetterName, None, fallback)(outSetterType).map(_ -> setter)
         }
         .toList
         .pipe(DerivationResult.sequence(_))
@@ -464,29 +472,38 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
     )
 
-  private def fallbackOnDefault[OutField: Type](
+  private def fromFallbackValue[OutField: Type](
     outParamName: String,
-    default:      Option[Expr[OutField]],
+    fallback:     FieldFallback[OutField],
     settings:     Settings
-  ): DerivationResult[ProductGeneratorData.OutputValue] =
-    if (settings.isFallbackToDefaultEnabled)
-      DerivationResult
-        .fromOption(default)(
+  ): DerivationResult[ProductGeneratorData.OutputValue] = fallback match {
+    case FieldFallback.Value(code, tpe) =>
+      // TODO: summon conversion?
+      if (isSubtype(tpe, typeOf[OutField]))
+        DerivationResult.pure(
+          ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code.asInstanceOf[Expr[OutField]])
+        )
+      else
+        DerivationResult.fail(
           DerivationError.InvalidInput(
-            s"No default defined for $outParamName, fallback on default is impossible"
+            s"Couldn't fallback on provided value ${previewCode(code)} for $outParamName - ${previewType(tpe)} is not a subtype of ${previewType[OutField]}"
           )
         )
-        .map(code => ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code))
-    else if (default.isDefined)
+    case FieldFallback.Default(code) if settings.isFallbackToDefaultEnabled =>
+      DerivationResult.pure(
+        ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code.asInstanceOf[Expr[OutField]])
+      )
+    case FieldFallback.Default(_) =>
+      DerivationResult.fail(DerivationError.InvalidInput(s"Couldn't fallback on default value for $outParamName"))
+    case FieldFallback.Unavailable if settings.isFallbackToDefaultEnabled =>
       DerivationResult.fail(
         DerivationError.InvalidInput(
           s"No value could be resolve for field $outParamName, although it has a default so you might try enableFallbackToDefaults option"
         )
       )
-    else
-      DerivationResult.fail(
-        DerivationError.InvalidInput(s"Couldn't fallback on default value for $outParamName")
-      )
+    case FieldFallback.Unavailable =>
+      DerivationResult.fail(DerivationError.InvalidInput(s"Couldn't fallback on default value for $outParamName"))
+  }
 }
 object ProductCaseGeneration {
 

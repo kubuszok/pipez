@@ -1,8 +1,10 @@
 package pipez.internal
 
 import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
+import scala.collection.AnyStepper
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
 import scala.language.existentials
@@ -55,27 +57,44 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   private def isVar(setter: Symbol): Boolean =
     setter.isTerm && setter.asTerm.name.toString.endsWith("_$eq") && setter.isPublic
 
-  final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
-    In.decls
+  final private case class Getter[Extracted, ExtractedField](
+    tpe: Type[ExtractedField],
+    get: Expr[Extracted] => Expr[ExtractedField]
+  )
+  private def extractGetters[Extracted: Type]: ListMap[String, Getter[Extracted, Any]] =
+    typeOf[Extracted].decls
       .to(List)
       .filterNot(isGarbage)
       .filter(m => isCaseClassField(m) || isJavaGetter(m))
       .map { getter =>
         val name     = getter.name.toString
         val termName = getter.asMethod.name.toTermName
-        name -> ProductInData.Getter[Any](
-          name = name,
-          tpe = returnTypeOf(In, getter).asInstanceOf[Type[Any]],
+        name -> Getter[Extracted, Any](
+          tpe = returnTypeOf(typeOf[Extracted], getter).asInstanceOf[Type[Any]],
           get =
-            if (getter.asMethod.paramLists.isEmpty) (in: Expr[In]) => c.Expr[Any](q"$in.$termName")
-            else (in: Expr[In]) => c.Expr[Any](q"$in.$termName()"),
-          path = Path.Field(Path.Root, name)
+            if (getter.asMethod.paramLists.isEmpty) (in: Expr[Extracted]) => c.Expr[Any](q"$in.$termName")
+            else (in: Expr[Extracted]) => c.Expr[Any](q"$in.$termName()")
         )
       }
       .to(ListMap)
+
+  final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
+    extractGetters[In]
+      .map { case (name, Getter(tpe, get)) =>
+        name -> ProductInData.Getter(name, tpe, get, Path.Field(Path.Root, name))
+      }
       .pipe(ProductInData(_))
       .pipe(DerivationResult.pure(_))
       .logSuccess(data => s"Resolved input: $data")
+
+  private def fallbackValueGetters(settings: Settings): Map[String, FieldFallback[?]] =
+    settings.fallbackValues
+      .collect { case ConfigEntry.AddFallbackValue(fallbackType, fallbackValue) =>
+        extractGetters(fallbackType).map { case (name, Getter(fallbackFieldType, extractFallbackValue)) =>
+          name -> FieldFallback.Value(fallbackFieldType, extractFallbackValue(fallbackValue))
+        }
+      }
+      .fold(Map.empty[String, FieldFallback[?]])((left, right) => right ++ left) // preserve first rather than last
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean[Out]) {
@@ -84,6 +103,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       val defaultConstructor = DerivationResult.fromOption(
         Out.decls.filterNot(isGarbage).find(isDefaultConstructor).map(_ => c.Expr[Out](q"new $Out()"))
       )(DerivationError.MissingPublicConstructor)
+
+      val fallbackValues = fallbackValueGetters(settings)
 
       val setters = Out.decls
         .to(List)
@@ -100,7 +121,13 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
             name = name,
             tpe = paramListsOf(Out, setter).flatten.head.typeSignature.asInstanceOf[Type[Any]],
             set = (out: Expr[Out], value: Expr[Any]) => c.Expr[Unit](q"$out.$termName($value)"),
-            fallback = FieldFallback.Unavailable // TODO: .addFallbackValue
+            fallback = fallbackValues
+              .collectFirst {
+                case (fallbackName, fallback)
+                    if inputNameMatchesOutputName(name, fallbackName, settings.isFieldCaseInsensitive) =>
+                  fallback
+              }
+              .getOrElse(FieldFallback.Unavailable)
           )
         }
         .to(ListMap)
@@ -127,15 +154,12 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
           Out.decls.to(List).filterNot(isGarbage).find(m => m.isPublic && m.isConstructor)
         )(DerivationError.MissingPublicConstructor)
         // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
-        fallbacks = primaryConstructor.typeSignature.paramLists.headOption.toList.flatten.zipWithIndex
-          .collect {
-            case (param, idx) if param.asTerm.isParamWithDefault =>
-              param.name.toString -> FieldFallback.Default(
-                c.Expr[Any](q"${Out.typeSymbol.companion}.${TermName("apply$default$" + (idx + 1))}")
-              )
-          }
-          .toMap
-          .withDefaultValue(FieldFallback.Unavailable)
+        fallbackValues = primaryConstructor.typeSignature.paramLists.headOption.toList.flatten.zipWithIndex.collect {
+          case (param, idx) if param.asTerm.isParamWithDefault =>
+            param.name.toString -> FieldFallback.Default(
+              c.Expr[Any](q"${Out.typeSymbol.companion}.${TermName("apply$default$" + (idx + 1))}")
+            )
+        }.toMap ++ fallbackValueGetters(settings) // we want defaults to be overridden by provided values
       } yield ProductOutData.CaseClass(
         caller = params => c.Expr(q"new $Out(...$params)"),
         params = paramListsOf(Out, primaryConstructor).map { params =>
@@ -145,7 +169,13 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               name -> ProductOutData.ConstructorParam(
                 name = name,
                 tpe = param.typeSignature.asInstanceOf[Type[Any]],
-                fallback = fallbacks(name) // TODO: .addFallbackValue
+                fallback = fallbackValues
+                  .collectFirst {
+                    case (fallbackName, fallback)
+                        if inputNameMatchesOutputName(name, fallbackName, settings.isFieldCaseInsensitive) =>
+                      fallback
+                  }
+                  .getOrElse(FieldFallback.Unavailable)
               )
             }
             .to(ListMap)

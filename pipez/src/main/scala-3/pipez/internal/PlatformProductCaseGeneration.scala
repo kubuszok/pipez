@@ -1,6 +1,7 @@
 package pipez.internal
 
 import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
@@ -47,27 +48,44 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   private def isVar(setter: Symbol): Boolean =
     setter.isValDef && setter.flags.is(Flags.Mutable)
 
-  final def extractProductInData(settings: Settings): DerivationResult[ProductInData] = {
-    val sym = TypeRepr.of[In].typeSymbol
+  final private case class Getter[Extracted, ExtractedField](
+    tpe: Type[ExtractedField],
+    get: Expr[Extracted] => Expr[ExtractedField]
+  )
+  private def extractGetters[Extracted: Type]: ListMap[String, Getter[Extracted, Any]] = {
+    val sym = TypeRepr.of[Extracted].typeSymbol
     // apparently each case field is duplicated: "a" and "a ", "_1" and "_1" o_0 - the first is method, the other val
     // the exceptions are cases in Scala 3 enum: they only have vals
     (sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef) ++ sym.declaredMethods.filter(
       isJavaGetter
     )).map { method =>
       val name = method.name
-      name -> ProductInData.Getter[Any](
-        name = name,
+      name -> Getter[Extracted, Any](
         tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
         get =
-          if (method.paramSymss.isEmpty) (in: Expr[In]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
-          else (in: Expr[In]) => in.asTerm.select(method).appliedToNone.asExpr,
-        path = Path.Field(Path.Root, name)
+          if (method.paramSymss.isEmpty) (in: Expr[Extracted]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
+          else (in: Expr[Extracted]) => in.asTerm.select(method).appliedToNone.asExpr
       )
     }.to(ListMap)
+  }
+
+  final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
+    extractGetters[In]
+      .map { case (name, Getter(tpe, get)) =>
+        name -> ProductInData.Getter(name, tpe, get, Path.Field(Path.Root, name))
+      }
       .pipe(ProductInData(_))
       .pipe(DerivationResult.pure)
       .logSuccess(data => s"Resolved input: $data")
-  }
+
+  private def fallbackValueGetters(settings: Settings): Map[String, FieldFallback[?]] =
+    settings.fallbackValues
+      .collect { case ConfigEntry.AddFallbackValue(fallbackType, fallbackValue) =>
+        extractGetters(fallbackType).map { case (name, Getter(fallbackFieldType, extractFallbackValue)) =>
+          name -> FieldFallback.Value(fallbackFieldType, extractFallbackValue(fallbackValue))
+        }
+      }
+      .fold(Map.empty[String, FieldFallback[?]])((left, right) => right ++ left) // preserve first rather than last
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean[Out]) {
@@ -106,6 +124,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         }
       )(DerivationError.MissingPublicConstructor)
 
+      val fallbackValues = fallbackValueGetters(settings)
+
       val setters = sym.declaredMethods
         .filter(s => isJavaSetter(s) || isVar(s))
         .map { setter =>
@@ -118,7 +138,13 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
             },
             set = (out: Expr[Out], value: Expr[Any]) =>
               out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit],
-            fallback = FieldFallback.Unavailable // TODO: .addFallbackValue
+            fallback = fallbackValues
+              .collectFirst {
+                case (fallbackName, fallback)
+                    if inputNameMatchesOutputName(name, fallbackName, settings.isFieldCaseInsensitive) =>
+                  fallback
+              }
+              .getOrElse(FieldFallback.Unavailable)
           )
         }
         .to(ListMap)
@@ -155,7 +181,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         pair <- resolveTypeArgsForMethodArguments(TypeRepr.of[Out], primaryConstructor)
         (typeByName, typeParams) = pair
         // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
-        fallbacks = primaryConstructor.paramSymss
+        fallbackValues = primaryConstructor.paramSymss
           .pipe(if (typeParams.nonEmpty) ps => ps.tail else ps => ps)
           .headOption
           .toList
@@ -167,8 +193,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               val sym = mod.declaredMethod("apply$default$" + (idx + 1)).head
               param.name -> FieldFallback.Default(Ref(mod).select(sym).asExpr.asInstanceOf[Expr[Any]])
           }
-          .toMap
-          .withDefaultValue(FieldFallback.Unavailable)
+          .toMap ++ fallbackValueGetters(settings) // we want defaults to be overridden by provided values
       } yield ProductOutData.CaseClass(
         params =>
           New(TypeTree.of[Out])
@@ -180,10 +205,17 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         primaryConstructor.paramSymss.pipe(if (typeParams.nonEmpty) ps => ps.tail else ps => ps).map { params =>
           params
             .map { param =>
+              val name = param.name
               param.name -> ProductOutData.ConstructorParam(
-                name = param.name,
-                tpe = typeByName(param.name).asType.asInstanceOf[Type[Any]],
-                fallback = fallbacks(param.name) // TODO: .addFallbackValue
+                name = name,
+                tpe = typeByName(name).asType.asInstanceOf[Type[Any]],
+                fallback = fallbackValues
+                  .collectFirst {
+                    case (fallbackName, fallback)
+                        if inputNameMatchesOutputName(name, fallbackName, settings.isFieldCaseInsensitive) =>
+                      fallback
+                  }
+                  .getOrElse(FieldFallback.Unavailable)
               )
             }
             .to(ListMap)

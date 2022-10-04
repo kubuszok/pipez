@@ -472,23 +472,23 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       (in, ctx) => unlift[InField, OutField](pipe, getter.get(in), updateContext(ctx, pathCode(getter.path)))
     )
 
+  type FallbackType
   private def fromFallbackValue[OutField: Type](
     outParamName: String,
     fallback:     FieldFallback[OutField],
     settings:     Settings
   ): DerivationResult[ProductGeneratorData.OutputValue] = fallback match {
-    case FieldFallback.Value(code, tpe) =>
-      // TODO: summon conversion?
-      if (isSubtype(tpe, typeOf[OutField]))
+    case value @ FieldFallback.Value(_, _) =>
+      implicit val fallbackType: Type[FallbackType] = value.tpe.asInstanceOf[Type[FallbackType]]
+      val fallbackValue = value.expr.asInstanceOf[Expr[FallbackType]]
+      if (isSubtype[FallbackType, OutField])
         DerivationResult.pure(
-          ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code.asInstanceOf[Expr[OutField]])
+          ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => fallbackValue.asInstanceOf[Expr[OutField]])
         )
       else
-        DerivationResult.fail(
-          DerivationError.InvalidInput(
-            s"Couldn't fallback on provided value ${previewCode(code)} for $outParamName - ${previewType(tpe)} is not a subtype of ${previewType[OutField]}"
-          )
-        )
+        summonOrDerive[FallbackType, OutField](settings, alwaysAllowDerivation = false).map { pipe =>
+          ProductGeneratorData.OutputValue.Result(typeOf[OutField], (_, ctx) => unlift(pipe, fallbackValue, ctx))
+        }
     case FieldFallback.Default(code) if settings.isFallbackToDefaultEnabled =>
       DerivationResult.pure(
         ProductGeneratorData.OutputValue.Pure(typeOf[OutField], (_, _) => code.asInstanceOf[Expr[OutField]])

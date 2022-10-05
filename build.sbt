@@ -1,6 +1,8 @@
 import commandmatrix.extra._
 import Settings._
 
+ThisProject / versionScheme := Some("early-semver")
+
 val testCasesVersion = "0.2.2"
 
 // Scala Native 2.13 seem to generate linking errors so we're disabling it for now

@@ -64,7 +64,9 @@ final case class ApiUser(
 )
 ```
 
-These types are almost identical, so rewritting it would be pretty dumb - we should be able to convert one into the other just by matching the corresponding fields (or subtypes) by name! That's what `Convert[From, To]` type class from pipez DSL does:
+These types are almost identical, so rewriting it would be pretty dumb - we should be able to convert one into the other
+just by matching the corresponding fields (or subtypes) by name! That's what `Convert[From, To]` type class from pipez
+DSL does:
 
 ```scala
 // given such User
@@ -95,7 +97,8 @@ trait Converter[From, To]:
   def convert(from: From): To
 ```
 
-and `user.convertInto[ApiUser]` creates an instance of `Converter[User, ApiUser]` and calls `.convert(user)` on it. It basically writes:
+and `user.convertInto[ApiUser]` creates an instance of `Converter[User, ApiUser]` and calls `.convert(user)` on it. It
+basically writes:
 
 ```scala
 // This is (more or less) what
@@ -122,7 +125,10 @@ new Converter[User, ApiUser] {
 
 for us letting us forget writing all this dump, error-prone boilerplate code ourselves!
 
-Great, but what if needed to convert things the other way? We would receive the password and we would have to hash it with a function:
+> `Converter` is a demonstration how Pipez can be used to implement something similar to Chimney's `Transformer`.
+
+Great, but what if needed to convert things the other way? We would receive the password and we would have to hash it
+with a function:
 
 ```scala
 // Left describes the parsing error
@@ -168,7 +174,8 @@ userResult == Right(User(
 ))
 ```
 
-Parsing allows you to calculate all possible errors or give up upon the first one - for that you have `parseFullInto` and `parseFastInto` methods. Similarly to `Converter` there is `Parser` type class:
+Parsing allows you to calculate all possible errors or give up upon the first one - for that you have `parseFullInto`
+and `parseFastInto` methods. Similarly to `Converter` there is `Parser` type class:
 
 ```scala
 // Converts From value into To value, but allows conversion to fail, report path
@@ -187,7 +194,8 @@ trait Parser[From, To]:
     parse(from, Vector.empty, failFast = false)
 ```
 
-When we called `apiUserWithPassword.parseFastInto[User]` we created `Parser[ApiUserWithPassword, User]` instance and called `.parseFast(apiUserWithPassword.parseFastInto)` on it.
+When we called `apiUserWithPassword.parseFastInto[User]` we created `Parser[ApiUserWithPassword, User]` instance
+and called `.parseFast(apiUserWithPassword.parseFastInto)` on it.
 
 ```scala
 // This is (more or less!) what
@@ -225,11 +233,29 @@ new Parser[ApiUserWithPassword, User] {
 .parseFast(apiUserWithPassword)
 ```
 
-In other words: `Converter` and `Parser` let us easily generate code which rewrites corresponding fields and subtypes by name, and plug-in our own conversion when it is not obvious how it could generate it.
+> `Parser` is a demonstration how Pipez can be used to implement something similar to Chimney's `TransformerF` with
+> effect `F` based on `Either` and `List` of errors, with `TransformerFErrorPathSupport` provided.
+
+In other words: `Converter` and `Parser` let us easily generate code which rewrites corresponding fields and subtypes by
+name, and plug-in our own conversion when it is not obvious how it could generate it.
+
+There is also `PatchApplier` which is used to apply patches:
+
+```scala
+case class Input(a: Int, b: String, c: Long)
+case class InputPatch(c: Long)
+
+val result = Input(a = 1, b = "b", c = 10L).patchWith(InputPatch(c = 40L))
+result == Input(a = 1, b = "b", c = 40L)
+```
+
+> `PatchApplier` is a demonstration how Pipez can be used to implement something similar to Chimney's `Patcher`.
 
 ## Custom parsers
 
-While `Converter` and `Parser` achieve quite a lot - and can do a lot more as you'll see reading this documentation - the true power of Pipez comes from the ability to defining your own conversion type class and deriving its instances for it! How can you achieve it?
+While `Converter` and `Parser` achieve quite a lot - and can do a lot more as you'll see reading this documentation -
+the true power of Pipez comes from the ability to defining your own conversion type class and deriving its instances for
+it! How can you achieve it?
 
 Perhaps you have your own conversion type class:
 
@@ -271,13 +297,15 @@ object WithContextAndResult:
   implicit val derivation: PipeDerivation[WithContextAndResult] = ???
 ```
 
-you'll get access to derivation abilities! (For now let's focus what possibilities it gives us, as we can always get to [how to define this implicit](#how-to-define-pipederivation) later on).
+you'll get access to derivation abilities! (For now let's focus what possibilities it gives us, as we can always get to
+[how to define this implicit](#how-to-define-pipederivation) later on).
 
 So, how to access the derived instances?
 
 ### Automatic derivation
 
-If you want to be able to summon derived instance always, then **automatic derivation** is for you. You can enable it by mixing in `PipeAutoSupport` to your companion object:
+If you want to be able to summon derived instance always, then **automatic derivation** is for you. You can enable it by
+mixing in `PipeAutoSupport` to your companion object:
 
 ```scala
 import pipez.*
@@ -311,7 +339,9 @@ which let you define a DSL fetchig such instance (like was done with `Converter`
 
 ### Semiautomatic derivation
 
-Sometimes pulling type class instances out of thin air without user doing anything, might be a bit dangerous. You might prefer them to define them somewhere explicitly - but not necessarily writing them by hand! This is when semiautomatic derivation comes handy:
+Sometimes pulling type class instances out of thin air without user doing anything, might be a bit dangerous. You might
+prefer them to define them somewhere explicitly - but not necessarily writing them by hand! This is when semiautomatic
+derivation comes handy:
 
 ```scala
 import pipez.*
@@ -350,7 +380,8 @@ making it explicit that the conversion is defined in one place, but not forcing 
 
 ### Configured derivation
 
-Not all types will be so nice to have corresponding fields or subtypes names. Sometimes a new field will appear in the output type, some field or type will be renamed or maybe you'll want to plug-in your own conversion for a particular pairs of fields.
+Not all types will be so nice to have corresponding fields or subtypes names. Sometimes a new field will appear in
+the output type, some field or type will be renamed or maybe you'll want to plug-in your own conversion for a particular pairs of fields.
 
 This requires an additional API and `PipeSemiautoConfiguredSupport` has you covered:
 
@@ -391,7 +422,8 @@ NonFailing.derive(
 )
 ```
 
-Configuration is build with fluent API within `.derive(...)`. This let us erase whole `Config` and leave only the generated type class value. Possible configuration options will be described next to each feature which uses them:
+Configuration is build with fluent API within `.derive(...)`. This let us erase whole `Config` and leave only
+the generated type class value. Possible configuration options will be described next to each feature which uses them:
 
 ## Supported features and configuration options
 
@@ -409,11 +441,16 @@ The automatically generated mappings can be roughly divided into the following c
 **Rules of derivation**:
 
 * `case class` has a public constructor and each of its arguments is a `val`
-* Java Bean has a public default constructor and getters/setters that you can use to access/set its values (getters have `get`/`is` prefix while setters have `set` prefix)
+* Java Bean has a public default constructor and getters/setters that you can use to access/set its values (getters have
+  `get`/`is` prefix while setters have `set` prefix)
 * both input and output is either case class or Java Bean
-* unless configuration tells otherwise each output field will require a matching input field to copy value from. Matching is done by comparing names of fields (`get`/`is`/`set` prefixes are stripped). The last configuration for output field "wins" and tells where to get the value from
-* if value cannot be copied because the types differ, derivation will attempt to summon `TypeClass[InputField, OutputField]` to convert it
-* if derivation cannot figure out where to get the value from (mismatching types + no conversion, no corresponding source field), it fails
+* unless configuration tells otherwise each output field will require a matching input field to copy value from.
+  Matching is done by comparing names of fields (`get`/`is`/`set` prefixes are stripped). The last configuration for
+  the output field "wins" and tells where to get the value from
+* if value cannot be copied because the types differ, derivation will attempt to summon
+  `TypeClass[InputField, OutputField]` to convert it
+* if derivation cannot figure out where to get the value from (mismatching types + no conversion, no corresponding
+  source field), it fails
 
 ```scala
 // This requires just rewriting fields in a dumb way...
@@ -468,7 +505,8 @@ WithContextAndResult.derive[Input, Output2]
 
 #### `addField` configuration
 
-Tells derivation to use `TypeClass[In, OutField]` to populate the output field that might not have a corresponding input field. You might use Single Abstract Method syntax:
+Tells derivation to use `TypeClass[In, OutField]` to populate the output field that might not have a corresponding input
+field. You might use Single Abstract Method syntax:
 
 ```scala
 // Output.d doesn't have a corresponding source
@@ -497,7 +535,8 @@ WithResultType.derive(
 
 #### `renameField` configuration
 
-Tells derivation that a specific target field should use the value from a specific input field. If types differ derivation will attempt to summon a type class to convert it:
+Tells derivation that a specific target field should use the value from a specific input field. If types differ then the
+derivation will attempt to summon a type class to convert it:
 
 ```scala
 final case class Input(a: Int, b: String, c: Long, x: Double)
@@ -557,35 +596,75 @@ By default field matching is case-sensitive. This flag enables case-insensitive 
 
 ```scala
 // This would fail as fields have different cases
-// with with case-insenstitive matching it works
+// with with case-insensitive matching it works
 final case class Input(a: Int, b: String, c: Long)
 final case class Output(A: Int, B: String, C: Long)
 
 // Pipez DSL
 Converter.derive(
   Converter.Config[Input, Output]
-  	.fieldMatchingCaseInsensitive
+    .fieldMatchingCaseInsensitive
 )
 Parser.derive(
   Parser.Config[Input, Output]
-  	.fieldMatchingCaseInsensitive
+    .fieldMatchingCaseInsensitive
 )
 // your own types
 NonFailing.derive(
   NonFailing.Config[Input, Output]
-  	.fieldMatchingCaseInsensitive
+    .fieldMatchingCaseInsensitive
 )
 WithContext.derive(
   WithContext.Config[Input, Output]
-  	.fieldMatchingCaseInsensitive
+    .fieldMatchingCaseInsensitive
 )
 WithResultType.derive(
   WithResultType.Config[Input, Output]
-  	.fieldMatchingCaseInsensitive
+    .fieldMatchingCaseInsensitive
 )
 WithContextAndResult.derive(
   WithContextAndResult.Config[Input, Output]
-  	.fieldMatchingCaseInsensitive
+    .fieldMatchingCaseInsensitive
+)
+```
+
+#### `addFallbackToValue` configuration
+
+Tells derivation that if there is no field in input with some name, it should try to get this field from the value
+passed into the configuration. There can be multiple fallback values - derivation will fallback in the in order in which
+they were provided.
+
+```scala
+// Input doesn't define x, but Fallback does
+final case class Input(a: Int, b: String, c: Long)
+final case class Output(a: Int, b: String, c: Long, x: Double)
+final case class Fallback(x: Double)
+
+// Pipez DSL
+Converter.derive(
+  Converter.Config[Input, Output]
+    .addFallbackToValue(Fallback(x = 10.0))
+)
+Parser.derive(
+  Parser.Config[Input, Output]
+    .addFallbackToValue(Fallback(x = 10.0))
+)
+// your own types
+NonFailing.derive(
+  NonFailing.Config[Input, Output]
+    .addFallbackToValue(Fallback(x = 10.0))
+)
+WithContext.derive(
+  WithContext.Config[Input, Output]
+    .addFallbackToValue(Fallback(x = 10.0))
+)
+WithResultType.derive(
+  WithResultType.Config[Input, Output]
+    .addFallbackToValue(Fallback(x = 10.0))
+)
+WithContextAndResult.derive(
+  WithContextAndResult.Config[Input, Output]
+    .addFallbackToValue(Fallback(x = 10.0))
 )
 ```
 
@@ -602,34 +681,38 @@ final case class Output(a: Int, b: String, c: Long, x: Double = 1.0)
 // Pipez DSL
 Converter.derive(
   Converter.Config[Input, Output]
-  	.enableFallbackToDefaults
+    .enableFallbackToDefaults
 )
 Parser.derive(
   Parser.Config[Input, Output]
-  	.enableFallbackToDefaults
+    .enableFallbackToDefaults
 )
 // your own types
 NonFailing.derive(
   NonFailing.Config[Input, Output]
-  	.enableFallbackToDefaults
+    .enableFallbackToDefaults
 )
 WithContext.derive(
   WithContext.Config[Input, Output]
-  	.enableFallbackToDefaults
+    .enableFallbackToDefaults
 )
 WithResultType.derive(
   WithResultType.Config[Input, Output]
-  	.enableFallbackToDefaults
+    .enableFallbackToDefaults
 )
 WithContextAndResult.derive(
   WithContextAndResult.Config[Input, Output]
-  	.enableFallbackToDefaults
+    .enableFallbackToDefaults
 )
 ```
 
+If `addFallbackToValue` is used, derivation will fallback to defaults only after there won't be any source provided
+with config, available in source nor available in fallback values.
+
 #### `recursiveDerivation` configuration
 
-Tells derivation to allow recursive derivation for fields conversion if no impicit is present and types don't match. Not needed if you mixed-in `PipeAutoSupport` into your companion:
+Tells derivation to allow recursive derivation for fields conversion if no implicit is present and types don't match.
+Not needed if you mixed-in `PipeAutoSupport` into your companion:
 
 ```scala
 // With semi-auto this would require deriving Input2 -> Output2,
@@ -644,19 +727,19 @@ final case class Output(a: Int, b: String, c: Long, d: Output2)
 // your own types (assuming they use semiauto)
 NonFailing.derive(
   NonFailing.Config[Input, Output]
-  	.recursiveDerivation
+    .recursiveDerivation
 )
 WithContext.derive(
   WithContext.Config[Input, Output]
-  	.recursiveDerivation
+    .recursiveDerivation
 )
 WithResultType.derive(
   WithResultType.Config[Input, Output]
-  	.recursiveDerivation
+    .recursiveDerivation
 )
 WithContextAndResult.derive(
   WithContextAndResult.Config[Input, Output]
-  	.recursiveDerivation
+    .recursiveDerivation
 )
 ```
 
@@ -666,9 +749,12 @@ WithContextAndResult.derive(
 
 * either input or output type is a tuple
 * the other type might be a case class instead of tuple
-* fields are matched by their position (if it's a case class we consider in which order fields were defined). Configuration options from case classes apply
-* if value cannot be copied because the types differ, derivation will attempt to summon `TypeClass[InputField, OutputField]` to convert it
-* if derivation cannot figure out where to get the value from (mismatching types + no conversion, no corresponding source field), it fails
+* fields are matched by their position (if it's a case class we consider in which order fields were defined).
+  Configuration options from case classes apply
+* if value cannot be copied because the types differ, derivation will attempt to summon
+  `TypeClass[InputField, OutputField]` to convert it
+* if derivation cannot figure out where to get the value from (mismatching types + no conversion, no corresponding
+  source field), it fails
 
 ```scala
 // When derived against tuple, derivation will use position
@@ -676,17 +762,17 @@ WithContextAndResult.derive(
 final case class Input(a: Int, b: String, c: Long)
 final case class Output(a: Int, b: String, c: Long)
 
-// If types in the same posision differ, converion will be summoned
+// If types in the same position differ, conversion will be summoned
 implicit val convertLong2Str: Converter[Long, String] = ...
 implicit val parseLong2Str: Parser[Long, String] = ...
 
 // Pipez DSL
 Converter.derive[Input, (Int, String, Long)]
 Converter.derive[(Int, String, Long), Output]
-Converter.derive[(Int, String, Long), (Int, String, Long)] // use convertLong2Str
+Converter.derive[(Int, String, Long), (Int, String, String)] // use convertLong2Str
 Parser.derive[Input, (Int, String, Long)]
 Parser.derive[(Int, String, Long), Output]
-Parser.derive[(Int, String, Long), (Int, String, Long)] // use parseLong2Str
+Parser.derive[(Int, String, Long), (Int, String, String)] // use parseLong2Str
 // your own types
 NonFailing.derive[Input, (Int, String, Long)]
 NonFailing.derive[(Int, String, Long), Output]
@@ -699,9 +785,13 @@ NonFailing.derive[(Int, String, Long), Output]
 
 * both input and output is a `sealed` type or `enum`
 * subtypes will be matches by their names
-* unless configuration tells otherwise each input subtype will require a matching output subtype to target a conversion. Matching is done by comparing names of subtypes. The last configuration for input subtype "wins" and tells where to get the value from
-* by default for each `InputSubtype`, `OutputSubtype` pair derivation will attempt to summon implicit - if it cannot do it, it will attempt to derive it
-* if derivation cannot figure out where to convert the subtype into (mismatching types + no conversion, no corresponding target subtype), it fails
+* unless configuration tells otherwise each input subtype will require a matching output subtype to target a conversion.
+  Matching is done by comparing names of subtypes. The last configuration for input subtype "wins" and tells where to
+  get the value from
+* by default for each `InputSubtype`, `OutputSubtype` pair derivation will attempt to summon implicit - if it cannot do
+  it, it will attempt to derive it
+* if derivation cannot figure out where to convert the subtype into (mismatching types + no conversion, no corresponding
+  target subtype), it fails
 
 ```scala
 // Derivation for ADTs uses subtype/element name for matching
@@ -729,7 +819,7 @@ WithContextAndResult.derive[Input, Output]
 
 #### `removeSubtype` configuration
 
-Tells derivarion that for particular input subtype it should use a specified type class instance:
+Tells derivation that for particular input subtype it should use a specified type class instance:
 
 ```scala
 // C doesn't have a corresponding target
@@ -874,7 +964,7 @@ WithResultType.derive(
 class Input(val value: String) extends AnyVal
 final case class Output(str: String) extends AnyVal
 
-/// ...wrapping and unwarpping works out of the box
+/// ...wrapping and unwrapping works out of the box
 
 // Pipez DSL
 Converter.derive[Input, Output]
@@ -896,14 +986,17 @@ NonFailing.derive[String, Output]
 Cross-compilation requires:
 
 * `("organization" %% "library" % version).cross(CrossVersion.for3Use2_13)` to use Scala 2.13 type in Scala 3
-* `("organization" %% "library" % version).cross(CrossVersion.for2_13Use3)` to use Scala 3 type in Scala 2.13, as well as adding `"-Ytasty-reader"` flag to `scalacOptions`
+* `("organization" %% "library" % version).cross(CrossVersion.for2_13Use3)` to use Scala 3 type in Scala 2.13, as well
+  as adding `"-Ytasty-reader"` flag to `scalacOptions`
 * matching versions of TASTY - Pipez was tested for 2.13.9 against 3.2.0
 
 ### Features you have to implement yourself
 
-* Pipez only provide you a way of derive a type class - build-in instances of your type class you have to write yourself!
-* this includes: collections, Maps, Options (lifting `F[A, B]` to `F[Option[A, B]]` or `F[A, Option[B]]` etc)
-* Pipez doesn't automatically support: Scala Enumeration or Java enums conversion (since they can be implemented in runtime)
+* Pipez only provides you a way of derive a type class - build-in instances of your type class you have to write
+  yourself!
+* this includes: collections, Maps, Options (lifting `F[A, B]` to `F[Option[A, B]]` or `F[A, Option[B]]` etc.)
+* Pipez doesn't automatically support: Scala Enumeration or Java enums conversion (since they can be implemented in
+  runtime)
 * Pipez isn't going to write for you some DSL which would call Pipez in a customized way
 
 ## How to define `PipeDerivation`
@@ -938,14 +1031,17 @@ how could derivation actually create such type?
 We need a few things:
 
 * sometimes we need to get the type class instance and put a field in it, so we have to know how to call it
-* this way we might end up with several results - each converting another field - which we would have to combine, so we need a way of combining results
+* this way we might end up with several results - each converting another field - which we would have to combine, so we
+  need a way of combining results
 * some of these values are not requiring conversion, and we just want to wrap them in result type
-* finally, we need something that would let us create a type class from a recipe that: takes the input (possibly with these extra arguments), creates output result out of it
-* the result type and extra arguments should not leak not we shouldn't require it to be a part of the type class signature
+* finally, we need something that would let us create a type class from a recipe that: takes the input (possibly with
+  these extra arguments), creates output result out of it
+* the result type and extra arguments should not leak not we shouldn't require it to be a part of the type class
+  signature
 
 How could we express that?
 
-Pipez arrived at one way of expressing these requrements using path-dependent types:
+Pipez arrived at one way of expressing these requirements using path-dependent types:
 
 ```scala
 /** Pipe parameters is where you put your type class */
@@ -1024,9 +1120,11 @@ object WithContextAndResult
     }
 ```
 
-This instance simple converts between `(In, String) => Either[String, Out]` and `WithContextAndResult[In, Out]`, glues together `Either`s and wraps pure value. Nothing complex.
+This instance simple converts between `(In, String) => Either[String, Out]` and `WithContextAndResult[In, Out]`, glues
+together `Either`s and wraps pure value. Nothing complex.
 
-However, this allow us to easily create desired  `WithContextAndResult[Input, Output]` instance. It could be done line this:
+However, this allow us to easily create desired  `WithContextAndResult[Input, Output]` instance. It could be done line
+this:
 
 ```scala
 WithContextAndResult.pd.lift { (in: Input, pathToFrom: String) =>
@@ -1068,13 +1166,16 @@ WithContextAndResult.pd.lift { (in: Input, pathToFrom: String) =>
 }
 ```
 
-While the *exact* ways the derivation would use the `PipeDerivation` type class is NOT a part of any contract, you can assume that conversion would be performed using `.map2` logic of `Applicative` (or `.parMap2` from `NonEmptyParallel`).
+While the *exact* ways the derivation would use the `PipeDerivation` type class is NOT a part of any contract, you can
+assume that conversion would be performed using `.map2` logic of `Applicative` (or `.parMap2` from `NonEmptyParallel`).
 
 ### Enriching Context with path to value
 
-The only not explained part of `PipeDerivation` is `updateContext`. It can be used to inject information about the path that lead to the value passed through the `unlift`.
+The only not explained part of `PipeDerivation` is `updateContext`. It can be used to inject information about the path
+that lead to the value passed through the `unlift`.
 
-Basically every time you derivation extracts field before passing it into unlift it calls `updateContext`. For case classes it can look like this:
+Basically every time you derivation extracts field before passing it into unlift it calls `updateContext`. For case
+classes it can look like this:
 
 ```scala
 WithContextAndResult.pd.lift { (in: Input, pathToFrom: String) =>
@@ -1120,7 +1221,9 @@ WithContextAndResult.pd.lift { (in: Input, pathToFrom: String) =>
 }
 ```
 
-If we define our `updateContext` method to add `pipez.Path` value to `Context` we passed it, we will be able to have access a whole path to the obtained value. With that we could e.g. create better error messages in `Left` side of `Either`... or log if we would make our `Result` to be side-effectful.
+If we define our `updateContext` method to add `pipez.Path` value to `Context` we passed it, we will be able to have
+access a whole path to the obtained value. With that we could e.g. create better error messages in `Left` side of
+`Either`... or log if we would make our `Result` to be side-effectful.
 
 ### Debugging
 
@@ -1159,8 +1262,7 @@ Chimney focuses on giving user the best out-of-the-box developer experience:
 * it provides DSL to transform value in-place without providing any custom definitions unless necessary
 * it supports operations on _native_ types like `Option`, collections
 * it doesn't require defining custom types to make transformation possible
-* it has options like using default values to provide missing fields, providing pure values, generating pure values
-  from transformed object,
+* it has options like providing pure values, generating pure values from transformed object,
 * for validated transformation it can provide a path to the failed field, showing: fields, subtypes, sequence index or
   map key or value that led to failure
 

@@ -427,7 +427,7 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  test("renameField config + conversion -> output field taken from: input, the first value, the second") {
+  test("addFallbackToValue config + conversion -> output field taken from: input, the first value, the second") {
     implicit val aCodec: ContextCodec[String, Long] =
       (in, _, _) => scala.util.Try(in.toLong).toEither.left.map(_ => List("err"))
     // case class

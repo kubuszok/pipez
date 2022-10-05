@@ -538,7 +538,7 @@ object ProductCaseGeneration {
     outFieldName:    String,
     caseInsensitive: Boolean
   ): Boolean = {
-    val in  = Set(inFieldName, dropGetIs(dropSet(inFieldName))) // drop set is used for fallbacks
+    val in  = Set(inFieldName, dropGetIs(inFieldName))
     val out = Set(outFieldName, dropSet(outFieldName))
     if (caseInsensitive) in.exists(a => out.exists(b => a.equalsIgnoreCase(b)))
     else in.intersect(out).nonEmpty

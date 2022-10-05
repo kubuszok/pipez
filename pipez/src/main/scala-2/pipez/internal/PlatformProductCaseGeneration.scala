@@ -124,7 +124,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
             fallback = fallbackValues
               .collectFirst {
                 case (fallbackName, fallback)
-                    if inputNameMatchesOutputName(name, fallbackName, settings.isFieldCaseInsensitive) =>
+                    if inputNameMatchesOutputName(fallbackName, name, settings.isFieldCaseInsensitive) =>
                   fallback
               }
               .getOrElse(FieldFallback.Unavailable)
@@ -172,7 +172,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
                 fallback = fallbackValues
                   .collectFirst {
                     case (fallbackName, fallback)
-                        if inputNameMatchesOutputName(name, fallbackName, settings.isFieldCaseInsensitive) =>
+                        if inputNameMatchesOutputName(fallbackName, name, settings.isFieldCaseInsensitive) =>
                       fallback
                   }
                   .getOrElse(FieldFallback.Unavailable)

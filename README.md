@@ -115,7 +115,7 @@ new Converter[User, ApiUser] {
     // we map them by their corresponding subtype names:
     userType = from.userName match {
       case UserType.Normal => UType.Normal
-      case UserType.Admin. => UType.Admin
+      case UserType.Admin  => UType.Admin
     }
   )
 }

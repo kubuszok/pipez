@@ -66,13 +66,13 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
               name = name,
               tpe = subtypeTypeParamsFixed,
               isCaseObject = subtypeType.flags.is(Flags.Module),
-              path = Path.Subtype(Path.Root, name)
+              path = Path.Subtype(Path.Root, TypeRepr.of(using subtypeTypeParamsFixed).dealias.show)
             )
           }
       )
     )(err =>
       DerivationError.NotYetImplemented(
-        s"${previewType(typeOf[A])} seem like an ADT but cannot extract its subtypes: ${err.getMessage}"
+        s"${previewType[A]} seem like an ADT but cannot extract its subtypes: ${err.getMessage}"
       )
     )
 

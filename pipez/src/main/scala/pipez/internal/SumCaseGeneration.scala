@@ -87,30 +87,31 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
     def resolveSubtype[InSubtype <: In: Type](
       settings:      Settings,
       outData:       EnumData[Out],
-      inSubtypeName: String
+      inSubtypeName: String,
+      path:          Path
     ): DerivationResult[EnumGeneratorData.InputSubtype] = resolve[InSubtype](settings) match {
       // OutSubtype - the same (simple) name as InSubtype
       // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
       case DefaultSubtype() =>
         outData
           .findSubtype(inSubtypeName, settings.isEnumCaseInsensitive)
-          .flatMap(outSubtype => fromOutputSubtype(settings)(typeOf[InSubtype], outSubtype.tpe))
+          .flatMap(outSubtype => fromOutputSubtype(settings, path)(typeOf[InSubtype], outSubtype.tpe))
           .log(s"Subtype ${previewType(typeOf[InSubtype])} uses default resolution (matching output name, summoning)")
       case SubtypeRemoved(pipe) =>
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[Out] }
-        fromMissingPipe[InSubtype](pipe).log(
+        fromMissingPipe[InSubtype](pipe, path).log(
           s"Subtype ${previewType(typeOf[InSubtype])} considered removed from input, uses provided pipe"
         )
       case SubtypeRenamed(outSubtypeType) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
-        fromOutputSubtype(settings)(typeOf[InSubtype], outSubtypeType).log(
+        fromOutputSubtype(settings, path)(typeOf[InSubtype], outSubtypeType).log(
           s"Subtype ${previewType(typeOf[InSubtype])} considered renamed to $outSubtypeType, uses summoning"
         )
       case PipeProvided(outSubtypeType, pipe) =>
         // OutSubtype - name provided
         // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, ctx): Result[OutSubtype] }
-        fromOutputPipe(pipe)(typeOf[InSubtype], outSubtypeType).log(
+        fromOutputPipe(pipe, path)(typeOf[InSubtype], outSubtypeType).log(
           s"Subtype ${previewType(typeOf[InSubtype])} converted to $outSubtypeType using provided pipe"
         )
     }
@@ -225,7 +226,7 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
         .map(_.asInstanceOf[EnumData.Case[InSubtype]])
         .map { case EnumData.Case(inSubtypeName, inSubtypeType, _, path) =>
           implicit val inSubtypeTpe: Type[InSubtype] = inSubtypeType
-          InSubtypeLogic.resolveSubtype[InSubtype](settings, outData, inSubtypeName).map(inSubtypeName -> _)
+          InSubtypeLogic.resolveSubtype[InSubtype](settings, outData, inSubtypeName, path).map(inSubtypeName -> _)
         }
         .pipe(DerivationResult.sequence(_))
         .map(_.to(ListMap))
@@ -234,35 +235,30 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
 
   // OutSubtype - name provided
   // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, updateContext(ctx, path)): Result[OutSubtype] }
-  private def fromOutputSubtype[InSubtype <: In: Type, OutSubtype <: Out: Type](settings: Settings): DerivationResult[
+  private def fromOutputSubtype[InSubtype <: In: Type, OutSubtype <: Out: Type](
+    settings: Settings,
+    path:     Path
+  ): DerivationResult[
     EnumGeneratorData.InputSubtype
   ] = summonOrDerive[InSubtype, OutSubtype](settings, alwaysAllowDerivation = true).map(
-    EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype],
-                                           typeOf[OutSubtype],
-                                           _,
-                                           Path.Subtype(Path.Root, previewType[InSubtype])
-    )
+    EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype], typeOf[OutSubtype], _, path)
   )
 
   // OutSubtype - name provided
   // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, updateContext(ctx, path)): Result[OutSubtype] }
   private def fromOutputPipe[InSubtype <: In: Type, OutSubtype <: Out: Type](
-    pipe: Expr[Pipe[InSubtype, OutSubtype]]
+    pipe: Expr[Pipe[InSubtype, OutSubtype]],
+    path: Path
   ): DerivationResult[EnumGeneratorData.InputSubtype] = DerivationResult.pure(
-    EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype],
-                                           typeOf[OutSubtype],
-                                           pipe,
-                                           Path.Subtype(Path.Root, previewType[InSubtype])
-    )
+    EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype], typeOf[OutSubtype], pipe, path)
   )
 
   // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, updateContext(ctx, path)): Result[Out] }
   private def fromMissingPipe[InSubtype <: In: Type](
-    pipe: Expr[Pipe[InSubtype, Out]]
+    pipe: Expr[Pipe[InSubtype, Out]],
+    path: Path
   ): DerivationResult[EnumGeneratorData.InputSubtype] =
-    DerivationResult.pure(
-      EnumGeneratorData.InputSubtype.Handle(typeOf[InSubtype], pipe, Path.Subtype(Path.Root, previewType[InSubtype]))
-    )
+    DerivationResult.pure(EnumGeneratorData.InputSubtype.Handle(typeOf[InSubtype], pipe, path))
 }
 object SumCaseGeneration {
 

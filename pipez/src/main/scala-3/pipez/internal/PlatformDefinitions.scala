@@ -20,9 +20,9 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
 
   final def previewType[A: Type]: String =
     val repr = TypeRepr.of[A]
-    scala.util.Try(repr.show).getOrElse(repr.toString)
+    scala.util.Try(repr.dealias.show(using Printer.TypeReprAnsiCode)).getOrElse(repr.toString)
 
-  final def previewCode[A](code: Expr[A]): String = code.show
+  final def previewCode[A](code: Expr[A]): String = code.asTerm.show(using Printer.TreeAnsiCode)
 
   final def pathCode(path: Path): Expr[pipez.Path] = path match
     case Path.Root                => '{ pipez.Path.root }

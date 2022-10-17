@@ -23,9 +23,11 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
 
   // def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] is defined in MacrosImpl
 
-  final def previewType[A: Type]: String = typeOf[A].toString
+  final def previewType[A: Type]: String =
+    Console.MAGENTA + typeOf[A].dealias.toString + Console.RESET
 
-  final def previewCode[A](code: Expr[A]): String = showCode(code.tree)
+  private lazy val ppu = new PrettyPrintUniverse(c.universe)
+  final def previewCode[A](code: Expr[A]): String = ppu.showCodeAnsi(code.tree.asInstanceOf[ppu.Tree])
 
   final def pathCode(path: Path): Expr[pipez.Path] = path match {
     case Path.Root                => c.Expr[pipez.Path](q"_root_.pipez.Path.root")

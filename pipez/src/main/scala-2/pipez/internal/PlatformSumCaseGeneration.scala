@@ -41,7 +41,7 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
               name = subtypeType.name.toString,
               tpe = subtypeTypeParamsFixed,
               isCaseObject = subtypeType.asClass.isModule,
-              path = Path.Subtype(Path.Root, subtypeType.fullName)
+              path = Path.Subtype(Path.Root, subtypeTypeParamsFixed.toString)
             )
           }
       )

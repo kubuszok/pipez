@@ -1,3 +1,18 @@
+# Pipez
+
+[![Pipez JVM](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=jvm)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
+[![Pipez JS](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=sjs1)](https://search.maven.org/artifact/com.kubuszok/pipez_sjs1_2.13)
+[![Pipez Native](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=native0.4)](https://search.maven.org/artifact/com.kubuszok/pipez_native0.4_3)
+
+[![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc%202.13.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
+[![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_3/scaladoc%203.svg)](https://javadoc.io/doc/com.kubuszok/pipez_3)
+![CI build](https://github.com/MateuszKubuszok/pipez/workflows/CI%20build/badge.svg)
+[![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
+
+Scala library for type-safe data-transformations, which allows you to build-in Chimney-like abilities to your own type classes and effects.
+
+> Pipez is a result of research about possible ways of migrating Chimney to Scala 3. It focuses on a certain type class from Chimney- `TransformerF` - and while it attempts to replicate as much features as possible it is **not** intended to replace Chimney nor reimplement all of its features.
+
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
@@ -34,21 +49,6 @@
   - [Pipez and Chimney](#pipez-and-chimney)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
-# Pipez
-
-[![Pipez JVM](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=jvm)](https://search.maven.org/artifact/com.kubuszok/pipez_2.13)
-[![Pipez JS](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=sjs1)](https://search.maven.org/artifact/com.kubuszok/pipez_sjs1_2.13)
-[![Pipez Native](https://index.scala-lang.org/mateuszkubuszok/pipez/pipez/latest-by-scala-version.svg?platform=native0.4)](https://search.maven.org/artifact/com.kubuszok/pipez_native0.4_3)
-
-[![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc%202.13.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
-[![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_3/scaladoc%203.svg)](https://javadoc.io/doc/com.kubuszok/pipez_3)
-![CI build](https://github.com/MateuszKubuszok/pipez/workflows/CI%20build/badge.svg)
-[![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
-
-Scala library for type-safe data-transformations, which allows you to build-in Chimney-like abilities to your own type classes and effects.
-
-> Pipez is a result of research about possible ways of migrating Chimney to Scala 3. It focuses on a certain type class from Chimney- `TransformerF` - and while it attempts to replicate as much features as possible it is **not** intended to replace Chimney nor reimplement all of its features.
 
 ## Installation
 

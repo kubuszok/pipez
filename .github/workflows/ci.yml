@@ -37,3 +37,5 @@ jobs:
           java-version: ${{ matrix.jvm }}
       - name: Clean, Check code formatting, compile, test
         run: sbt clean scalafmtCheck test:scalafmtCheck pipez$SUFFIX/Test/compile pipezDsl$SUFFIX/Test/compile pipez$SUFFIX/test pipezDsl$SUFFIX/test
+      - name: TOC Generator
+        uses: technote-space/toc-generator@v4.0.0

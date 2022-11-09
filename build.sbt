@@ -5,9 +5,6 @@ ThisProject / versionScheme := Some("early-semver")
 
 val testCasesVersion = "0.2.2"
 
-// Scala Native 2.13 seem to generate linking errors so we're disabling it for now
-val skip2_13Native = MatrixAction((s, a) => s.isScala2 && a.contains(VirtualAxis.native)).Skip
-
 // IDEs don't like projects which share sources
 val ideScala = scala2_13version
 Global / excludeLintKeys += ideSkipProject
@@ -21,7 +18,7 @@ val pipez = projectMatrix
   .someVariations(
     List(scala2_13version, scala3version),
     List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
-  )(skip2_13Native, only1JvmScalaInIde, noJsNoNativeInIde)
+  )(only1JvmScalaInIde, noJsNoNativeInIde)
   .enablePlugins(GitVersioning)
   .settings(name := "pipez")
   .settings(commonSettings: _*)
@@ -38,7 +35,7 @@ val pipezDsl = projectMatrix
   .someVariations(
     List(scala2_13version, scala3version),
     List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
-  )(skip2_13Native, only1JvmScalaInIde, noJsNoNativeInIde)
+  )(only1JvmScalaInIde, noJsNoNativeInIde)
   .enablePlugins(GitVersioning)
   .settings(name := "pipez-dsl")
   .settings(commonSettings: _*)

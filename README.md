@@ -1024,7 +1024,7 @@ Cross-compilation requires:
 * `("organization" %% "library" % version).cross(CrossVersion.for3Use2_13)` to use Scala 2.13 type in Scala 3
 * `("organization" %% "library" % version).cross(CrossVersion.for2_13Use3)` to use Scala 3 type in Scala 2.13, as well
   as adding `"-Ytasty-reader"` flag to `scalacOptions`
-* matching versions of TASTY - Pipez was tested for 2.13.9 against 3.2.0
+* matching versions of TASTY - Pipez was tested for 2.13.10 against 3.2.1
 
 ### Features you have to implement yourself
 

@@ -9,3 +9,7 @@ addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.11.0")
 addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.4.8")
 // disabling projects in IDEs
 addSbtPlugin("org.jetbrains" % "sbt-ide-settings" % "1.1.0")
+// welcome
+addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.2.2")
+
+ThisBuild / libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always

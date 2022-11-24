@@ -17,13 +17,6 @@ jobs:
         jvm: [openjdk@1.17.0]
         scalaVersion: ["", 3]
         scalaPlatform: ["", JS, Native]
-        exclude:
-          # Disabled due to fast opt error: https://github.com/scala-js/scala-js/issues/4739
-          - scalaVersion: ""
-            scalaPlatform: JS
-          # Disabled due to linking error: https://github.com/scala-native/scala-native/issues/2983
-          - scalaVersion: ""
-            scalaPlatform: Native
       fail-fast: false
 
     env:

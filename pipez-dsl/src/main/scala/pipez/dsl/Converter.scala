@@ -89,7 +89,6 @@ private[dsl] trait ConverterInstances2 { self: Converter.type =>
   implicit def convertToSelf[A, B >: A]: Converter[A, B] = a => a
 }
 private[dsl] object ConverterDerivationDefinition extends pipez.PipeDerivation.Simple[Converter] {
-  import Converter._
 
   override def simpleLift[In, Out](f: In => Out):                       Converter[In, Out] = f(_)
   override def simpleUnlift[In, Out](pipe: Converter[In, Out], in: In): Out                = pipe.convert(in)

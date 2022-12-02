@@ -1,9 +1,5 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
-
-import scala.annotation.nowarn
-import scala.util.chaining.*
 import scala.language.existentials
 
 private[internal] trait PlatformAnyValCaseGeneration[Pipe[_, _], In, Out] extends AnyValCaseGeneration[Pipe, In, Out] {
@@ -21,22 +17,17 @@ private[internal] trait PlatformAnyValCaseGeneration[Pipe[_, _], In, Out] extend
   final def extractAnyValInData(settings: Settings): DerivationResult[AnyValInData[AnyValType]] =
     if (isAnyVal[In])
       DerivationResult.fromOption(
-        In.decls
-          .to(List)
-          .filterNot(isGarbage)
-          .filter(field => field.isMethod && field.asMethod.isGetter)
-          .headOption
-          .map { getter =>
-            val name     = getter.name.toString
-            val termName = getter.asMethod.name.toTermName
-            AnyValInData.InAnyVal(
-              tpe = returnTypeOf(In, getter).asInstanceOf[Type[AnyValType]],
-              get =
-                if (getter.asMethod.paramLists.isEmpty) (in: Expr[In]) => c.Expr[AnyValType](q"$in.$termName")
-                else (in: Expr[In]) => c.Expr[AnyValType](q"$in.$termName()"),
-              path = Path.Field(Path.Root, name)
-            )
-          }
+        In.decls.to(List).filterNot(isGarbage).find(field => field.isMethod && field.asMethod.isGetter).map { getter =>
+          val name     = getter.name.toString
+          val termName = getter.asMethod.name.toTermName
+          AnyValInData.InAnyVal(
+            tpe = returnTypeOf(In, getter).asInstanceOf[Type[AnyValType]],
+            get =
+              if (getter.asMethod.paramLists.isEmpty) (in: Expr[In]) => c.Expr[AnyValType](q"$in.$termName")
+              else (in: Expr[In]) => c.Expr[AnyValType](q"$in.$termName()"),
+            path = Path.Field(Path.Root, name)
+          )
+        }
       )(DerivationError.InvalidInput("Couldn't found a valid getter to extract value from AnyVal"))
     else
       DerivationResult.pure(AnyValInData.InPrimitive(typeOf[In].asInstanceOf[Type[AnyValType]]))

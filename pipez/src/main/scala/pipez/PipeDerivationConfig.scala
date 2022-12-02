@@ -46,7 +46,7 @@ sealed trait PipeDerivationConfig[Pipe[_, _], In, Out] {
   /** During derivation subtype names from In to Out won't be matches exactly but with case-insensitive comparison */
   final def enumMatchingCaseInsensitive: this.type = this
 
-  /** Allow attempts to recursively derive transformetion even without auto derivation implicit in scope */
+  /** Allow attempts to recursively derive transformation even without auto derivation implicit in scope */
   final def recursiveDerivation: this.type = this
 }
 object PipeDerivationConfig {

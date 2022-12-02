@@ -4,7 +4,6 @@ import pipez.internal.Definitions.{ Context, Result }
 import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
-import scala.collection.AnyStepper
 import scala.collection.immutable.ListMap
 import scala.util.chaining.*
 import scala.language.existentials

@@ -1,7 +1,7 @@
 package pipez
 
-/** Allows derivation macro to glue Pipes for `Pipe[in.field, out.field]` for each field or `Pipe[In.Subtype,
-  * Out.Subtype]` for each subtype together.
+/** Allows derivation macro to glue Pipes for `Pipe[in.field, out.field]` for each case class field/Java Bean accessor
+  * or `Pipe[In.Subtype, Out.Subtype]` for each subtype together.
   *
   * Assumes that `Pipe[In, Out]` is interchangeable to `(in: In, ctx: Context) => Result[Out]` where:
   *   - `Context` is anything we want to thread through our calls (like in `ReaderT`)
@@ -11,9 +11,9 @@ package pipez
   * returned value you might define `Result[Out] = Out`.
   *
   * @tparam Pipe
-  *   typeclass with two type parameters, used like `Pipe[In, Out]`, which is most likely a Single Abstract Method
+  *   type class with two type parameters, used like `Pipe[In, Out]`, which is most likely a Single Abstract Method
   *   interface, implementing some `(In, Context) => Result[Out]` function, which could be automatically generated for
-  *   `InProduct => OutProduct` or `InSumType => OutSumType` by pipeing the corresponding fields or sum type elements by
+  *   `InProduct => OutProduct` or `InSumType => OutSumType` by piping the corresponding fields or sum type elements by
   *   their name and combining the result together
   */
 trait PipeDerivation[Pipe[_, _]] {
@@ -24,7 +24,7 @@ trait PipeDerivation[Pipe[_, _]] {
   /** Type of value you want to return after the call */
   type Result[Out]
 
-  /** Turns a function into your `Pipe` typeclass */
+  /** Turns a function into your `Pipe` type class */
   def lift[In, Out](f: (In, Context) => Result[Out]): Pipe[In, Out]
 
   /** Calls `Pipe` as if it was a function */

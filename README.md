@@ -134,7 +134,7 @@ trait Converter[From, To]:
 ```
 
 and `user.convertInto[ApiUser]` creates an instance of `Converter[User, ApiUser]` and calls `.convert(user)` on it. It
-basically writes:
+basically writes for us:
 
 ```scala
 // This is (more or less) what
@@ -159,7 +159,7 @@ new Converter[User, ApiUser] {
 .convert(user)
 ```
 
-for us letting us forget writing all this dump, error-prone boilerplate code ourselves!
+letting us forget about writing all this dumb, error-prone boilerplate code ourselves!
 
 > `Converter` is a demonstration how Pipez can be used to implement something similar to Chimney's `Transformer`.
 
@@ -545,7 +545,7 @@ Tells derivation to use `TypeClass[In, OutField]` to populate the output field t
 field. You might use Single Abstract Method syntax:
 
 ```scala
-// Output.d doesn't have a corresponding source
+// Output.x doesn't have a corresponding source
 final case class Input(a: Int, b: String, c: Long)
 final case class Output(a: Int, b: String, c: Long, x: Double)
 
@@ -628,7 +628,7 @@ WithResultType.derive(
 
 #### `fieldMatchingCaseInsensitive` configuration
 
-By default field matching is case-sensitive. This flag enables case-insensitive comparison:
+By default, field matching is case-sensitive. This flag enables case-insensitive comparison:
 
 ```scala
 // This would fail as fields have different cases
@@ -710,7 +710,7 @@ Tells derivation to use the default value if present and no other way of computi
 
 ```scala
 // Conversion from Input to Output would fail since there is
-// no d in Input, but we can tell derivation to use defaults
+// no x in Input, but we can tell derivation to use defaults
 final case class Input(a: Int, b: String, c: Long)
 final case class Output(a: Int, b: String, c: Long, x: Double = 1.0)
 
@@ -955,7 +955,7 @@ WithResultType.derive(
 
 #### `enumMatchingCaseInsensitive` configuration
 
-By default subtype matching is case-sensitive. This flag enables case-insensitive comparison:
+By default, subtype matching is case-sensitive. This flag enables case-insensitive comparison:
 
 ```scala
 // Names don't match since they have different cases
@@ -1234,7 +1234,7 @@ WithContextAndResult.pd.lift { (in: Input, pathToFrom: String) =>
 }
 ```
 
-Meanwhile for enums it can look like this:
+Meanwhile, for enums it can look like this:
 
 ```scala
 WithContextAndResult.pd.lift { (in: Input, pathToFrom: String) =>
@@ -1268,12 +1268,12 @@ pass it a configuration with `.enableDiagnosics` option.
 
 ### Contracts and laws
 
-What Pipez promises is that it:
+What Pipez promises is that:
 
-* will not use conversion if an input field type is a subtype of output field type
+* it will not use conversion if an input field type is a subtype of output field type
 * when conversion of a field/subtype will be performed, the library will provide instance (from summoning or config)
   and then use users code (`pipeDerivation.unlift`) to run it
-* partial results of conversions of fields will be combined through `pipeDerivation.mergeResult`
+* the partial results of conversions of fields will be combined through `pipeDerivation.mergeResult`
 
 It does not however:
 

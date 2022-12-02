@@ -167,7 +167,7 @@ private[dsl] trait ParserInstances2 {
   implicit def parseToSelf[A, B >: A]: Parser[A, B] = (a, _, _) => Right(a)
 }
 private[dsl] object ParserDerivationDefinition extends pipez.PipeDerivation[Parser] {
-  import Parser._
+  import Parser.*
 
   override type Context   = (Path, ShouldFailFast)
   override type Result[A] = ParsingResult[A]

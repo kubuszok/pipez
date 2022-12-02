@@ -35,7 +35,7 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
     val filteredSettings = settings.stripSpecificsToCurrentDerivation.asInstanceOf[m.Settings]
     val result           = m.derive(filteredSettings)
     val mError           = m.DerivationError
-    import DerivationError._
+    import DerivationError.*
     // pattern matching is done through companion objects - which differ when objects exists in different MacroImpls
     def fixErrors(errors: List[m.DerivationError]): List[DerivationError] = errors.map {
       case mError.MissingPublicConstructor            => MissingPublicConstructor
@@ -110,8 +110,7 @@ final class Macro(val c: blackbox.Context) {
   //
   // If we figured it out, we could remove this fix, as it only fails this case as far as I can tell.
   private def fixTypes[Pipe[_, _]: ConstructorWeakTypeTag, Out](
-    expr:           blackbox.Context#Expr[Out],
-    pipeDerivation: c.Expr[PipeDerivation[Pipe]]
+    expr: blackbox.Context#Expr[Out]
   ): c.Expr[Out] = try
     c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree.asInstanceOf[c.Tree])))
   catch {
@@ -123,7 +122,7 @@ final class Macro(val c: blackbox.Context) {
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
-    fixTypes(m.deriveDefault, pipeDerivation)
+    fixTypes(m.deriveDefault)
   }
 
   /** Called with `macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]` */
@@ -133,6 +132,6 @@ final class Macro(val c: blackbox.Context) {
     pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
-    fixTypes(m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]), pipeDerivation)
+    fixTypes(m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]))
   }
 }

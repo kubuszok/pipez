@@ -1,7 +1,5 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
-
 import scala.annotation.nowarn
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")

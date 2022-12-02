@@ -1,14 +1,11 @@
 package pipez.internal
 
 import java.io.PrintWriter
-import scala.annotation.{ nowarn, tailrec }
-import scala.collection.mutable
-import scala.reflect.{ ClassTag, NameTransformer, classTag }
+import scala.reflect.ClassTag
 import scala.reflect.internal.{ Reporter, TreeInfo }
 import scala.reflect.internal.util.Statistics
-import scala.reflect.macros.blackbox
 
-// Needed to get intp internal utilities used to print code
+// Needed to get into internal utilities used to print code
 class ExtensibleUniverse(u: scala.reflect.macros.Universe) extends scala.reflect.internal.SymbolTable {
 
   private lazy val delegatedUniverse: scala.reflect.internal.SymbolTable =
@@ -113,8 +110,8 @@ class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUn
     else qsymbol
   }
 
-  override def decodedSymName(tree: Tree, name: Name): String = symNameInternal(tree, name, true)
-  override def symName(tree: Tree, name: Name):        String = symNameInternal(tree, name, false)
+  override def decodedSymName(tree: Tree, name: Name): String = symNameInternal(tree, name, decoded = true)
+  override def symName(tree: Tree, name: Name):        String = symNameInternal(tree, name, decoded = false)
 
   class AnsiCodePrinter(out: PrintWriter, printRootPkg: Boolean) extends CodePrinter(out, printRootPkg) {
 
@@ -130,13 +127,13 @@ class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUn
       print(NoColor)
     }
 
-    override def printVParam(vd: ValDef, primaryCtorParam: Boolean) = {
+    override def printVParam(vd: ValDef, primaryCtorParam: Boolean): Unit = {
       print(ValDefColor)
       super.printVParam(vd, primaryCtorParam)
       print(NoColor)
     }
 
-    override protected def printTypeDef(tree: TypeDef, resultName: => String) = {
+    override protected def printTypeDef(tree: TypeDef, resultName: => String): Unit = {
       print(TypeColor)
       super.printTypeDef(tree, resultName)
       print(NoColor)
@@ -218,8 +215,8 @@ class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUn
           printRowColor(parents, " " + highlightKeyword("with") + " ", TypeColor)
           if (body.nonEmpty) {
             if (self.name != nme.WILDCARD) {
-              print(" { ", self.name);
-              printOpt(": ", self.tpt);
+              print(" { ", self.name)
+              printOpt(": ", self.tpt)
               print(" => ")
             } else if (self.tpt.nonEmpty) {
               print(" { _ : ", self.tpt, " => ")
@@ -236,7 +233,7 @@ class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUn
         case Match(selector, cases) =>
           val selectorType1 = selectorType
           selectorType = selector.tpe
-          print(selector);
+          print(selector)
           printColumn(cases, " " + highlightKeyword("match") + " {", "", "}")
           selectorType = selectorType1
 
@@ -377,7 +374,7 @@ class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUn
           print(tp); printRowColor(args, "[", ", ", "]", TypeColor)
 
         case TypeBoundsTree(lo, hi) =>
-          // Avoid printing noisy empty typebounds everywhere
+          // Avoid printing noisy empty type bounds everywhere
           // Untyped empty bounds are not printed by printOpt,
           // but after they are typed we have to exclude Nothing/Any.
           if ((lo.tpe eq null) || !(lo.tpe =:= definitions.NothingTpe))

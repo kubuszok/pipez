@@ -25,9 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: coursier/cache-action@v6
-      - uses: olafurpg/setup-scala@v11
-        with:
-          java-version: ${{ matrix.jvm }}
+      - uses: coursier/setup-action@v1
       - name: Clean, Check code formatting, compile, test
         run: sbt clean scalafmtCheck test:scalafmtCheck pipez$SUFFIX/Test/compile pipezDsl$SUFFIX/Test/compile pipez$SUFFIX/test pipezDsl$SUFFIX/test
       - name: TOC Generator

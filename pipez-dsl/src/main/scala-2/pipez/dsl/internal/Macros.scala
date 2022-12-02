@@ -2,7 +2,7 @@ package pipez.dsl.internal
 
 import pipez.dsl.{ Converter, Parser, PatchApplier }
 
-import scala.reflect.macros.{ TypecheckException, blackbox }
+import scala.reflect.macros.blackbox
 
 class Macros(val c: blackbox.Context) {
 

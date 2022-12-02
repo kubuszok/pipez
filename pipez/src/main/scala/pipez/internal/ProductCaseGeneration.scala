@@ -1,7 +1,7 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
-import pipez.internal.ProductCaseGeneration.{ inputNameMatchesOutputName, setAccessor }
+import pipez.internal.Definitions.Context
+import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
 import scala.collection.immutable.ListMap

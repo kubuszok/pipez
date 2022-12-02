@@ -66,8 +66,10 @@ private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
   protected val isGarbage: Symbol => Boolean = s => garbage(s.name.toString)
 
   /** Applies type arguments obtained from tpe to the type parameters in method's parameters' types */
-  protected val paramListsOf = (tpe: c.Type, method: c.Symbol) => method.asMethod.typeSignatureIn(tpe).paramLists
+  protected val paramListsOf: (c.Type, c.Symbol) => List[List[c.universe.Symbol]] = (tpe: c.Type, method: c.Symbol) =>
+    method.asMethod.typeSignatureIn(tpe).paramLists
 
   /** Applies type arguments obtained from tpe to the type parameters in method's return type */
-  protected val returnTypeOf = (tpe: c.Type, method: c.Symbol) => method.typeSignatureIn(tpe).finalResultType
+  protected val returnTypeOf: (c.Type, c.Symbol) => c.universe.Type = (tpe: c.Type, method: c.Symbol) =>
+    method.typeSignatureIn(tpe).finalResultType
 }

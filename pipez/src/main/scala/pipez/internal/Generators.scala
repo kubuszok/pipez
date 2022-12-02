@@ -4,10 +4,10 @@ import pipez.PipeDerivationConfig
 import pipez.internal.Definitions.{ Context, Result }
 
 import scala.annotation.nowarn
-import scala.util.chaining.scalaUtilChainingOps
+import scala.util.chaining.*
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-trait Generators[Pipe[_, _], In, Out]
+private[internal] trait Generators[Pipe[_, _], In, Out]
     extends AnyValCaseGeneration[Pipe, In, Out]
     with ProductCaseGeneration[Pipe, In, Out]
     with SumCaseGeneration[Pipe, In, Out] {

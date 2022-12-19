@@ -138,3 +138,34 @@ private[internal] trait Generators[Pipe[_, _], In, Out]
   final def deriveConfigured(configurationCode: Expr[PipeDerivationConfig[Pipe, In, Out]]): Expr[Pipe[In, Out]] =
     derive(Some(configurationCode))
 }
+protected[internal] object Generators {
+
+  // methods we can drop from searching scope
+  private val garbage = Set(
+    // case class generated
+    "copy",
+    // scala.Product methods
+    "canEqual",
+    "productArity",
+    "productElement",
+    "productElementName",
+    "productElementNames",
+    "productIterator",
+    "productPrefix",
+    // java.lang.Object methods
+    "equals",
+    "hashCode",
+    "toString",
+    "clone",
+    "synchronized",
+    "wait",
+    "notify",
+    "notifyAll",
+    "getClass",
+    "asInstanceOf",
+    "isInstanceOf"
+  )
+  // default arguments has name method$default$index
+  private val defaultElement = raw"$$default$$"
+  final val isGarbage: String => Boolean = name => garbage(name) || name.contains(defaultElement)
+}

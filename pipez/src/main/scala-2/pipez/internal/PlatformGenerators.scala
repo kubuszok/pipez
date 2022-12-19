@@ -45,25 +45,7 @@ private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
     f:   Expr[(A, B) => C]
   ): Expr[Result[C]] = c.Expr[Result[C]](q"""$pipeDerivation.mergeResults($ctx, $ra, $rb, $f)""")
 
-  private val garbage = Set(
-    // product methods
-    "productElementName",
-    "productIterator",
-    "canEqual",
-    "productElement",
-    "productArity",
-    "productPrefix",
-    "productElementNames",
-    // object methods
-    "synchronized",
-    "wait",
-    "equals",
-    "hashCode",
-    "getClass",
-    "asInstanceOf",
-    "isInstanceOf"
-  )
-  protected val isGarbage: Symbol => Boolean = s => garbage(s.name.toString)
+  protected val isGarbage: Symbol => Boolean = ((s: Symbol) => s.name.toString) andThen Generators.isGarbage
 
   /** Applies type arguments obtained from tpe to the type parameters in method's parameters' types */
   protected val paramListsOf: (c.Type, c.Symbol) => List[List[c.universe.Symbol]] = (tpe: c.Type, method: c.Symbol) =>

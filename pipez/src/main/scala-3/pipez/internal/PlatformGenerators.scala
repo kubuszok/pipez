@@ -46,4 +46,6 @@ private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
     rb:  Expr[Result[B]],
     f:   Expr[(A, B) => C]
   ): Expr[Result[C]] = '{ ${ pipeDerivation }.mergeResults(${ ctx }, ${ ra }, ${ rb }, ${ f }) }
+
+  protected val isGarbage: Symbol => Boolean = ((s: Symbol) => s.name.toString) andThen Generators.isGarbage
 }

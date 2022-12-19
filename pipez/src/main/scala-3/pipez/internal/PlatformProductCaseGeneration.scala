@@ -78,14 +78,15 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       .pipe(DerivationResult.pure)
       .logSuccess(data => s"Resolved input: $data")
 
-  private def fallbackValueGetters(settings: Settings): Map[String, FieldFallback[?]] =
-    settings.fallbackValues
+  private def providedFallbackValueByFields(settings: Settings): Map[String, Vector[FieldFallback[?]]] =
+    settings.providedFallbackValues
       .collect { case ConfigEntry.AddFallbackValue(fallbackType, fallbackValue) =>
         extractGetters(fallbackType).map { case (name, Getter(fallbackFieldType, extractFallbackValue)) =>
           name -> FieldFallback.Value(fallbackFieldType, extractFallbackValue(fallbackValue))
-        }
+        }.toVector
       }
-      .fold(Map.empty[String, FieldFallback[?]])((left, right) => right ++ left) // preserve first rather than last
+      .flatten
+      .groupMapReduce(_._1)(p => Vector(p._2))(_ ++ _)
 
   final def extractProductOutData(settings: Settings): DerivationResult[ProductOutData] =
     if (isJavaBean[Out]) {
@@ -124,7 +125,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         }
       )(DerivationError.MissingPublicConstructor)
 
-      val fallbackValues = fallbackValueGetters(settings)
+      val fallbackValues = providedFallbackValueByFields(settings) // Java Beans don't have fallbacks to defaults
 
       val setters = sym.declaredMethods
         .filter(s => isJavaSetter(s) || isVar(s))
@@ -138,13 +139,14 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
             },
             set = (out: Expr[Out], value: Expr[Any]) =>
               out.asTerm.select(setter).appliedTo(value.asTerm).asExpr.asExprOf[Unit],
-            fallback = fallbackValues
-              .collectFirst {
+            fallback = fallbackValues.view
+              .collect {
                 case (fallbackName, fallback)
                     if inputNameMatchesOutputName(fallbackName, name, settings.isFieldCaseInsensitive) =>
                   fallback
               }
-              .getOrElse(FieldFallback.Unavailable)
+              .flatten
+              .toVector
           )
         }
         .to(ListMap)
@@ -180,8 +182,10 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         )(DerivationError.MissingPublicConstructor)
         pair <- resolveTypeArgsForMethodArguments(TypeRepr.of[Out], primaryConstructor)
         (typeByName, typeParams) = pair
+        providedFallbackValues = providedFallbackValueByFields(settings)
+          .asInstanceOf[Map[String, Vector[FieldFallback[Any]]]]
         // default value for case class field n (1 indexed) is obtained from Companion.apply$default$n
-        fallbackValues = primaryConstructor.paramSymss
+        defaultFallbackValues = primaryConstructor.paramSymss
           .pipe(if (typeParams.nonEmpty) ps => ps.tail else ps => ps)
           .headOption
           .toList
@@ -193,7 +197,12 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               val sym = mod.declaredMethod("apply$default$" + (idx + 1)).head
               param.name -> FieldFallback.Default(Ref(mod).select(sym).asExpr.asInstanceOf[Expr[Any]])
           }
-          .toMap ++ fallbackValueGetters(settings) // we want defaults to be overridden by provided values
+          .toMap
+        fallbackValues = (providedFallbackValues.keySet ++ defaultFallbackValues.keySet).map { fieldName =>
+          // we want defaults to have lower priority than provided values
+          fieldName -> (providedFallbackValues
+            .getOrElse(fieldName, Vector.empty) ++ defaultFallbackValues.get(fieldName).toVector)
+        }
       } yield ProductOutData.CaseClass(
         params =>
           New(TypeTree.of[Out])
@@ -209,13 +218,14 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
               param.name -> ProductOutData.ConstructorParam(
                 name = name,
                 tpe = typeByName(name).asType.asInstanceOf[Type[Any]],
-                fallback = fallbackValues
-                  .collectFirst {
+                fallback = fallbackValues.view
+                  .collect {
                     case (fallbackName, fallback)
                         if inputNameMatchesOutputName(fallbackName, name, settings.isFieldCaseInsensitive) =>
                       fallback
                   }
-                  .getOrElse(FieldFallback.Unavailable)
+                  .flatten
+                  .toVector
               )
             }
             .to(ListMap)

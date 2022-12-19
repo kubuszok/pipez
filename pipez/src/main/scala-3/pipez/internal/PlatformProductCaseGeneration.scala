@@ -25,28 +25,37 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     val sym          = TypeRepr.of[A].typeSymbol
     def isScala2Enum = sym.flags.is(Flags.Case | Flags.Module)
     def isScala3Enum = sym.flags.is(Flags.Case | Flags.Enum | Flags.JavaStatic)
-    (isScala2Enum || isScala3Enum) && isPublic(sym)
+    isPublic(sym) && (isScala2Enum || isScala3Enum)
 
   final def isJavaBean[A: Type]: Boolean =
     val sym = TypeRepr.of[A].typeSymbol
-    sym.isClassDef && !sym.flags.is(Flags.Abstract) && sym.declarations.exists(
-      isDefaultConstructor
-    ) && (sym.declaredMethods.exists(isJavaSetter) || sym.declaredMethods.exists(isVar))
+    val mem = sym.declarations
+    sym.isClassDef && !sym.flags.is(Flags.Abstract) && mem.exists(isDefaultConstructor) && mem.exists(isJavaSetterOrVar)
 
+  private val nonPrivateFlags = Flags.Private | Flags.PrivateLocal | Flags.Protected
   private def isPublic(sym: Symbol): Boolean =
-    !sym.flags.is(Flags.Private) && !sym.flags.is(Flags.PrivateLocal) && !sym.flags.is(Flags.Protected)
+    (sym.flags & nonPrivateFlags).is(Flags.EmptyFlags)
 
   private def isDefaultConstructor(ctor: Symbol): Boolean =
-    ctor.isClassConstructor && ctor.paramSymss.filterNot(_.exists(_.isType)).flatten.isEmpty && isPublic(ctor)
+    isPublic(ctor) && ctor.isClassConstructor && ctor.paramSymss.filterNot(_.exists(_.isType)).flatten.isEmpty
 
   private def isJavaGetter(getter: Symbol): Boolean =
-    ProductCaseGeneration.isGetterName(getter.name) && getter.paramSymss.flatten.isEmpty && isPublic(getter)
+    getter.isDefDef &&
+      isPublic(getter) &&
+      getter.paramSymss.flatten.isEmpty &&
+      ProductCaseGeneration.isGetterName(getter.name)
 
   private def isJavaSetter(setter: Symbol): Boolean =
-    ProductCaseGeneration.isSetterName(setter.name) && setter.paramSymss.flatten.size == 1 && isPublic(setter)
+    isPublic(setter) &&
+      setter.isDefDef &&
+      setter.paramSymss.flatten.size == 1 &&
+      ProductCaseGeneration.isSetterName(setter.name)
 
   private def isVar(setter: Symbol): Boolean =
-    setter.isValDef && setter.flags.is(Flags.Mutable)
+    isPublic(setter) && setter.isValDef && setter.flags.is(Flags.Mutable)
+
+  private def isJavaSetterOrVar(setter: Symbol): Boolean =
+    isJavaSetter(setter) || isVar(setter)
 
   final private case class Getter[Extracted, ExtractedField](
     tpe: Type[ExtractedField],
@@ -54,19 +63,22 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   )
   private def extractGetters[Extracted: Type]: ListMap[String, Getter[Extracted, Any]] = {
     val sym = TypeRepr.of[Extracted].typeSymbol
-    // apparently each case field is duplicated: "a" and "a ", "_1" and "_1" o_0 - the first is method, the other val
+    // apparently each case field is duplicated: "a" and "a ", "_1" and "_1 " o_0 - the first is method, the other val
     // the exceptions are cases in Scala 3 enum: they only have vals
-    (sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef) ++ sym.declaredMethods.filter(
-      isJavaGetter
-    )).map { method =>
-      val name = method.name
-      name -> Getter[Extracted, Any](
-        tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
-        get =
-          if (method.paramSymss.isEmpty) (in: Expr[Extracted]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
-          else (in: Expr[Extracted]) => in.asTerm.select(method).appliedToNone.asExpr
-      )
-    }.to(ListMap)
+    val caseFields  = sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef)
+    val javaGetters = sym.declaredMethods.filterNot(isGarbage).filter(isJavaGetter)
+    (caseFields ++ javaGetters)
+      .map { method =>
+        val name = method.name
+        name -> Getter[Extracted, Any](
+          tpe = returnType[Any](TypeRepr.of[In].memberType(method)),
+          get =
+            // macros distinct obj.method and obj.method()
+            if (method.paramSymss.isEmpty) (in: Expr[Extracted]) => in.asTerm.select(method).appliedToArgss(Nil).asExpr
+            else (in: Expr[Extracted]) => in.asTerm.select(method).appliedToNone.asExpr
+        )
+      }
+      .to(ListMap)
   }
 
   final def extractProductInData(settings: Settings): DerivationResult[ProductInData] =
@@ -128,6 +140,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       val fallbackValues = providedFallbackValueByFields(settings) // Java Beans don't have fallbacks to defaults
 
       val setters = sym.declaredMethods
+        .filterNot(isGarbage)
         .filter(s => isJavaSetter(s) || isVar(s))
         .map { setter =>
           val name = setter.name
@@ -178,7 +191,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
 
       (for {
         primaryConstructor <- DerivationResult.fromOption(
-          Option(TypeRepr.of[Out].typeSymbol.primaryConstructor).filter(s => !s.isNoSymbol)
+          Option(TypeRepr.of[Out].typeSymbol.primaryConstructor).filter(s => !s.isNoSymbol).filter(isPublic)
         )(DerivationError.MissingPublicConstructor)
         pair <- resolveTypeArgsForMethodArguments(TypeRepr.of[Out], primaryConstructor)
         (typeByName, typeParams) = pair

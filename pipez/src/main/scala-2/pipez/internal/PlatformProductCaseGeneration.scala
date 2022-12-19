@@ -21,40 +21,43 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   final def isCaseClass[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
     val mem = typeOf[A].members
-    sym.isClass && sym.asClass.isCaseClass && !sym.isAbstract && mem.exists(m => m.isConstructor && m.isPublic)
+    sym.isClass && sym.asClass.isCaseClass && !sym.isAbstract && sym.asClass.primaryConstructor.isPublic
   }
   final def isCaseObject[A: Type]: Boolean = {
-    val sym = typeOf[A].typeSymbol
-    // removed check for sym.asClass.isCaseClass since Scala 3 enums' without parameters didn't fulfill it
-    sym.isModuleClass && sym.isPublic
+    val sym          = typeOf[A].typeSymbol
+    def isScala2Enum = sym.asClass.isCaseClass
+    def isScala3Enum = sym.isStatic && sym.isFinal // paramless case in S3 cannot be checked for "case"
+    sym.isPublic && sym.isModuleClass && (isScala2Enum || isScala3Enum)
   }
   final def isJavaBean[A: Type]: Boolean = {
     val sym = typeOf[A].typeSymbol
     val mem = typeOf[A].members
-    sym.isClass && !sym.isAbstract && mem.exists(isDefaultConstructor) &&
-    (mem.exists(isJavaSetter) || mem.exists(isVar))
+    sym.isClass && !sym.isAbstract && mem.exists(isDefaultConstructor) && mem.exists(isJavaSetterOrVar)
   }
 
   private def isDefaultConstructor(ctor: Symbol): Boolean =
-    ctor.isConstructor && ctor.asMethod.paramLists.flatten.isEmpty && ctor.isPublic
+    ctor.isPublic && ctor.isConstructor && ctor.asMethod.paramLists.flatten.isEmpty
 
   private def isCaseClassField(field: Symbol): Boolean =
-    field.isMethod && field.asMethod.isGetter
+    field.isMethod && field.asMethod.isGetter && field.asMethod.isCaseAccessor
 
   private def isJavaGetter(getter: Symbol): Boolean =
-    getter.isMethod &&
-      ProductCaseGeneration.isGetterName(getter.asMethod.name.toString) &&
+    getter.isPublic &&
+      getter.isMethod &&
       getter.asMethod.paramLists.flatten.isEmpty &&
-      getter.isPublic
+      ProductCaseGeneration.isGetterName(getter.asMethod.name.toString)
 
   private def isJavaSetter(setter: Symbol): Boolean =
-    setter.isMethod &&
-      ProductCaseGeneration.isSetterName(setter.asMethod.name.toString) &&
+    setter.isPublic &&
+      setter.isMethod &&
       setter.asMethod.paramLists.flatten.size == 1 &&
-      setter.isPublic
+      ProductCaseGeneration.isSetterName(setter.asMethod.name.toString)
 
   private def isVar(setter: Symbol): Boolean =
-    setter.isTerm && setter.asTerm.name.toString.endsWith("_$eq") && setter.isPublic
+    setter.isPublic && setter.isTerm && setter.asTerm.name.toString.endsWith("_$eq")
+
+  private def isJavaSetterOrVar(setter: Symbol): Boolean =
+    isJavaSetter(setter) || isVar(setter)
 
   final private case class Getter[Extracted, ExtractedField](
     tpe: Type[ExtractedField],
@@ -71,6 +74,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         name -> Getter[Extracted, Any](
           tpe = returnTypeOf(typeOf[Extracted], getter).asInstanceOf[Type[Any]],
           get =
+            // macros distinct obj.method and obj.method()
             if (getter.asMethod.paramLists.isEmpty) (in: Expr[Extracted]) => c.Expr[Any](q"$in.$termName")
             else (in: Expr[Extracted]) => c.Expr[Any](q"$in.$termName()")
         )
@@ -152,7 +156,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
 
       (for {
         primaryConstructor <- DerivationResult.fromOption(
-          Out.decls.to(List).filterNot(isGarbage).find(m => m.isPublic && m.isConstructor)
+          Option(Out.typeSymbol).filter(_.isClass).map(_.asClass.primaryConstructor).filter(_.isPublic)
         )(DerivationError.MissingPublicConstructor)
         providedFallbackValues = providedFallbackValueByFields(settings)
           .asInstanceOf[Map[String, Vector[FieldFallback[Any]]]]

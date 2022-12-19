@@ -147,7 +147,7 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
 
     lazy val isEnumCaseInsensitive: Boolean = entries.contains(EnumCaseInsensitive)
 
-    lazy val fallbackValues: List[ConfigEntry.AddFallbackValue[?]] = entries.collect {
+    lazy val providedFallbackValues: List[ConfigEntry.AddFallbackValue[?]] = entries.collect {
       case config @ ConfigEntry.AddFallbackValue(_, _) => config
     }
 

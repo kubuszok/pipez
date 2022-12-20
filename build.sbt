@@ -6,7 +6,7 @@ ThisProject / versionScheme := Some("early-semver")
 val testCasesVersion = "0.2.2"
 
 // IDEs don't like projects which share sources
-val ideScala = scala3version
+val ideScala = scala2_13version
 Global / excludeLintKeys += ideSkipProject
 val only1JvmScalaInIde =
   MatrixAction.ForPlatforms(VirtualAxis.jvm).Configure(_.settings(ideSkipProject := (scalaVersion.value != ideScala)))

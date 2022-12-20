@@ -221,6 +221,10 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     final case class NotYetImplemented(msg: String) extends DerivationError
   }
 
+  final class LazyMessage(msg: => String) {
+    final def value: String = msg
+  }
+
   /** Helper which allows: use of for-comprehension, parallel error composition, logging */
   sealed trait DerivationResult[+A] extends Product with Serializable {
 
@@ -260,22 +264,22 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     }
 
     def diagnostic: Diagnostic
-    final def log(message: String): DerivationResult[A] = this match {
-      case Success(value, diagnostic)  => Success(value, diagnostic :+ message)
-      case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ message)
+    final def log(message: => String): DerivationResult[A] = this match {
+      case Success(value, diagnostic)  => Success(value, diagnostic :+ new LazyMessage(message))
+      case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ new LazyMessage(message))
     }
     final def logResult(success: A => String)(failure: List[DerivationError] => String): DerivationResult[A] =
       this match {
-        case DerivationResult.Success(value, _)  => log(success(value))
-        case DerivationResult.Failure(errors, _) => log(failure(errors))
+        case Success(value, diagnostic)  => Success(value, diagnostic :+ new LazyMessage(success(value)))
+        case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ new LazyMessage(failure(errors)))
       }
     final def logSuccess(success: A => String): DerivationResult[A] = this match {
-      case DerivationResult.Success(value, _) => log(success(value))
-      case DerivationResult.Failure(_, _)     => this
+      case DerivationResult.Success(value, diagnostics) => Success(value, diagnostic :+ new LazyMessage(success(value)))
+      case _                                            => this
     }
     final def logFailure(failure: List[DerivationError] => String): DerivationResult[A] = this match {
-      case DerivationResult.Success(_, _)      => this
-      case DerivationResult.Failure(errors, _) => log(failure(errors))
+      case Failure(errors, diagnostic) => Failure(errors, diagnostic :+ new LazyMessage(failure(errors)))
+      case _                           => this
     }
   }
   object DerivationResult {
@@ -290,7 +294,7 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
       diagnostic: Diagnostic
     ) extends DerivationResult[Nothing]
 
-    type Diagnostic = Vector[String]
+    type Diagnostic = Vector[LazyMessage]
 
     def pure[A](value: A):                           DerivationResult[A]       = Success(value, Vector.empty)
     def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error), Vector.empty)

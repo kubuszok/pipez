@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        jvm: ['graalvm-java17:22.3.0']
+        jvm: ['temurin-jre:1.19.0.1']
         scalaVersion: ["", 3]
         scalaPlatform: ["", JS, Native]
       fail-fast: false
@@ -29,6 +29,6 @@ jobs:
         with:
           jvm: ${{ matrix.jvm }}
       - name: Clean, Check code formatting, compile, test
-        run: sbt clean scalafmtCheck test:scalafmtCheck pipez$SUFFIX/Test/compile pipezDsl$SUFFIX/Test/compile pipez$SUFFIX/test pipezDsl$SUFFIX/test
+        run: sbt clean scalafmtCheck Test/scalafmtCheck pipez$SUFFIX/Test/compile pipezDsl$SUFFIX/Test/compile pipez$SUFFIX/test pipezDsl$SUFFIX/test
       - name: TOC Generator
         uses: technote-space/toc-generator@v4.0.0

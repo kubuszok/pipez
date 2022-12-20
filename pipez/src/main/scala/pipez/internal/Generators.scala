@@ -26,7 +26,7 @@ private[internal] trait Generators[Pipe[_, _], In, Out]
 
   /** Generate message to be displayed by macro on INFO level (if requested by config) */
   final def diagnosticsMessage[A](result: DerivationResult[A]): String =
-    "Macro diagnostics:\n" + result.diagnostic.map(" - " + _).mkString("\n")
+    "Macro diagnostics:\n" + result.diagnostic.map(" - " + _.value).mkString("\n")
 
   /** Should use platform-specific way of reporting information from macro on INFO level */
   def reportDiagnostics[A](result: DerivationResult[A]): Unit

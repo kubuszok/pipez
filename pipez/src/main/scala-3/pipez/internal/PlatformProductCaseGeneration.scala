@@ -63,10 +63,25 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   )
   private def extractGetters[Extracted: Type]: ListMap[String, Getter[Extracted, Any]] = {
     val sym = TypeRepr.of[Extracted].typeSymbol
-    // apparently each case field is duplicated: "a" and "a ", "_1" and "_1 " o_0 - the first is method, the other val
-    // the exceptions are cases in Scala 3 enum: they only have vals
-    val caseFields  = sym.caseFields.filter(if (sym.flags.is(Flags.Enum)) _.isValDef else _.isDefDef)
-    val javaGetters = sym.declaredMethods.filterNot(isGarbage).filter(isJavaGetter)
+    // case class fields appear once in sym.caseFields as vals and once in sym.declaredMethods as methods
+    // additionally sometimes they appear twice! once as "val name" and once as "method name " (notice space at the end
+    // of name). This breaks matching by order (tuples) but has to be fixed in a way that doesn't filter out fields
+    // for normal cases.
+    val caseFields = sym.caseFields.zipWithIndex
+      .groupBy(_._1.name.trim)
+      .view
+      .map {
+        case (_, Seq(fieldIdx, _)) if fieldIdx._1.isDefDef => fieldIdx
+        case (_, Seq(_, fieldIdx)) if fieldIdx._1.isDefDef => fieldIdx
+        case (_, fieldIdxs)                                => fieldIdxs.head
+      }
+      .toList
+      .sortBy(_._2)
+      .map(_._1)
+      .toList
+    val caseFieldNames               = caseFields.map(_.name.trim).toSet
+    def isCaseFieldName(sym: Symbol) = caseFieldNames(sym.name)
+    val javaGetters = sym.declaredMethods.filterNot(isGarbage).filterNot(isCaseFieldName).filter(isJavaGetter)
     (caseFields ++ javaGetters)
       .map { method =>
         val name = method.name

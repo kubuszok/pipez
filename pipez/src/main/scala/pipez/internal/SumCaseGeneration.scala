@@ -260,7 +260,7 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
   ): DerivationResult[EnumGeneratorData.InputSubtype] =
     DerivationResult.pure(EnumGeneratorData.InputSubtype.Handle(typeOf[InSubtype], pipe, path))
 }
-object SumCaseGeneration {
+private[internal] object SumCaseGeneration {
 
   def inputNameMatchesOutputName(inSubtype: String, outSubtype: String, caseInsensitiveSearch: Boolean): Boolean =
     if (caseInsensitiveSearch) inSubtype equalsIgnoreCase outSubtype else inSubtype == outSubtype

@@ -514,7 +514,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
       DerivationResult.fail(DerivationError.InvalidInput(s"Couldn't fallback on default value for $outParamName"))
   }
 }
-object ProductCaseGeneration {
+private[internal] object ProductCaseGeneration {
 
   private val getAccessor = raw"(?i)get(.)(.*)".r
   private val isAccessor  = raw"(?i)is(.)(.*)".r

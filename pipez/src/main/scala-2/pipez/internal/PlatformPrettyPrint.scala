@@ -6,7 +6,8 @@ import scala.reflect.internal.{ Reporter, TreeInfo }
 import scala.reflect.internal.util.Statistics
 
 // Needed to get into internal utilities used to print code
-class ExtensibleUniverse(u: scala.reflect.macros.Universe) extends scala.reflect.internal.SymbolTable {
+private[internal] class ExtensibleUniverse(u: scala.reflect.macros.Universe)
+    extends scala.reflect.internal.SymbolTable {
 
   private lazy val delegatedUniverse: scala.reflect.internal.SymbolTable =
     u.asInstanceOf[scala.reflect.internal.SymbolTable]
@@ -50,7 +51,7 @@ class ExtensibleUniverse(u: scala.reflect.macros.Universe) extends scala.reflect
   def newStrictTreeCopier: TreeCopier = delegatedUniverse.newStrictTreeCopier.asInstanceOf[TreeCopier]
 }
 
-class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUniverse(u) {
+private[internal] class PrettyPrintUniverse(u: scala.reflect.macros.Universe) extends ExtensibleUniverse(u) {
 
   // Keep in Sync with Dotty macro highlighter:
   // https://github.com/lampepfl/dotty/blob/master/compiler/src/scala/quoted/runtime/impl/printers/SyntaxHighlight.scala

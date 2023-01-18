@@ -33,6 +33,18 @@ object Settings {
     scalafmtOnCompile := true
   )
 
+  // documentation
+
+  def excludePackageInDocs(pkg: String) = Seq(
+    Compile / doc / scalacOptions ++= {
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, 13)) => Seq("-skip-packages", pkg)
+        case Some((3, _)) => Seq(s"-skip-by-id:$pkg")
+        case _ => Seq.empty
+      }
+    },
+  )
+
   // publishing
 
   val publishSettings = Seq(

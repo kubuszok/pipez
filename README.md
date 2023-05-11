@@ -11,7 +11,7 @@
 
 Scala library for type-safe data-transformations, which allows you to build-in Chimney-like abilities to your own type classes and effects.
 
-> Pipez is a result of research about possible ways of migrating Chimney to Scala 3. It focuses on a certain type class from Chimney- `TransformerF` - and while it attempts to replicate as much features as possible it is **not** intended to replace Chimney nor reimplement all of its features.
+> Pipez is a result of research about possible ways of migrating Chimney to Scala 3. It focuses on a certain **deprecated** type class from Chimney- `TransformerF` - and while it attempts to replicate as much features as possible it is **not** intended to replace Chimney nor reimplement all of its features.
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
@@ -221,7 +221,7 @@ trait Parser[From, To]:
   def parse(
     from:     From, // parsed input
     path:     Parser.Path, // Vector of fields/subtype matches leading to the value
-    failFast: Parser.ShouldFailFast // =:= Boolean, should be fail fast or continue
+    failFast: Parser.ShouldFailFast // =:= Boolean, should we fail fast or continue
   ): Parser.ParsingResult[To] // =:= Either[Errors, To], accumulates parsing errors
 
   final def parseFast(from: From): Parser.ParsingResult[To] =
@@ -1106,10 +1106,64 @@ trait PipeDerivation[Pipe[_, _]] {
 }
 ```
 
-For instance for `WithContextAndResult` the implementation could look like this:
+If you wonder how these `Context` and `Result` could be mapped back and forth with
+your types take a look at these examples:
+
+```scala
+// NonFailing[From, To] is equivalent to From => To
+//                                    or (From, Unit) => To
+trait NonFailing[From, To]:
+  def convert(from: From): To
+object NonFailing {
+  implicit val pd: PipeDerivation[NonFailing] = new PipeDerivation[NonFailing] {
+    type Context     = Unit
+    type Result[Out] = Out
+    // ...
+  }
+}
+
+// WithContext[From, To] is equivalent to (From, String) => To
+trait WithContext[From, To]:
+  def convert(from: From, pathToFrom: String): To
+object WithContext {
+  implicit val pd: PipeDerivation[WithContext] = new PipeDerivation[WithContext] {
+    type Context     = String
+    type Result[Out] = Out
+    // ...
+  }
+}
+
+// WithResultType[From, To] is equivalent to From => Either[String, To]
+//                                        or (From, Unit) => Either[String, To]
+trait WithResultType[From, To]:
+  def convert(from: From): Either[String, To]
+object WithContext {
+  implicit val pd: PipeDerivation[WithResultType] = new PipeDerivation[WithResultType] {
+    type Context     = Unit
+    type Result[Out] = Either[String, Out]
+    // ...
+  }
+}
+
+// WithContextAndResult[From, To] is equivalent to (From, String) => Either[String, To]
+trait WithContextAndResult[From, To]:
+  def convert(from: From, pathToFrom: String): Either[String, To]
+object WithContextAndResult {
+  implicit val pd: PipeDerivation[WithContextAndResult] = new PipeDerivation[WithContextAndResult] {
+    type Context     = String
+    type Result[Out] = Either[String, Out]
+    // ...
+  }
+}
+```
+
+The full implementation, for instance for `WithContextAndResult`, could look like this:
 
 ```scala
 import pipez.*
+
+trait WithContextAndResult[From, To]:
+  def convert(from: From, pathToFrom: String): Either[String, To]
 
 object WithContextAndResult
     extends PipeSemiautoSupport[WithContextAndResult]
@@ -1301,6 +1355,9 @@ Chimney focuses on giving user the best out-of-the-box developer experience:
 * it has options like providing pure values, generating pure values from transformed object,
 * for validated transformation it can provide a path to the failed field, showing: fields, subtypes, sequence index or
   map key or value that led to failure
+* it provides `PartialTransformer`s for the above, with fixed result type, which allows it to optimize the code
+  and provide consistent, predicatable behavior in an easy to use way
+* it deprecates `TransformerF`s in 0.7.0 for the reasons above with the intent to remove them in 0.8.0
 
 Pipez on the other hand is targeting library maintainers:
 
@@ -1315,3 +1372,5 @@ Pipez on the other hand is targeting library maintainers:
   out of implicitly acquired functions `(In2, Ctx) => Result[Out2]` mapping each field/subtype `In2` in `In`
   to a corresponding field/subtype `Out2` in `Out` (transformations are not necessary if `In2 >: Out2`)
 * how functions/type classes are combined is defined with an implicit implementation of `PipezDerivation[F]`
+* since internals of your `F` are opaque to Pipez - it works with them only through the `PipeDerivation[F]` interface -
+  many optimizations are impossible to implement, so certain overhead is unavoidable

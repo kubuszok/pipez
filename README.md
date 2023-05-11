@@ -1137,7 +1137,7 @@ object WithContext {
 //                                        or (From, Unit) => Either[String, To]
 trait WithResultType[From, To]:
   def convert(from: From): Either[String, To]
-object WithContext {
+object WithResultType {
   implicit val pd: PipeDerivation[WithResultType] = new PipeDerivation[WithResultType] {
     type Context     = Unit
     type Result[Out] = Either[String, Out]

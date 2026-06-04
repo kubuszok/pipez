@@ -68,7 +68,7 @@ object Settings {
         <developer>
           <id>MateuszKubuszok</id>
           <name>Mateusz Kubuszok</name>
-          <url>https://github.com/MateuszKubuszok</url>
+          <url>https://kubuszok.com</url>
         </developer>
       </developers>
   )

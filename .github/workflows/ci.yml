@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: coursier/cache-action@v6
-      - uses: coursier/setup-action@v1.3.0
+      - uses: coursier/setup-action@v3.0.0
         with:
           jvm: ${{ matrix.jvm }}
       - name: Clean, Check code formatting, compile, test

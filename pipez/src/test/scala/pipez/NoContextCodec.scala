@@ -6,7 +6,7 @@ trait NoContextCodec[In, Out] {
   def decode(in: In): Either[List[String], Out]
 }
 
-object NoContextCodec extends PipeSemiautoSupport[NoContextCodec] with PipeSemiautoConfiguredSupport[NoContextCodec] {
+object NoContextCodec extends PipeSemiautoConfiguredSupport[NoContextCodec] {
 
   // Information for macros to let them now how to combine smaller instances into bigger instances
   implicit val pipeDerivation: PipeDerivation.NoContext[NoContextCodec] = new PipeDerivation.NoContext[NoContextCodec] {

@@ -20,7 +20,16 @@ trait PipezConfigParserScala3 { this: PipezMacrosImpl & PipezMacros[?, ?, ?] & M
     }
 
     def toHExpr(tree: Tree): Expr[Any] = tree.asExpr.asInstanceOf[Expr[Any]]
-    def toHType(tree: TypeTree): ?? = tree.tpe.asType.asInstanceOf[??]
+    def toHType(tree: TypeTree): ?? =
+      toHTypeImpl(tree.tpe.asType)
+
+    def toHTypeImpl(sqType: scala.quoted.Type[?]): ?? = {
+      type T
+      given scala.quoted.Type[T] = sqType.asInstanceOf[scala.quoted.Type[T]]
+      // scala.quoted.Type[T] IS hearth's Type[T] on Scala 3
+      val hearthType: Type[T] = summon[scala.quoted.Type[T]].asInstanceOf[Type[T]]
+      hearthType.as_??
+    }
 
     def extract(tree: Term, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
       case Inlined(_, List(), expr)         => extract(expr, acc)

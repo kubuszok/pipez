@@ -55,7 +55,7 @@ class FunctionDerivationSpec extends munit.FunSuite {
   test("(Ctx, In) => Out derivation should work with a little help".format()) {
     final case class Ctx()
     // only needed in Scala 2!
-    implicit val ctxDerivation: PipeDerivation[Function2[*, Ctx, *]] = PipeDerivation.contextFunction[Ctx]()
+    implicit lazy val ctxDerivation: PipeDerivation[Function2[*, Ctx, *]] = PipeDerivation.contextFunction[Ctx]()
     // default constructor -> default constructor
     assertEquals(
       PipeDerivation.derive[Function2[*, Ctx, *], ZeroIn, ZeroOut].apply(ZeroIn(), Ctx()),
@@ -108,7 +108,7 @@ class FunctionDerivationSpec extends munit.FunSuite {
   }
 
   test("In => Out derivation should handle field conversion") {
-    implicit val fun: Int => String = _.toString
+    implicit lazy val fun: Int => String = _.toString
     // case class -> case class
     assertEquals(
       PipeDerivation.derive[Function1, CaseOnesIn, CaseOnesOutMod].apply(CaseOnesIn(1)),

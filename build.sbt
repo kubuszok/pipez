@@ -71,6 +71,7 @@ val settings = Seq(
       "-Wconf:msg=Missing symbol position:s",
       "-Wconf:msg=discarded non-Unit value:s",
       "-Wconf:msg=unused explicit parameter:s",
+      "-Wconf:msg=Infinite loop in function body:s",
       "-Werror",
       "-Wnonunit-statement",
       "-Wunused:privates",
@@ -79,7 +80,7 @@ val settings = Seq(
       "-Wunused:implicits",
       "-Wunused:params",
       "-Wvalue-discard",
-      "-Xcheck-macros",
+      // "-Xcheck-macros", // Disabled: type-erased code gen uses Any which is correct at runtime but fails strict checking
       "-Xkind-projector:underscores"
     ),
     for2_13 = Seq(

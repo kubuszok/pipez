@@ -20,6 +20,8 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
 
   override type Pipe[A, B] = P[A, B]
 
+  override implicit lazy val typeOfAny: Type[Any] = Type.of[Any]
+
   override implicit lazy val PipeCtor: Type.Ctor2[Pipe] =
     Type.Ctor2.fromUntyped[P](pipeTpe.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
 

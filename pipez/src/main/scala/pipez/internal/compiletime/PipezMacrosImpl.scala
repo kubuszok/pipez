@@ -46,17 +46,19 @@ trait PipezMacrosImpl
   /** Build a block expression: { stmt0; stmt1; ...; result } */
   def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any]
 
-  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index,
-    * then reads all fields from the array and calls the case class primary constructor.
-    * The parameter types and constructor are resolved from the case class info. */
+  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index, then reads all fields from the
+    * array and calls the case class primary constructor. The parameter types and constructor are resolved from the case
+    * class info.
+    */
   def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
   ): Expr[Any]
 
-  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index,
-    * then reads all fields from the array, calls each bean setter, and returns the bean. */
+  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index, then reads all fields from the
+    * array, calls each bean setter, and returns the bean.
+    */
   def generateArrayToBeanFn[Out: Type](
       beanFields: List[(??, Method)],
       defaultConstructor: Method,
@@ -67,26 +69,26 @@ trait PipezMacrosImpl
   // ---- Settings ----
 
   final class Settings(val entries: List[ConfigEntry]) {
-    lazy val isDiagnosticsEnabled: Boolean       = entries.contains(ConfigEntry.EnableDiagnostics)
-    lazy val isFieldCaseInsensitive: Boolean     = entries.contains(ConfigEntry.FieldCaseInsensitive)
-    lazy val isEnumCaseInsensitive: Boolean      = entries.contains(ConfigEntry.EnumCaseInsensitive)
+    lazy val isDiagnosticsEnabled: Boolean = entries.contains(ConfigEntry.EnableDiagnostics)
+    lazy val isFieldCaseInsensitive: Boolean = entries.contains(ConfigEntry.FieldCaseInsensitive)
+    lazy val isEnumCaseInsensitive: Boolean = entries.contains(ConfigEntry.EnumCaseInsensitive)
     lazy val isRecursiveDerivationEnabled: Boolean = entries.contains(ConfigEntry.EnableRecursiveDerivation)
     lazy val isFallbackToDefaultEnabled: Boolean = entries.contains(ConfigEntry.EnableFallbackToDefaults)
 
-    lazy val addedFields: List[ConfigEntry.AddField]            = entries.collect { case e: ConfigEntry.AddField => e }
-    lazy val renamedFields: List[ConfigEntry.RenameField]       = entries.collect { case e: ConfigEntry.RenameField => e }
-    lazy val pluggedFields: List[ConfigEntry.PlugInField]       = entries.collect { case e: ConfigEntry.PlugInField => e }
+    lazy val addedFields: List[ConfigEntry.AddField] = entries.collect { case e: ConfigEntry.AddField => e }
+    lazy val renamedFields: List[ConfigEntry.RenameField] = entries.collect { case e: ConfigEntry.RenameField => e }
+    lazy val pluggedFields: List[ConfigEntry.PlugInField] = entries.collect { case e: ConfigEntry.PlugInField => e }
     lazy val fallbackValues: List[ConfigEntry.AddFallbackValue] = entries.collect {
       case e: ConfigEntry.AddFallbackValue => e
     }
-    lazy val removedSubtypes: List[ConfigEntry.RemoveSubtype] = entries.collect {
-      case e: ConfigEntry.RemoveSubtype => e
+    lazy val removedSubtypes: List[ConfigEntry.RemoveSubtype] = entries.collect { case e: ConfigEntry.RemoveSubtype =>
+      e
     }
-    lazy val renamedSubtypes: List[ConfigEntry.RenameSubtype] = entries.collect {
-      case e: ConfigEntry.RenameSubtype => e
+    lazy val renamedSubtypes: List[ConfigEntry.RenameSubtype] = entries.collect { case e: ConfigEntry.RenameSubtype =>
+      e
     }
-    lazy val pluggedSubtypes: List[ConfigEntry.PlugInSubtype] = entries.collect {
-      case e: ConfigEntry.PlugInSubtype => e
+    lazy val pluggedSubtypes: List[ConfigEntry.PlugInSubtype] = entries.collect { case e: ConfigEntry.PlugInSubtype =>
+      e
     }
 
     def stripForRecursion: Settings = new Settings(
@@ -127,10 +129,10 @@ trait PipezMacrosImpl
   // ---- Rule infrastructure ----
 
   abstract class PipezRule(val name: String) extends Rule {
-    def apply[In: Type, Out: Type](using ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]]
+    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]]
   }
 
-  def deriveResultRecursively[In: Type, Out: Type](using
+  def deriveResultRecursively[In: Type, Out: Type](implicit
       ctx: DerivationCtx[In, Out]
   ): MIO[Expr[Pipe[In, Out]]] = {
     debugLog(s"  deriveResultRecursively: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
@@ -141,7 +143,7 @@ trait PipezMacrosImpl
         PipezHandleAsValueTypeRule,
         PipezHandleAsCaseClassRule,
         PipezHandleAsEnumRule
-      )(rule => { debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }).flatMap {
+      ) { rule => debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }.flatMap {
         case Right(result) =>
           debugLog(s"    rule matched!")
           MIO.pure(result)
@@ -164,11 +166,11 @@ trait PipezMacrosImpl
     Expr.summonImplicit[Pipe[In, Out]].toOption
   }
 
-  def summonOrDerive[In: Type, Out: Type](using
+  def summonOrDerive[In: Type, Out: Type](implicit
       ctx: DerivationCtx[?, ?]
-  ): MIO[Expr[Pipe[In, Out]]] = {
+  ): MIO[Expr[Pipe[In, Out]]] =
     summonPipe[In, Out] match {
-      case Some(pipe) => MIO.pure(pipe)
+      case Some(pipe)                                        => MIO.pure(pipe)
       case None if ctx.settings.isRecursiveDerivationEnabled =>
         val newCtx = DerivationCtx[In, Out](
           inType = Type[In],
@@ -176,7 +178,7 @@ trait PipezMacrosImpl
           settings = ctx.settings.stripForRecursion,
           derivedPipeType = ctx.derivedPipeType
         )
-        deriveResultRecursively[In, Out](using Type[In], Type[Out], newCtx)
+        deriveResultRecursively[In, Out](Type[In], Type[Out], newCtx)
       case None =>
         MIO.fail(
           new RuntimeException(
@@ -184,20 +186,19 @@ trait PipezMacrosImpl
           )
         )
     }
-  }
 
   // ---- Path helpers ----
 
   def pathFieldCode(name: String): Expr[Path] =
-    Expr.quote { Path.root.field(Expr.splice(Expr(name))) }
+    Expr.quote(Path.root.field(Expr.splice(Expr(name))))
 
   def pathSubtypeCode(name: String): Expr[Path] =
-    Expr.quote { Path.root.subtype(Expr.splice(Expr(name))) }
+    Expr.quote(Path.root.subtype(Expr.splice(Expr(name))))
 
   // ---- Name matching ----
 
   private val getAccessor = raw"(?i)get(.)(.*)".r
-  private val isAccessor  = raw"(?i)is(.)(.*)".r
+  private val isAccessor = raw"(?i)is(.)(.*)".r
 
   def dropGetIs(name: String): String = name match {
     case getAccessor(head, tail) => head.toLowerCase + tail
@@ -206,7 +207,7 @@ trait PipezMacrosImpl
   }
 
   def inputNameMatchesOutputName(inName: String, outName: String, caseInsensitive: Boolean): Boolean = {
-    val in  = Set(inName, dropGetIs(inName))
+    val in = Set(inName, dropGetIs(inName))
     val out = Set(outName, dropGetIs(outName))
     if (caseInsensitive) in.exists(a => out.exists(b => a.equalsIgnoreCase(b)))
     else in.intersect(out).nonEmpty
@@ -226,10 +227,10 @@ trait PipezMacrosImpl
     f.close()
   }
 
-  /** Top-level derivation skips PipezUseImplicitRule to avoid self-referential
-    * implicit cycles (e.g. implicit lazy val codec = derive(config) would
-    * summon itself via the implicit rule). */
-  private def deriveTopLevel[In: Type, Out: Type](using
+  /** Top-level derivation skips PipezUseImplicitRule to avoid self-referential implicit cycles (e.g. implicit lazy val
+    * codec = derive(config) would summon itself via the implicit rule).
+    */
+  private def deriveTopLevel[In: Type, Out: Type](implicit
       ctx: DerivationCtx[In, Out]
   ): MIO[Expr[Pipe[In, Out]]] = {
     debugLog(s"  deriveTopLevel: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
@@ -239,7 +240,7 @@ trait PipezMacrosImpl
         PipezHandleAsValueTypeRule,
         PipezHandleAsCaseClassRule,
         PipezHandleAsEnumRule
-      )(rule => { debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }).flatMap {
+      ) { rule => debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }.flatMap {
         case Right(result) =>
           debugLog(s"    rule matched!")
           MIO.pure(result)
@@ -266,21 +267,21 @@ trait PipezMacrosImpl
       debugLog(s"  inside Log.namedScope")
       for {
         _ <- Environment.loadStandardExtensions().toMIO(allowFailures = true)
-        result <- deriveTopLevel[In, Out](using Type[In], Type[Out], ctx)
+        result <- deriveTopLevel[In, Out](Type[In], Type[Out], ctx)
       } yield result
     }
     debugLog(s"  MIO created, calling runToExprOrFail")
     result.runToExprOrFail(
-        "PipeDerivation.derive",
-        infoRendering = DontRender,
-        errorRendering = DontRender,
-        timeout = scala.concurrent.duration.FiniteDuration(5, java.util.concurrent.TimeUnit.SECONDS)
-      ) { (_, errors) =>
-        val msg = s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated:\n" +
-          errors.map(e => s" - ${e.getMessage}").mkString("\n")
-        debugLog(s"  ERROR: $msg")
-        msg
-      }
+      "PipeDerivation.derive",
+      infoRendering = DontRender,
+      errorRendering = DontRender,
+      timeout = scala.concurrent.duration.FiniteDuration(5, java.util.concurrent.TimeUnit.SECONDS)
+    ) { (_, errors) =>
+      val msg = s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated:\n" +
+        errors.map(e => s" - ${e.getMessage}").mkString("\n")
+      debugLog(s"  ERROR: $msg")
+      msg
+    }
   }
 
   // ---- Config parser (implemented by platform-specific bridges) ----

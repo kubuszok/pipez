@@ -281,9 +281,15 @@ final class PipezMacro(val c: blackbox.Context) {
     )
   }
 
-  private def fixTypes[Out](expr: c.Expr[Out]): c.Expr[Out] =
+  private def fixTypes[Out: WeakTypeTag](expr: c.Expr[Out]): c.Expr[Out] =
     try c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree)))
-    catch { case e: scala.reflect.macros.TypecheckException => c.abort(c.enclosingPosition, e.msg) }
+    catch {
+      case _: scala.reflect.macros.TypecheckException =>
+        // If re-typechecking fails (e.g., enum invariance), wrap in asInstanceOf and try again
+        val outTpe = c.weakTypeOf[Out]
+        try c.Expr[Out](c.typecheck(tree = c.untypecheck(q"""${expr.tree}.asInstanceOf[$outTpe]""")))
+        catch { case e2: scala.reflect.macros.TypecheckException => c.abort(c.enclosingPosition, e2.msg) }
+    }
 
   def deriveDefault[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]

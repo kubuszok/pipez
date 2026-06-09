@@ -28,6 +28,11 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     f.close()
   }
 
+  // Override to avoid cross-quotes plugin recursive implicit self-reference.
+  // Use direct scala.quoted.Type.of instead of hearth's cross-quotes Type.of.
+  @nowarn("msg=unused") implicit override lazy val typeOfAny: Type[Any] =
+    SQType.of[Any](using quotes).asInstanceOf[Type[Any]]
+
   @nowarn("msg=Infinite loop|unused") implicit override lazy val PipeCtor: Type.Ctor2[Pipe] = {
     debugLog("PipeCtor init start")
     val pipeTypeRepr = TypeRepr.of(using pipeTypeQ)
@@ -66,15 +71,26 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     pdExpr.asInstanceOf[Expr[PipeDerivation.Aux[P, Ctx0, Res0]]]
 
   // ---- Code generation implementations ----
-  // All methods use Select/Apply tree construction to avoid needing SQType[Res0]
-  // in quote blocks, since Res0 is a HKT that cannot be represented as a quoted Type.
 
   override def generateLift[In: Type, Out: Type](
       body: (Expr[Any], Expr[Any]) => Expr[Any]
+  ): Expr[Pipe[In, Out]] =
+    // Extract implicit types in a separate block to avoid recursive given self-reference (SOE)
+    // and forward reference errors between the val and given definitions
+    generateLiftImpl[In, Out](
+      summon[Type[In]].asInstanceOf[SQType[In]],
+      summon[Type[Out]].asInstanceOf[SQType[Out]],
+      body
+    )
+
+  private def generateLiftImpl[In, Out](
+      inSQType: SQType[In],
+      outSQType: SQType[Out],
+      body: (Expr[Any], Expr[Any]) => Expr[Any]
   ): Expr[Pipe[In, Out]] = {
     given SQType[P] = pipeTypeQ
-    @nowarn("msg=Infinite loop") given SQType[In] = summon[Type[In]].asInstanceOf[SQType[In]]
-    @nowarn("msg=Infinite loop") given SQType[Out] = summon[Type[Out]].asInstanceOf[SQType[Out]]
+    given SQType[In] = inSQType
+    given SQType[Out] = outSQType
     val pd = pdTyped
 
     '{
@@ -82,35 +98,56 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
         val _in = in
         val _ctx = ctx
         ${
-          body(
+          val bodyResult = body(
             '{ _in }.asInstanceOf[Expr[Any]],
             '{ _ctx }.asInstanceOf[Expr[Any]]
-          ).asInstanceOf[Expr[Res0[Out]]]
+          )
+          // Insert tree-level asInstanceOf to cast Result[Any] to Result[Out]
+          val bodyTerm = bodyResult.asInstanceOf[SQExpr[Any]].asTerm
+          val expectedType = resCtorUntypedType.appliedTo(TypeRepr.of[Out])
+          val casted = TypeApply(Select.unique(bodyTerm, "asInstanceOf"), List(Inferred(expectedType)))
+          casted.asExpr.asInstanceOf[Expr[Res0[Out]]]
         }
       }
     }.asInstanceOf[Expr[Pipe[In, Out]]]
   }
+
+  // Use tree construction with proper type handling to avoid ScopeException.
+  // The key insight: expressions from one splice (like '{ _ctx }) can be used in
+  // tree construction (Select/Apply) without triggering ScopeException, as long as
+  // we don't create new quote blocks that would check splice ownership.
+
+  private def pdTerm: Term = pdExpr.asInstanceOf[SQExpr[Any]].asTerm
+
+  private def toTerm(e: Expr[Any]): Term = e.asInstanceOf[SQExpr[Any]].asTerm
 
   override def generateUnlift(
       pipe: Expr[Any],
       in: Expr[Any],
       ctx: Expr[Any]
   ): Expr[Any] = {
-    given SQType[P] = pipeTypeQ
-    val pd = pdTyped
-    val pipeExpr = pipe.asInstanceOf[Expr[P[Any, Any]]]
-    val inExpr = in.asInstanceOf[Expr[Any]]
-    val ctxExpr = ctx.asInstanceOf[Expr[Ctx0]]
-
-    '{ $pd.unlift[Any, Any]($pipeExpr, $inExpr, $ctxExpr) }.asInstanceOf[Expr[Any]]
+    val anyTR = TypeRepr.of[Any]
+    val pipeTR = PipeCtor.apply[Any, Any](using typeOfAny, typeOfAny).asInstanceOf[SQType[?]] match {
+      case '[t] => TypeRepr.of[t]
+    }
+    // pd.unlift[Any, Any](pipe.asInstanceOf[Pipe[Any, Any]], in, ctx)
+    val unliftSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("unlift").head)
+    val pipeCast = TypeApply(Select.unique(toTerm(pipe), "asInstanceOf"), List(Inferred(pipeTR)))
+    val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
+    val applied = unliftSel
+      .appliedToTypes(List(anyTR, anyTR))
+      .appliedToArgs(List(pipeCast, toTerm(in), ctxCast))
+    applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
   override def generatePureResult(a: Expr[Any]): Expr[Any] = {
-    given SQType[P] = pipeTypeQ
-    val pd = pdTyped
-    val aExpr = a.asInstanceOf[Expr[Any]]
-
-    '{ $pd.pureResult[Any]($aExpr) }.asInstanceOf[Expr[Any]]
+    val anyTR = TypeRepr.of[Any]
+    // pd.pureResult[Any](a) using tree construction to stay in same splice context
+    val pureResultSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("pureResult").head)
+    val applied = pureResultSel
+      .appliedToType(anyTR)
+      .appliedTo(toTerm(a))
+    applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
   override def generateMergeResults(
@@ -119,23 +156,27 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
       rb: Expr[Any],
       f: Expr[Any]
   ): Expr[Any] = {
-    given SQType[P] = pipeTypeQ
-    val pd = pdTyped
-    val ctxExpr = ctx.asInstanceOf[Expr[Ctx0]]
-    val raExpr = ra.asInstanceOf[Expr[Res0[Any]]]
-    val rbExpr = rb.asInstanceOf[Expr[Res0[Any]]]
-    val fExpr = f.asInstanceOf[Expr[(Any, Any) => Any]]
-
-    '{ $pd.mergeResults[Any, Any, Any]($ctxExpr, $raExpr, $rbExpr, $fExpr) }.asInstanceOf[Expr[Any]]
+    val anyTR = TypeRepr.of[Any]
+    val resTR = resCtorUntypedType.appliedTo(anyTR)
+    val fn2TR = TypeRepr.of[(Any, Any) => Any]
+    // pd.mergeResults[Any, Any, Any](ctx, ra, rb, f)
+    val mergeResultsSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("mergeResults").head)
+    // Cast arguments to expected types
+    val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
+    val raCast = TypeApply(Select.unique(toTerm(ra), "asInstanceOf"), List(Inferred(resTR)))
+    val rbCast = TypeApply(Select.unique(toTerm(rb), "asInstanceOf"), List(Inferred(resTR)))
+    val fCast = TypeApply(Select.unique(toTerm(f), "asInstanceOf"), List(Inferred(fn2TR)))
+    val applied = mergeResultsSel
+      .appliedToTypes(List(anyTR, anyTR, anyTR))
+      .appliedToArgs(List(ctxCast, raCast, rbCast, fCast))
+    applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
   override def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any] = {
-    given SQType[P] = pipeTypeQ
-    val pd = pdTyped
-    val ctxExpr = ctx.asInstanceOf[Expr[Ctx0]]
-    val pExpr = path.asInstanceOf[Expr[Path]]
-
-    '{ $pd.updateContext($ctxExpr, $pExpr) }.asInstanceOf[Expr[Any]]
+    val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
+    val updateContextSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("updateContext").head)
+    val applied = updateContextSel.appliedToArgs(List(ctxCast, toTerm(path)))
+    applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
   // ---- Forwarding entry points ----

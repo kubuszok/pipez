@@ -17,6 +17,11 @@ trait PipezMacrosImpl
 
   type Pipe[_, _]
 
+  // Provide Type[Any] for rule impls that need it in implicit scope.
+  // Implemented in platform-specific bridges to avoid cross-quotes plugin
+  // recursive implicit self-reference on Scala 3.
+  implicit def typeOfAny: Type[Any]
+
   implicit def PipeCtor: Type.Ctor2[Pipe]
 
   def pdExpr: Expr[Any]

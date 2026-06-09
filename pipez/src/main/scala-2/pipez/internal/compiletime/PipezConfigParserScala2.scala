@@ -13,13 +13,20 @@ trait PipezConfigParserScala2 { this: PipezMacrosImpl & MacroCommonsScala2 =>
 
     def extractPath(in: Tree): Either[String, String] = in match {
       case Block(List(defn: DefDef), _) => extractPath(defn.rhs)
+      case Function(_, body)            => extractPath(body)
       case Select(_, field)             => Right(field.decodedName.toString)
       case Apply(Select(_, get), Nil)   => Right(get.decodedName.toString)
       case Ident(_)                     => Right("")
+      case Typed(expr, _)               => extractPath(expr)
       case _                            => Left(s"Unsupported path expression")
     }
 
     def toHExpr(t: Tree): Expr[Any] = c.Expr(t)(typeOfAny.asInstanceOf[c.WeakTypeTag[Any]]).asInstanceOf[Expr[Any]]
+
+    def toHType(tpe: c.universe.Type): ?? = {
+      val tag: Type[Any] = c.WeakTypeTag(tpe).asInstanceOf[Type[Any]]
+      tag.as_??
+    }
 
     def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
       case TypeApply(Select(_, name), _) if name.decodedName.toString == "apply" =>
@@ -59,7 +66,7 @@ trait PipezConfigParserScala2 { this: PipezMacrosImpl & MacroCommonsScala2 =>
           if name.decodedName.toString == "addFallbackToValue" =>
         extract(
           expr,
-          ConfigEntry.AddFallbackValue(fallbackTypeTree.tpe.asInstanceOf[??], toHExpr(fallbackValue)) :: acc
+          ConfigEntry.AddFallbackValue(toHType(fallbackTypeTree.tpe), toHExpr(fallbackValue)) :: acc
         )
       case Select(expr, name) if name.decodedName.toString == "enableFallbackToDefaults" =>
         extract(expr, ConfigEntry.EnableFallbackToDefaults :: acc)
@@ -67,15 +74,15 @@ trait PipezConfigParserScala2 { this: PipezMacrosImpl & MacroCommonsScala2 =>
           if name.decodedName.toString == "removeSubtype" =>
         extract(
           expr,
-          ConfigEntry.RemoveSubtype(inputSubtype.tpe.asInstanceOf[??], toHExpr(pipe)) :: acc
+          ConfigEntry.RemoveSubtype(toHType(inputSubtype.tpe), toHExpr(pipe)) :: acc
         )
       case TypeApply(Select(expr, name), List(inputSubtype, outputSubtype))
           if name.decodedName.toString == "renameSubtype" =>
         extract(
           expr,
           ConfigEntry.RenameSubtype(
-            inputSubtype.tpe.asInstanceOf[??],
-            outputSubtype.tpe.asInstanceOf[??]
+            toHType(inputSubtype.tpe),
+            toHType(outputSubtype.tpe)
           ) :: acc
         )
       case Apply(TypeApply(Select(expr, name), List(inputSubtype, outputSubtype)), List(pipe))
@@ -83,8 +90,8 @@ trait PipezConfigParserScala2 { this: PipezMacrosImpl & MacroCommonsScala2 =>
         extract(
           expr,
           ConfigEntry.PlugInSubtype(
-            inputSubtype.tpe.asInstanceOf[??],
-            outputSubtype.tpe.asInstanceOf[??],
+            toHType(inputSubtype.tpe),
+            toHType(outputSubtype.tpe),
             toHExpr(pipe)
           ) :: acc
         )

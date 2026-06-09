@@ -184,6 +184,14 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     Block(stats.toList, resTerm).asExpr.asInstanceOf[Expr[Any]]
   }
 
+  // No-op on Scala 3: the generateLiftImpl already casts the body result.
+  override def eraseExprType(expr: Expr[Any]): Expr[Any] = expr
+
+  // On Scala 3, generateLiftImpl already handles the body cast via asInstanceOf.
+  override def generateLiftForEnum[In: Type, Out: Type](
+      body: (Expr[Any], Expr[Any]) => Expr[Any]
+  ): Expr[Pipe[In, Out]] = generateLift[In, Out](body)
+
   override def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,

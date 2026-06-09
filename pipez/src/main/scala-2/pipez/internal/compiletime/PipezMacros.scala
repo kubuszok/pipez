@@ -177,21 +177,33 @@ final class PipezMacro(val c: blackbox.Context) {
 
   type ConstructorWeakTypeTag[F[_, _]] = WeakTypeTag[F[Any, Nothing]]
 
+  private def extractConcreteTypes(pdExpr: c.Expr[?]): (c.Type, c.Type) = {
+    val pdTree = pdExpr.tree
+    val declaredT = pdTree.tpe.widen
+    // Re-summon the implicit to get its full refined type (including Aux type members)
+    val implTree = c.inferImplicitValue(declaredT, silent = true)
+    val pdTpe = if (implTree != EmptyTree) implTree.tpe.widen else declaredT
+
+    val ctxMember = pdTpe.member(TypeName("Context"))
+    val ctxTpe = ctxMember.typeSignatureIn(pdTpe).dealias
+
+    val resMember = pdTpe.member(TypeName("Result"))
+    val resSig = resMember.typeSignatureIn(pdTpe)
+    // For `type Result[A] = Either[..., A]`, resSig is a PolyType with resultType = Either[..., A]
+    // For `type Result[A] = A`, resSig is a PolyType with resultType = A (the type param itself)
+    // Use dealias to resolve through type aliases
+    val resTpe = resSig.dealias match {
+      case pt if pt.typeParams.nonEmpty => pt.resultType.dealias.typeConstructor
+      case other                        => other.typeConstructor
+    }
+
+    (ctxTpe, resTpe)
+  }
+
   private def macros[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ) = {
-    // Extract Context and Result concrete types using c.typecheck on method calls.
-    // This resolves through the implicit value's refinement type.
-    val pdTree = pipeDerivation.tree
-    // Resolve Context by calling updateContext and extracting the return type
-    val ctxTpe = c
-      .typecheck(
-        q"""(null: _root_.pipez.Path) match { case _p => $pdTree.updateContext($pdTree.updateContext(null.asInstanceOf[Any], _p), _p) }"""
-      )
-      .tpe
-      .dealias
-    // Resolve Result by calling pureResult and extracting the return type
-    val resTpe = c.typecheck(q"""$pdTree.pureResult(1)""").tpe.dealias.typeConstructor
+    val (ctxTpe, resTpe) = extractConcreteTypes(pipeDerivation)
     new PipezMacrosImpl2[P, Any, ({ type R[A] = Any })#R, In, Out](c)(
       pipeTpe = c.weakTypeOf[P[Any, Nothing]].typeConstructor,
       ctxTpe0 = ctxTpe,

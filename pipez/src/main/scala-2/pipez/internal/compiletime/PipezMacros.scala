@@ -29,19 +29,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
   implicit override lazy val PipeCtor: Type.Ctor2[Pipe] =
     Type.Ctor2.fromUntyped[P](pipeTpe.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
 
-  private lazy val ctxTpe: c.Type = {
-    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
-    val updateContextCall = c.typecheck(q"""$pdTree.updateContext((??? : Any).asInstanceOf[${pd.actualType
-        .asInstanceOf[c.Type]
-        .member(TypeName("Context"))
-        .asType
-        .toType
-        .asSeenFrom(
-          pd.actualType.asInstanceOf[c.Type],
-          pd.actualType.asInstanceOf[c.Type].typeSymbol
-        )}], (??? : Any).asInstanceOf[_root_.pipez.Path])""")
-    updateContextCall.tpe.dealias
-  }
+  private lazy val ctxTpe: c.Type = c.universe.definitions.AnyTpe
 
   private lazy val resTpe: c.Type = {
     val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
@@ -51,10 +39,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
 
   private lazy val pdTyped: c.Expr[Any] = {
     val expr = pd.asInstanceOf[c.Expr[PipeDerivation[P]]]
-    val PipeTc = pipeTpe.asInstanceOf[c.Type]
-    val CtxT = ctxTpe
-    val ResT = resTpe.typeConstructor
-    c.Expr[Any](q"""$expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT]]""")(anyTag)
+    mkExpr(q"""$expr""")
   }
 
   override lazy val pdExpr: Expr[Any] = pdTyped.asInstanceOf[Expr[Any]]
@@ -67,16 +52,25 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val inT = tpeOf[In]
     val outT = tpeOf[Out]
     val pdE = pdTyped
+    val pdName = TermName(c.freshName("pd"))
     val inName = TermName(c.freshName("in"))
     val ctxName = TermName(c.freshName("ctx"))
+    val pdRef = Ident(pdName)
     val inRef = c.Expr[Any](Ident(inName))(anyTag)
     val ctxRef = c.Expr[Any](Ident(ctxName))(anyTag)
     val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
     val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
-    val resOutTpe = appliedType(resTpe.typeConstructor, outT)
-    val castedBody = q"""$bodyTree.asInstanceOf[$resOutTpe]"""
-    val liftTree = q"""$pdE.lift[$inT, $outT]((($inName: $inT, $ctxName: $ctxTpe) => $castedBody))"""
-    mkExpr(liftTree).asInstanceOf[Expr[Pipe[In, Out]]]
+    // Replace all references to pdE in bodyTree with pdRef for stable path
+    val stableBody = new Transformer {
+      override def transform(tree: Tree): Tree = tree match {
+        case t if t.equalsStructure(pdE.tree) => pdRef
+        case _                                => super.transform(tree)
+      }
+    }.transform(bodyTree)
+    mkExpr(q"""{
+      val $pdName = $pdE
+      $pdName.lift[$inT, $outT](($inName: $inT, $ctxName: $pdName.Context) => $stableBody)
+    }""").asInstanceOf[Expr[Pipe[In, Out]]]
   }
 
   override def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any] = {

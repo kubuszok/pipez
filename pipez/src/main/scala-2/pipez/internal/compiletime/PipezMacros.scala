@@ -281,11 +281,15 @@ final class PipezMacro(val c: blackbox.Context) {
     )
   }
 
+  private def fixTypes[Out](expr: c.Expr[Out]): c.Expr[Out] =
+    try c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree)))
+    catch { case e: scala.reflect.macros.TypecheckException => c.abort(c.enclosingPosition, e.msg) }
+
   def deriveDefault[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ): c.Expr[P[In, Out]] = {
     val m = macros[P, In, Out](pipeDerivation)
-    m.doDeriveDef.asInstanceOf[c.Expr[P[In, Out]]]
+    fixTypes(m.doDeriveDef.asInstanceOf[c.Expr[P[In, Out]]])
   }
 
   def deriveConfigured[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
@@ -294,6 +298,8 @@ final class PipezMacro(val c: blackbox.Context) {
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ): c.Expr[P[In, Out]] = {
     val m = macros[P, In, Out](pipeDerivation)
-    m.doDeriveConf(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[P, In, Out]]]).asInstanceOf[c.Expr[P[In, Out]]]
+    fixTypes(
+      m.doDeriveConf(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[P, In, Out]]]).asInstanceOf[c.Expr[P[In, Out]]]
+    )
   }
 }

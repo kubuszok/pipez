@@ -70,9 +70,11 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
     val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
     val resOutTpe = resApply0(outT).asInstanceOf[c.Type]
+    val isIdentity = resOutTpe =:= outT
+    val finalBody = if (isIdentity) bodyTree else q"""($bodyTree).asInstanceOf[$resOutTpe]"""
     mkExpr(q"""{
       $pdInit
-      $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $ctxTpe) => ($bodyTree).asInstanceOf[$resOutTpe])
+      $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $pdStableRef.Context) => $finalBody)
     }""").asInstanceOf[Expr[Pipe[In, Out]]]
   }
 

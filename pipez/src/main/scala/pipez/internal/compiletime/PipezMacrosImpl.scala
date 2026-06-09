@@ -10,7 +10,8 @@ import scala.collection.immutable.ListMap
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PipezMacrosImpl
-    extends rules.PipezUseImplicitRuleImpl
+    extends PipezConfigParserShared
+    with rules.PipezUseImplicitRuleImpl
     with rules.PipezHandleAsValueTypeRuleImpl
     with rules.PipezHandleAsCaseClassRuleImpl
     with rules.PipezHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
@@ -284,7 +285,4 @@ trait PipezMacrosImpl
     }
   }
 
-  // ---- Config parser (implemented by platform-specific bridges) ----
-
-  def readConfig[In: Type, Out: Type](code: Expr[PipeDerivationConfig[Pipe, In, Out]]): Settings
 }

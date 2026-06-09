@@ -179,6 +179,8 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
+  override def eraseExprType(expr: Expr[Any]): Expr[Any] = expr
+
   override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
     val stats = statements.map(e => toTerm(e).asInstanceOf[quotes.reflect.Statement])
     val resTerm = toTerm(result)

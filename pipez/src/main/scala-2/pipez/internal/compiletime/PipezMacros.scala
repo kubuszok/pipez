@@ -29,20 +29,39 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
   implicit override lazy val PipeCtor: Type.Ctor2[Pipe] =
     Type.Ctor2.fromUntyped[P](pipeTpe.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
 
-  private lazy val ctxTpe: c.Type = c.universe.definitions.AnyTpe
+  private lazy val ctxTpe: c.Type = {
+    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
+    c.typecheck(tq"""$pdTree.Context""", mode = c.TYPEmode).tpe.dealias
+  }
 
   private lazy val resTpe: c.Type = {
     val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
-    val pureResultCall = c.typecheck(q"""$pdTree.pureResult[Int](1)""")
-    pureResultCall.tpe.dealias.typeConstructor
+    val resIntType = c.typecheck(tq"""$pdTree.Result[Int]""", mode = c.TYPEmode).tpe
+    val f = new java.io.FileWriter("/tmp/pipez-debug.log", true)
+    f.write(s"[resTpe] resIntType=$resIntType\n")
+    f.write(s"[resTpe] resIntType.dealias=${resIntType.dealias}\n")
+    f.write(s"[resTpe] resIntType.dealias.typeConstructor=${resIntType.dealias.typeConstructor}\n")
+    f.close()
+    resIntType.dealias.typeConstructor
   }
 
-  private lazy val pdTyped: c.Expr[Any] = {
+  // Use a SINGLE stable name for pipeDerivation across all generated code.
+  // This ensures all path-dependent types (Context, Result) use the same stabilizer.
+  private val pdStableName: TermName = TermName(c.freshName("pd"))
+  private val pdStableRef: Tree = Ident(pdStableName)
+
+  // All generate* methods use pdStableRef. generateLift wraps with val pdStableName = pipeDerivation.
+  // Use Aux pattern so the stable val has resolved Context and Result types.
+  private lazy val pdInit: Tree = {
     val expr = pd.asInstanceOf[c.Expr[PipeDerivation[P]]]
-    mkExpr(q"""$expr""")
+    val PipeTc = pipeTpe.asInstanceOf[c.Type]
+    val CtxT = ctxTpe
+    val ResT = resTpe
+    q"""val $pdStableName: _root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT] = $expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT]]"""
   }
 
-  override lazy val pdExpr: Expr[Any] = pdTyped.asInstanceOf[Expr[Any]]
+  // pdExpr as used by shared code — refers to the stable name
+  override lazy val pdExpr: Expr[Any] = mkExpr(pdStableRef).asInstanceOf[Expr[Any]]
 
   // ---- Code generation implementations ----
 
@@ -51,30 +70,22 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
   override def generateLift[In: Type, Out: Type](body: (Expr[Any], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]] = {
     val inT = tpeOf[In]
     val outT = tpeOf[Out]
-    val pdE = pdTyped
-    val pdName = TermName(c.freshName("pd"))
     val inName = TermName(c.freshName("in"))
     val ctxName = TermName(c.freshName("ctx"))
-    val pdRef = Ident(pdName)
     val inRef = c.Expr[Any](Ident(inName))(anyTag)
     val ctxRef = c.Expr[Any](Ident(ctxName))(anyTag)
     val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
-    val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
-    // Replace all references to pdE in bodyTree with pdRef for stable path
-    val stableBody = new Transformer {
-      override def transform(tree: Tree): Tree = tree match {
-        case t if t.equalsStructure(pdE.tree) => pdRef
-        case _                                => super.transform(tree)
-      }
-    }.transform(bodyTree)
+    val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree {
+      val f = new java.io.FileWriter("/tmp/pipez-debug.log", true); f.write(s"[generateLift] outT=$outT\n"); f.close()
+    }
     mkExpr(q"""{
-      val $pdName = $pdE
-      $pdName.lift[$inT, $outT](($inName: $inT, $ctxName: $pdName.Context) => $stableBody)
+      $pdInit
+      $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $pdStableRef.Context) => ($bodyTree).asInstanceOf[${tq"$pdStableRef.Result[$outT]"}])
     }""").asInstanceOf[Expr[Pipe[In, Out]]]
   }
 
   override def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any] = {
-    val pdE = pdTyped
+    val pdE = mkExpr(pdStableRef)
     val p = pipe.asInstanceOf[c.Expr[Any]]
     val i = in.asInstanceOf[c.Expr[Any]]
     val ct = ctx.asInstanceOf[c.Expr[Any]]
@@ -82,13 +93,13 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
   }
 
   override def generatePureResult(a: Expr[Any]): Expr[Any] = {
-    val pdE = pdTyped
+    val pdE = mkExpr(pdStableRef)
     val ae = a.asInstanceOf[c.Expr[Any]]
     mkExpr(q"""$pdE.pureResult($ae)""").asInstanceOf[Expr[Any]]
   }
 
   override def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any] = {
-    val pdE = pdTyped
+    val pdE = mkExpr(pdStableRef)
     val ce = ctx.asInstanceOf[c.Expr[Any]]
     val rae = ra.asInstanceOf[c.Expr[Any]]
     val rbe = rb.asInstanceOf[c.Expr[Any]]
@@ -97,7 +108,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
   }
 
   override def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any] = {
-    val pdE = pdTyped
+    val pdE = mkExpr(pdStableRef)
     val ce = ctx.asInstanceOf[c.Expr[Any]]
     val pe = path.asInstanceOf[c.Expr[Path]]
     mkExpr(q"""$pdE.updateContext($ce, $pe)""").asInstanceOf[Expr[Any]]

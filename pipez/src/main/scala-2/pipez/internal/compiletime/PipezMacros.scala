@@ -40,19 +40,18 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
   private val pdStableName: TermName = TermName(c.freshName("pd"))
   private val pdStableRef: Tree = Ident(pdStableName)
 
-  private lazy val isIdentityResult: Boolean = resTpe =:= definitions.AnyTpe
+  // Use the implicit's actual type for the stable val annotation.
+  // This ensures path-dependent types (Context, Result) are resolved concretely.
+  private lazy val pdDeclaredType: c.Type = {
+    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
+    val declaredT = pdTree.tpe.widen
+    val implTree = c.inferImplicitValue(declaredT, silent = true)
+    if (implTree != EmptyTree) implTree.tpe.widen else declaredT
+  }
 
   private lazy val pdInit: Tree = {
     val expr = pd.asInstanceOf[c.Expr[Any]]
-    val PipeTc = pipeTpe.asInstanceOf[c.Type]
-    if (isIdentityResult) {
-      // Identity Result[A] = A — use base type, no Aux needed
-      q"""val $pdStableName = $expr"""
-    } else {
-      val CtxT = ctxTpe
-      val ResT = resTpe.typeConstructor
-      q"""val $pdStableName: _root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT] = $expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT]]"""
-    }
+    q"""val $pdStableName: $pdDeclaredType = $expr"""
   }
 
   override lazy val pdExpr: Expr[Any] = mkExpr(pdStableRef).asInstanceOf[Expr[Any]]
@@ -206,9 +205,13 @@ final class PipezMacro(val c: blackbox.Context) {
       case pt if pt.typeParams.nonEmpty =>
         val tp = pt.typeParams.head
         val rt = pt.resultType.dealias
-        (outTpe: c.Type) => rt.substituteTypes(List(tp), List(outTpe))
+        if (rt.isInstanceOf[scala.reflect.internal.Types#TypeBounds] || rt.typeSymbol == tp) {
+          // Identity: type Result[Out] = Out
+          (outTpe: c.Type) => outTpe
+        } else { (outTpe: c.Type) =>
+          rt.substituteTypes(List(tp), List(outTpe))
+        }
       case _ =>
-        // Abstract — no concrete resolution available, fall back to Any (erased at runtime)
         (_: c.Type) => definitions.AnyTpe
     }
     (ctxTpe, resApply)
@@ -217,6 +220,47 @@ final class PipezMacro(val c: blackbox.Context) {
   private def macros[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ) = {
+    // Diagnostic: dump all type info for every macro invocation
+    // (placed BEFORE extractConcreteTypes to catch crashes)
+    {
+      val pdTree = pipeDerivation.tree
+      val f = new java.io.FileWriter("/tmp/pipez-types.log", true)
+      f.write(s"\n=== MACRO INVOCATION ===\n")
+      f.write(s"In=${c.weakTypeOf[In]}, Out=${c.weakTypeOf[Out]}\n")
+      f.write(s"Pipe=${c.weakTypeOf[P[Any, Nothing]].typeConstructor}\n")
+      f.write(s"pd.tree = $pdTree\n")
+      f.write(s"pd.tree.tpe = ${pdTree.tpe}\n")
+      f.write(s"pd.tree.tpe.widen = ${pdTree.tpe.widen}\n")
+      f.write(s"pd.actualType = ${pipeDerivation.actualType}\n")
+      if (pdTree.symbol != null) {
+        f.write(s"pd.tree.symbol = ${pdTree.symbol}\n")
+        f.write(s"pd.tree.symbol.typeSignature = ${pdTree.symbol.typeSignature}\n")
+        f.write(s"pd.tree.symbol.info = ${pdTree.symbol.info}\n")
+      }
+      val declaredT = pdTree.tpe.widen
+      val implTree = c.inferImplicitValue(declaredT, silent = true)
+      f.write(s"inferImplicitValue isEmpty = ${implTree == EmptyTree}\n")
+      if (implTree != EmptyTree) {
+        f.write(s"inferImplicitValue.tpe = ${implTree.tpe}\n")
+        f.write(s"inferImplicitValue.tpe.widen = ${implTree.tpe.widen}\n")
+        val implTpe = implTree.tpe.widen
+        val rm = implTpe.member(TypeName("Result"))
+        f.write(s"Result member = $rm\n")
+        f.write(s"Result.typeSignatureIn = ${rm.typeSignatureIn(implTpe)}\n")
+        val rs = rm.typeSignatureIn(implTpe)
+        f.write(s"Result sig.dealias = ${rs.dealias}\n")
+        if (rs.typeParams.nonEmpty) {
+          f.write(s"Result sig.typeParams = ${rs.typeParams}\n")
+          f.write(s"Result sig.resultType = ${rs.resultType}\n")
+          f.write(s"Result sig.resultType.dealias = ${rs.resultType.dealias}\n")
+        }
+        val cm = implTpe.member(TypeName("Context"))
+        f.write(s"Context member = $cm\n")
+        f.write(s"Context.typeSignatureIn = ${cm.typeSignatureIn(implTpe)}\n")
+      }
+      f.close()
+    }
+
     val (ctxTpe, resApply) = extractConcreteTypes(pipeDerivation)
     val resIntTpe = resApply(definitions.IntTpe)
     // For identity Result[A] = A, resIntTpe = Int, typeConstructor gives Int (0 params)

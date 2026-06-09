@@ -6,7 +6,7 @@ trait ContextCodec[In, Out] {
   def decode(in: In, shouldFailFast: Boolean, path: String): Either[List[String], Out]
 }
 
-object ContextCodec extends PipeSemiautoSupport[ContextCodec] with PipeSemiautoConfiguredSupport[ContextCodec] {
+object ContextCodec extends PipeSemiautoConfiguredSupport[ContextCodec] {
 
   final case class Driver(shouldFailFast: Boolean, path: String)
 

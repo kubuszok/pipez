@@ -17,9 +17,9 @@ sealed trait PipeDerivationConfig[Pipe[_, _], In, Out] {
 
   /** Let you specify the exact way a specific output field is computed using specific input field */
   final def plugInField[InField, OutField](
-    inputField:  In => InField,
-    outputField: Out => OutField,
-    pipe:        Pipe[InField, OutField]
+      inputField: In => InField,
+      outputField: Out => OutField,
+      pipe: Pipe[InField, OutField]
   ): this.type = this
 
   /** During derivation field names from In to Out won't be matches exactly but with case-insensitive comparison */

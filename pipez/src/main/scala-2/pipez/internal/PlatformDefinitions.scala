@@ -1,7 +1,7 @@
 package pipez.internal
 
 import pipez.PipeDerivationConfig
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
@@ -16,7 +16,7 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
   import c.universe.*
 
   type Tagged[U] = { type Tag = U }
-  type @@[T, U]  = T & Tagged[U]
+  type @@[T, U] = T & Tagged[U]
 
   override type Type[A] = c.Type @@ A
   override type Expr[A] = c.Expr[A]
@@ -26,8 +26,7 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
   final def previewType[A: Type]: String =
     Console.MAGENTA + typeOf[A].dealias.toString + Console.RESET
 
-  private lazy val ppu = new PrettyPrintUniverse(c.universe)
-  final def previewCode[A](code: Expr[A]): String = ppu.showCodeAnsi(code.tree.asInstanceOf[ppu.Tree])
+  final def previewCode[A](code: Expr[A]): String = c.universe.showCode(code.tree)
 
   final def pathCode(path: Path): Expr[pipez.Path] = path match {
     case Path.Root                => c.Expr[pipez.Path](q"_root_.pipez.Path.root")
@@ -54,7 +53,7 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
       case Select(expr, TermName(field))              => extractPath(expr).map(Path.Field(_, field)) // extract .field
       case Apply(Select(expr, TermName(get)), List()) => extractPath(expr).map(Path.Field(_, get)) // extract .getField
       case Ident(TermName(_))                         => Right(Path.Root) // drop argName from before .field
-      case tt: TypeTree => Right(Path.Subtype(Path.Root, tt.tpe.toString)) // A.Subtype
+      case tt: TypeTree                               => Right(Path.Subtype(Path.Root, tt.tpe.toString)) // A.Subtype
       case _ => Left(s"Path ${previewCode(c.Expr(in))} is not in format _.field1.field2")
     }
 
@@ -90,10 +89,11 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
           outPath <- extractPath(outputField)
           result <- extract(
             expr,
-            ConfigEntry.RenameField(inPath,
-                                    inputField.tpe.resultType.asInstanceOf[Type[Any]],
-                                    outPath,
-                                    outputField.tpe.resultType.asInstanceOf[Type[Any]]
+            ConfigEntry.RenameField(
+              inPath,
+              inputField.tpe.resultType.asInstanceOf[Type[Any]],
+              outPath,
+              outputField.tpe.resultType.asInstanceOf[Type[Any]]
             ) :: acc
           )
         } yield result
@@ -102,7 +102,7 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out]
         for {
           inFieldPath <- extractPath(inputField)
           outFieldPath <- extractPath(outputField)
-          TypeRef(_, _, List(_, inFieldType))  = inputField.tpe
+          TypeRef(_, _, List(_, inFieldType)) = inputField.tpe
           TypeRef(_, _, List(_, outFieldType)) = outputField.tpe
           result <- extract(
             expr,

@@ -5,10 +5,10 @@ trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
 
   /** Derives `Pipe[In, Out]` using provided settings */
   inline def derive[In, Out](
-    inline config: Config[In, Out]
+      inline config: Config[In, Out]
   )(using
-    pipeDerivation: PipeDerivation[Pipe]
-  ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveConfigured[Pipe, In, Out]('{ config })('{ pipeDerivation }) }
+      pipeDerivation: PipeDerivation[Pipe]
+  ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveConfigured[Pipe, In, Out]('config)('pipeDerivation) }
 
   /** Utility useful for providing configuration to macro.
     *

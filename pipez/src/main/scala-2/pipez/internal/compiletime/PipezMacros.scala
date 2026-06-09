@@ -104,6 +104,11 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     mkExpr(q"""$pdStableRef.updateContext($ce, $pe)""").asInstanceOf[Expr[Any]]
   }
 
+  override def eraseExprType(expr: Expr[Any]): Expr[Any] = {
+    val tree = expr.asInstanceOf[c.Expr[Any]].tree
+    mkExpr(q"""$tree: Any""").asInstanceOf[Expr[Any]]
+  }
+
   override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
     val stats = statements.map(_.asInstanceOf[c.Expr[Any]].tree)
     val res = result.asInstanceOf[c.Expr[Any]].tree

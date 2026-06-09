@@ -3,6 +3,13 @@ package pipez
 /** Mix-in providing `derive` method for semiautomatic `Pipe` derivation without recursion and custom configuration */
 trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
 
+  /** Derives `Pipe[In, Out]` using default settings */
+  inline def derive[In, Out](using
+      inline pipeDerivation: PipeDerivation[Pipe]
+  ): Pipe[In, Out] = ${
+    pipez.internal.compiletime.PipezMacros.deriveDefault[Pipe, In, Out]('pipeDerivation)
+  }
+
   /** Derives `Pipe[In, Out]` using provided settings */
   inline def derive[In, Out](
       inline config: Config[In, Out]

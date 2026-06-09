@@ -34,7 +34,7 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
       }.toMap
 
       MIO.scoped { runSafe =>
-        generateLift[In, Out] { (in, ctxExpr) =>
+        generateLiftForEnum[In, Out] { (in, ctxExpr) =>
           runSafe {
             inEnum
               .matchOn[MIO, Any](in.asInstanceOf[Expr[In]]) { matched =>

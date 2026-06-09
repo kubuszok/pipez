@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.nowarn
 import scala.util.chaining.*
@@ -81,7 +81,7 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
       .pipe(c.Expr[Out](_))
 
     val body = {
-      val in  = c.freshName(TermName("in"))
+      val in = c.freshName(TermName("in"))
       val ctx = c.freshName(TermName("ctx"))
       lift[In, Out](
         c.Expr[(In, Context) => Result[Out]](

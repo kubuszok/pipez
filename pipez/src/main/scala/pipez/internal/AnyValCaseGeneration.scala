@@ -13,9 +13,9 @@ private[internal] trait AnyValCaseGeneration[Pipe[_, _], In, Out] {
   def isPrimitive[A: Type]: Boolean
 
   final def isUsableAsAnyValConversion: Boolean = {
-    val inAnyVal     = isAnyVal[In]
-    val inPrimitive  = isPrimitive[In]
-    val outAnyVal    = isAnyVal[Out]
+    val inAnyVal = isAnyVal[In]
+    val inPrimitive = isPrimitive[In]
+    val outAnyVal = isAnyVal[Out]
     val outPrimitive = isPrimitive[Out]
     (inAnyVal || outAnyVal) && (inAnyVal || inPrimitive) && (outAnyVal || outPrimitive)
   }
@@ -26,13 +26,13 @@ private[internal] trait AnyValCaseGeneration[Pipe[_, _], In, Out] {
   object AnyValInData {
 
     final case class InAnyVal[InPrimitive](
-      tpe:  Type[InPrimitive],
-      get:  Expr[In] => Expr[InPrimitive],
-      path: Path
+        tpe: Type[InPrimitive],
+        get: Expr[In] => Expr[InPrimitive],
+        path: Path
     ) extends AnyValInData[InPrimitive]
 
     final case class InPrimitive[InPrimitive](
-      tpe: Type[InPrimitive]
+        tpe: Type[InPrimitive]
     ) extends AnyValInData[InPrimitive]
   }
 
@@ -42,12 +42,12 @@ private[internal] trait AnyValCaseGeneration[Pipe[_, _], In, Out] {
   object AnyValOutData {
 
     final case class OutAnyVal[OutPrimitive](
-      tpe: Type[OutPrimitive],
-      put: Expr[OutPrimitive] => Expr[Out]
+        tpe: Type[OutPrimitive],
+        put: Expr[OutPrimitive] => Expr[Out]
     ) extends AnyValOutData[OutPrimitive]
 
     final case class OutPrimitive[OutPrimitive](
-      tpe: Type[OutPrimitive]
+        tpe: Type[OutPrimitive]
     ) extends AnyValOutData[OutPrimitive]
   }
 
@@ -104,8 +104,8 @@ private[internal] trait AnyValCaseGeneration[Pipe[_, _], In, Out] {
   } yield code
 
   private def repackAnyValData(
-    inData:  AnyValInData[AnyValType],
-    outData: AnyValOutData[AnyValType]
+      inData: AnyValInData[AnyValType],
+      outData: AnyValOutData[AnyValType]
   ): DerivationResult[AnyValGeneratorData] = DerivationResult.pure {
     val unwrap = inData match {
       case AnyValInData.InAnyVal(_, get, _) => (in: Expr[In]) => get(in)

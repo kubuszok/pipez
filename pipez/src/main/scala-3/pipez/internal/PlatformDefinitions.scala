@@ -1,11 +1,11 @@
 package pipez.internal
 
-import pipez.{ PipeDerivation, PipeDerivationConfig }
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.{PipeDerivation, PipeDerivationConfig}
+import pipez.internal.Definitions.{Context, Result}
 
-import scala.annotation.{ nowarn, unused }
+import scala.annotation.{nowarn, unused}
 import scala.util.chaining.*
-import scala.quoted.{ Type as _, * }
+import scala.quoted.{Type as _, *}
 
 private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quotes: Quotes)
     extends Definitions[Pipe, In, Out] {
@@ -18,16 +18,18 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
 
   // def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] is defined in MacrosImpl
 
-  final def previewType[A: Type]: String =
+  final def previewType[A: Type]: String = {
     val repr = TypeRepr.of[A]
     scala.util.Try(repr.dealias.show(using Printer.TypeReprAnsiCode)).getOrElse(repr.toString)
+  }
 
   final def previewCode[A](code: Expr[A]): String = code.asTerm.show(using Printer.TreeAnsiCode)
 
-  final def pathCode(path: Path): Expr[pipez.Path] = path match
+  final def pathCode(path: Path): Expr[pipez.Path] = path match {
     case Path.Root                => '{ pipez.Path.root }
     case Path.Field(from, name)   => '{ ${ pathCode(from) }.field(${ Expr(name) }) }
     case Path.Subtype(from, name) => '{ ${ pathCode(from) }.subtype(${ Expr(name) }) }
+  }
 
   final def summonPipe[Input: Type, Output: Type]: DerivationResult[Expr[Pipe[Input, Output]]] =
     DerivationResult
@@ -38,9 +40,10 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
 
   // def derivePipe[Input: Type, Output: Type](Settings): DerivationResult[Expr[Pipe[Input, Output]]] is defined in MacrosImpl
 
-  final def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM] =
+  final def singleAbstractMethodExpansion[SAM: Type](code: Expr[SAM]): Expr[SAM] = {
     val SAM = typeOf[SAM]
-    '{ scala.Predef.identity[SAM.Underlying](${ code }) }
+    '{ scala.Predef.identity[SAM.Underlying]($code) }
+  }
 
   final def readConfig(code: Expr[PipeDerivationConfig[Pipe, In, Out]]): DerivationResult[Settings] = {
     def extractPath(in: Tree): Either[String, Path] = in match {
@@ -94,8 +97,9 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
           )
         } yield result
       // matches {cfg}.plugIn(_.in, _.out, pipe)
-      case Apply(TypeApply(Select(expr, "plugInField"), List(inputType, outputType)),
-                 List(inputField, outputField, pipe)
+      case Apply(
+            TypeApply(Select(expr, "plugInField"), List(inputType, outputType)),
+            List(inputField, outputField, pipe)
           ) =>
         for {
           inPath <- extractPath(inputField)
@@ -122,8 +126,9 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
       case Apply(TypeApply(Select(expr, "addFallbackToValue"), List(fallbackValueType)), List(fallbackValue)) =>
         extract(
           expr,
-          ConfigEntry.AddFallbackValue(returnType[Any](fallbackValueType.tpe),
-                                       fallbackValue.asExpr.asInstanceOf[Expr[Any]]
+          ConfigEntry.AddFallbackValue(
+            returnType[Any](fallbackValueType.tpe),
+            fallbackValue.asExpr.asInstanceOf[Expr[Any]]
           ) :: acc
         )
       // matches {cfg}.enableFallbackToDefaults
@@ -197,19 +202,20 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
 
   // Scala 3-macro specific instances, required because code-generation needs these types
 
-  implicit val Pipe:    scala.quoted.Type[Pipe]
+  implicit val Pipe: scala.quoted.Type[Pipe]
   implicit val Context: scala.quoted.Type[Context]
-  implicit val Result:  scala.quoted.Type[Result]
+  implicit val Result: scala.quoted.Type[Result]
 
-  def returnType[A](typeRepr: TypeRepr): Type[A] = typeRepr.widenByName match
+  def returnType[A](typeRepr: TypeRepr): Type[A] = typeRepr.widenByName match {
     case MethodType(_, _, out) => returnType[A](out)
     case out                   => out.asType.asInstanceOf[Type[A]]
+  }
 
   val resolveTypeArgsForMethodArguments = (tpe: TypeRepr, method: Symbol) =>
-    tpe.memberType(method) match
+    tpe.memberType(method) match {
       // monomorphic
       case MethodType(names, types, _) =>
-        val typeArgs:           List[TypeRepr]        = Nil
+        val typeArgs: List[TypeRepr] = Nil
         val typeArgumentByName: Map[String, TypeRepr] = names.zip(types).toMap
         DerivationResult.pure(typeArgumentByName -> typeArgs)
       // polymorphic
@@ -233,4 +239,5 @@ private[internal] trait PlatformDefinitions[Pipe[_, _], In, Out](using val quote
             s"Constructor of ${previewType[Out]} has unrecognized/unsupported format of type: ${tpe}"
           )
         )
+    }
 }

@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.{ PipeDerivation, PipeDerivationConfig }
+import pipez.{PipeDerivation, PipeDerivationConfig}
 
 import scala.annotation.nowarn
 import scala.collection.Factory
@@ -64,29 +64,29 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     case object EnableDiagnostics extends ConfigEntry
 
     final case class AddField[OutField](
-      outputField:  Path,
-      outFieldType: Type[OutField],
-      pipe:         Expr[Pipe[In, OutField]]
+        outputField: Path,
+        outFieldType: Type[OutField],
+        pipe: Expr[Pipe[In, OutField]]
     ) extends ConfigEntry {
       override def toString: String = s"AddField($outputField : ${previewType(outFieldType)}, ${previewCode(pipe)})"
     }
 
     final case class RenameField[InField, OutField](
-      inputField:     Path,
-      inputFieldType: Type[InField],
-      outputField:    Path,
-      outFieldType:   Type[OutField]
+        inputField: Path,
+        inputFieldType: Type[InField],
+        outputField: Path,
+        outFieldType: Type[OutField]
     ) extends ConfigEntry {
       override def toString: String =
         s"AddField($inputField : ${previewType(inputFieldType)}, $outputField : ${previewType(outFieldType)})"
     }
 
     final case class PlugInField[InField, OutField](
-      inputField:     Path,
-      inputFieldType: Type[InField],
-      outputField:    Path,
-      outFieldType:   Type[OutField],
-      pipe:           Expr[Pipe[InField, OutField]]
+        inputField: Path,
+        inputFieldType: Type[InField],
+        outputField: Path,
+        outFieldType: Type[OutField],
+        pipe: Expr[Pipe[InField, OutField]]
     ) extends ConfigEntry {
       override def toString: String =
         s"PlugInField($inputField : ${previewType(inputFieldType)}, $outputField : ${previewType(outFieldType)}, ${previewCode(pipe)})"
@@ -95,37 +95,37 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     case object FieldCaseInsensitive extends ConfigEntry
 
     final case class AddFallbackValue[FallbackValue](
-      fallbackValueType: Type[FallbackValue],
-      fallbackValue:     Expr[FallbackValue]
+        fallbackValueType: Type[FallbackValue],
+        fallbackValue: Expr[FallbackValue]
     ) extends ConfigEntry
 
     case object EnableFallbackToDefaults extends ConfigEntry
 
     final case class RemoveSubtype[InSubtype <: In](
-      inputSubtype:     Path,
-      inputSubtypeType: Type[InSubtype],
-      pipe:             Expr[Pipe[InSubtype, Out]]
+        inputSubtype: Path,
+        inputSubtypeType: Type[InSubtype],
+        pipe: Expr[Pipe[InSubtype, Out]]
     ) extends ConfigEntry {
       override def toString: String =
         s"RemoveSubtype($inputSubtype : ${previewType(inputSubtypeType)}, ${previewCode(pipe)})"
     }
 
     final case class RenameSubtype[InSubtype <: In, OutSubtype <: Out](
-      inputSubtype:      Path,
-      inputSubtypeType:  Type[InSubtype],
-      outputSubtype:     Path,
-      outputSubtypeType: Type[OutSubtype]
+        inputSubtype: Path,
+        inputSubtypeType: Type[InSubtype],
+        outputSubtype: Path,
+        outputSubtypeType: Type[OutSubtype]
     ) extends ConfigEntry {
       override def toString: String =
         s"RenameSubtype($inputSubtype : ${previewType(inputSubtypeType)}, $outputSubtype : ${previewType(outputSubtypeType)})"
     }
 
     final case class PlugInSubtype[InSubtype <: In, OutSubtype <: Out](
-      inputSubtype:      Path,
-      inputSubtypeType:  Type[InSubtype],
-      outputSubtype:     Path,
-      outputSubtypeType: Type[OutSubtype],
-      pipe:              Expr[Pipe[InSubtype, OutSubtype]]
+        inputSubtype: Path,
+        inputSubtypeType: Type[InSubtype],
+        outputSubtype: Path,
+        outputSubtypeType: Type[OutSubtype],
+        pipe: Expr[Pipe[InSubtype, OutSubtype]]
     ) extends ConfigEntry {
       override def toString: String =
         s"PlugInSubtype($inputSubtype : ${previewType(inputSubtypeType)}, $outputSubtype : ${previewType(outputSubtypeType)}, ${previewCode(pipe)})"
@@ -178,38 +178,38 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     case object MissingPublicConstructor extends DerivationError
 
     final case class MissingPublicSource(
-      outFieldName: String
+        outFieldName: String
     ) extends DerivationError
 
     final case class MissingMatchingSubType(
-      subtypeName: String
+        subtypeName: String
     ) extends DerivationError
 
     final case class MissingMatchingValue(
-      valueName: String
+        valueName: String
     ) extends DerivationError
 
     final case class RequiredImplicitNotFound[I, O](
-      inFieldType:  Type[I],
-      outFieldType: Type[O]
+        inFieldType: Type[I],
+        outFieldType: Type[O]
     ) extends DerivationError
 
     final case class RecursiveDerivationFailed[I, O](
-      inType:  Type[I],
-      outType: Type[O],
-      errors:  List[DerivationError]
+        inType: Type[I],
+        outType: Type[O],
+        errors: List[DerivationError]
     ) extends DerivationError
 
     final case class NotSupportedFieldConversion[I, O](
-      inField:      String,
-      inFieldType:  Type[I],
-      outField:     String,
-      outFieldType: Type[O]
+        inField: String,
+        inFieldType: Type[I],
+        outField: String,
+        outFieldType: Type[O]
     ) extends DerivationError
 
     final case class NotSupportedEnumConversion(
-      isInSumType:  Boolean,
-      isOutSumType: Boolean
+        isInSumType: Boolean,
+        isOutSumType: Boolean
     ) extends DerivationError
 
     final case class InvalidConfiguration(msg: String) extends DerivationError
@@ -250,7 +250,7 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
     final def zip[B](other: DerivationResult[B]): DerivationResult[(A, B)] = map2(other)(_ -> _)
 
     def orElse[A1 >: A](result: => DerivationResult[A1]): DerivationResult[A1] = this match {
-      case success @ Success(_, _) => success
+      case success @ Success(_, _)       => success
       case Failure(errors1, diagnostic1) =>
         result match {
           case Success(value, diagnostic2)   => Success(value, diagnostic2)
@@ -285,19 +285,19 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
   object DerivationResult {
 
     final private case class Success[+A](
-      value:      A,
-      diagnostic: Diagnostic
+        value: A,
+        diagnostic: Diagnostic
     ) extends DerivationResult[A]
 
     final private case class Failure(
-      errors:     List[DerivationError],
-      diagnostic: Diagnostic
+        errors: List[DerivationError],
+        diagnostic: Diagnostic
     ) extends DerivationResult[Nothing]
 
     type Diagnostic = Vector[LazyMessage]
 
-    def pure[A](value: A):                           DerivationResult[A]       = Success(value, Vector.empty)
-    def fail(error: DerivationError):                DerivationResult[Nothing] = Failure(List(error), Vector.empty)
+    def pure[A](value: A): DerivationResult[A] = Success(value, Vector.empty)
+    def fail(error: DerivationError): DerivationResult[Nothing] = Failure(List(error), Vector.empty)
     def failMultiple(errors: List[DerivationError]): DerivationResult[Nothing] = Failure(errors, Vector.empty)
 
     def unsafe[A](thunk: => A)(error: Throwable => DerivationError): DerivationResult[A] =
@@ -308,9 +308,9 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
       }
 
     def sequence[A, Coll[A0] <: Seq[A0]](
-      seq: Coll[DerivationResult[A]]
+        seq: Coll[DerivationResult[A]]
     )(implicit
-      factory: Factory[A, Coll[A]]
+        factory: Factory[A, Coll[A]]
     ): DerivationResult[Coll[A]] =
       seq.foldLeft(pure(factory.newBuilder))((builder, next) => builder.map2(next)(_.addOne(_))).map(_.result())
 
@@ -331,8 +331,8 @@ private[internal] trait Definitions[Pipe[_, _], In, Out] { self =>
 
   /** Attempts to summon the type class and on failure fallbacks to deriving it */
   final def summonOrDerive[Input: Type, Output: Type](
-    settings:              Settings,
-    alwaysAllowDerivation: Boolean
+      settings: Settings,
+      alwaysAllowDerivation: Boolean
   ): DerivationResult[Expr[Pipe[Input, Output]]] =
     summonPipe[Input, Output].orElse {
       if (alwaysAllowDerivation || settings.isRecursiveDerivationEnabled) derivePipe[Input, Output](settings)

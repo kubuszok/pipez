@@ -7,6 +7,6 @@ trait PipeAutoSupport[Pipe[_, _]] {
 
   /** Derives `Pipe[In, Out]` using default settings, defined as implicit */
   implicit def deriveAutomatic[In, Out](implicit
-    pipeDerivation: PipeDerivation[Pipe]
+      pipeDerivation: PipeDerivation[Pipe]
   ): Pipe[In, Out] = macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]
 }

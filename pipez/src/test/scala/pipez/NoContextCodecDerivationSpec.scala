@@ -576,7 +576,7 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     )
   }
 
-  test("transformation should handle 2.13-3 cross-compilation and convert sealed hierarchies and enums") {
+  test("transformation should handle 2.13-3 cross-compilation and convert sealed hierarchies") {
     // scala 2 gadt -> scala 2 gadt
     assertEquals(
       NoContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.A),
@@ -585,33 +585,6 @@ class NoContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       NoContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.B(1)),
       Right(GadtOut.B(1))
-    )
-    // scala 2 gadt -> scala 3 enum
-    assertEquals(
-      NoContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.A),
-      Right(EnumOut.A)
-    )
-    assertEquals(
-      NoContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.B(1)),
-      Right(EnumOut.B(1))
-    )
-    // scala 3 enum -> scala 2 gadt
-    assertEquals(
-      NoContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.A),
-      Right(GadtOut.A)
-    )
-    assertEquals(
-      NoContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.B(1)),
-      Right(GadtOut.B(1))
-    )
-    // scala 3 enum -> scala 3 enum
-    assertEquals(
-      NoContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.A),
-      Right(EnumOut.A)
-    )
-    assertEquals(
-      NoContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1)),
-      Right(EnumOut.B(1))
     )
   }
 

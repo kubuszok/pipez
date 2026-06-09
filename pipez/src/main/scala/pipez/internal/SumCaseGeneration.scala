@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 import pipez.internal.SumCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
@@ -50,20 +50,20 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
     final case class DefaultSubtype[InSubtype <: In]() extends InSubtypeLogic[InSubtype]
 
     final case class SubtypeRemoved[InSubtype <: In](
-      pipe: Expr[Pipe[InSubtype, Out]]
+        pipe: Expr[Pipe[InSubtype, Out]]
     ) extends InSubtypeLogic[InSubtype] {
       override def toString: String = s"SubtypeRemoved(${previewCode(pipe)})"
     }
 
     final case class SubtypeRenamed[InSubtype <: In, OutSubtype <: Out](
-      outSubtype: Type[OutSubtype]
+        outSubtype: Type[OutSubtype]
     ) extends InSubtypeLogic[InSubtype] {
       override def toString: String = s"SubtypeRenamed(${previewType(outSubtype)})"
     }
 
     final case class PipeProvided[InSubtype <: In, OutSubtype <: Out](
-      outSubtype: Type[OutSubtype],
-      pipe:       Expr[Pipe[InSubtype, OutSubtype]]
+        outSubtype: Type[OutSubtype],
+        pipe: Expr[Pipe[InSubtype, OutSubtype]]
     ) extends InSubtypeLogic[InSubtype] {
       override def toString: String = s"PipeProvided(${previewType(outSubtype)}, ${previewCode(pipe)})"
     }
@@ -77,18 +77,19 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
         case RenameSubtype(_, tpe, _, outSubtypeType) if areSubtypesEqual(tpe, typeOf[InSubtype]) =>
           SubtypeRenamed(outSubtypeType)
         case PlugInSubtype(_, tpe, _, outSubtypeType, pipe) if areSubtypesEqual(tpe, typeOf[InSubtype]) =>
-          PipeProvided[InSubtype, Out](outSubtypeType.asInstanceOf[Type[Out]],
-                                       pipe.asInstanceOf[Expr[Pipe[InSubtype, Out]]]
+          PipeProvided[InSubtype, Out](
+            outSubtypeType.asInstanceOf[Type[Out]],
+            pipe.asInstanceOf[Expr[Pipe[InSubtype, Out]]]
           )
       }
     }
 
     type OutSubtype <: Out
     def resolveSubtype[InSubtype <: In: Type](
-      settings:      Settings,
-      outData:       EnumData[Out],
-      inSubtypeName: String,
-      path:          Path
+        settings: Settings,
+        outData: EnumData[Out],
+        inSubtypeName: String,
+        path: Path
     ): DerivationResult[EnumGeneratorData.InputSubtype] = resolve[InSubtype](settings) match {
       // OutSubtype - the same (simple) name as InSubtype
       // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, ctx): Result[OutSubtype] }
@@ -147,19 +148,19 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
     object InputSubtype {
 
       final case class Convert[InSubtype <: In, OutSubtype <: Out](
-        inSubtype:  Type[InSubtype],
-        outSubtype: Type[OutSubtype],
-        pipe:       Expr[Pipe[InSubtype, OutSubtype]],
-        path:       Path
+          inSubtype: Type[InSubtype],
+          outSubtype: Type[OutSubtype],
+          pipe: Expr[Pipe[InSubtype, OutSubtype]],
+          path: Path
       ) extends InputSubtype {
         override def toString: String =
           s"Convert(${previewType(inSubtype)}, ${previewType(outSubtype)}, ${previewCode(pipe)})"
       }
 
       final case class Handle[InSubtype <: In](
-        inSubtype: Type[InSubtype],
-        pipe:      Expr[Pipe[InSubtype, Out]],
-        path:      Path
+          inSubtype: Type[InSubtype],
+          pipe: Expr[Pipe[InSubtype, Out]],
+          path: Path
       ) extends InputSubtype {
         override def toString: String = s"Handle(${previewType(inSubtype)}, ${previewCode(pipe)})"
       }
@@ -217,9 +218,9 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
   // - so we are iterating over the list of possible values of In and check the configuration for them
   // - additional subtypes/values in Out can be safely ignored
   private def matchEnums(
-    inData:   EnumData[In],
-    outData:  EnumData[Out],
-    settings: Settings
+      inData: EnumData[In],
+      outData: EnumData[Out],
+      settings: Settings
   ): DerivationResult[EnumGeneratorData] = (inData, outData) match {
     case (EnumData(inSubtypes), outData) =>
       inSubtypes
@@ -236,8 +237,8 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
   // OutSubtype - name provided
   // (in, ctx) => in match { i: InSubtype => unlift(summon[InSubtype, OutSubtype), in, updateContext(ctx, path)): Result[OutSubtype] }
   private def fromOutputSubtype[InSubtype <: In: Type, OutSubtype <: Out: Type](
-    settings: Settings,
-    path:     Path
+      settings: Settings,
+      path: Path
   ): DerivationResult[
     EnumGeneratorData.InputSubtype
   ] = summonOrDerive[InSubtype, OutSubtype](settings, alwaysAllowDerivation = true).map(
@@ -247,16 +248,16 @@ private[internal] trait SumCaseGeneration[Pipe[_, _], In, Out] {
   // OutSubtype - name provided
   // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, updateContext(ctx, path)): Result[OutSubtype] }
   private def fromOutputPipe[InSubtype <: In: Type, OutSubtype <: Out: Type](
-    pipe: Expr[Pipe[InSubtype, OutSubtype]],
-    path: Path
+      pipe: Expr[Pipe[InSubtype, OutSubtype]],
+      path: Path
   ): DerivationResult[EnumGeneratorData.InputSubtype] = DerivationResult.pure(
     EnumGeneratorData.InputSubtype.Convert(typeOf[InSubtype], typeOf[OutSubtype], pipe, path)
   )
 
   // (in, ctx) => in match { i: InSubtype => unlift(pipe, in, updateContext(ctx, path)): Result[Out] }
   private def fromMissingPipe[InSubtype <: In: Type](
-    pipe: Expr[Pipe[InSubtype, Out]],
-    path: Path
+      pipe: Expr[Pipe[InSubtype, Out]],
+      path: Path
   ): DerivationResult[EnumGeneratorData.InputSubtype] =
     DerivationResult.pure(EnumGeneratorData.InputSubtype.Handle(typeOf[InSubtype], pipe, path))
 }

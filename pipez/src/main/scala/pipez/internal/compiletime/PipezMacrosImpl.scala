@@ -43,6 +43,27 @@ trait PipezMacrosImpl
   def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any]
   def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any]
 
+  /** Build a block expression: { stmt0; stmt1; ...; result } */
+  def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any]
+
+  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index,
+    * then reads all fields from the array and calls the case class primary constructor.
+    * The parameter types and constructor are resolved from the case class info. */
+  def generateArrayToConstructorFn[Out: Type](
+      outClass: CaseClass[Out],
+      lastIndex: Int,
+      totalFields: Int
+  ): Expr[Any]
+
+  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index,
+    * then reads all fields from the array, calls each bean setter, and returns the bean. */
+  def generateArrayToBeanFn[Out: Type](
+      beanFields: List[(??, Method)],
+      defaultConstructor: Method,
+      lastIndex: Int,
+      totalFields: Int
+  ): Expr[Any]
+
   // ---- Settings ----
 
   final class Settings(val entries: List[ConfigEntry]) {
@@ -205,6 +226,35 @@ trait PipezMacrosImpl
     f.close()
   }
 
+  /** Top-level derivation skips PipezUseImplicitRule to avoid self-referential
+    * implicit cycles (e.g. implicit lazy val codec = derive(config) would
+    * summon itself via the implicit rule). */
+  private def deriveTopLevel[In: Type, Out: Type](using
+      ctx: DerivationCtx[In, Out]
+  ): MIO[Expr[Pipe[In, Out]]] = {
+    debugLog(s"  deriveTopLevel: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
+    Log.namedScope(s"Deriving Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") {
+      debugLog(s"    about to run Rules (top-level, no implicit rule)")
+      Rules(
+        PipezHandleAsValueTypeRule,
+        PipezHandleAsCaseClassRule,
+        PipezHandleAsEnumRule
+      )(rule => { debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }).flatMap {
+        case Right(result) =>
+          debugLog(s"    rule matched!")
+          MIO.pure(result)
+        case Left(failures) =>
+          val reasons = failures.toList.map(_._2.mkString(", ")).mkString("; ")
+          debugLog(s"    all rules failed: $reasons")
+          MIO.fail(
+            new RuntimeException(
+              s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated: $reasons"
+            )
+          )
+      }
+    }
+  }
+
   def deriveWithSettings[In: Type, Out: Type](settings: Settings): Expr[Pipe[In, Out]] = {
     debugLog(s"deriveWithSettings start: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
     @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
@@ -216,7 +266,7 @@ trait PipezMacrosImpl
       debugLog(s"  inside Log.namedScope")
       for {
         _ <- Environment.loadStandardExtensions().toMIO(allowFailures = true)
-        result <- deriveResultRecursively[In, Out](using Type[In], Type[Out], ctx)
+        result <- deriveTopLevel[In, Out](using Type[In], Type[Out], ctx)
       } yield result
     }
     debugLog(s"  MIO created, calling runToExprOrFail")

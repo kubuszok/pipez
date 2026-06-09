@@ -10,7 +10,7 @@ trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
       config: PipeDerivationConfig[Pipe, In, Out]
   )(implicit
       pipeDerivation: PipeDerivation[Pipe]
-  ): Pipe[In, Out] = macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]
+  ): Pipe[In, Out] = macro pipez.internal.compiletime.PipezMacro.deriveConfigured[Pipe, In, Out]
 
   /** Utility useful for providing configuration to macro.
     *

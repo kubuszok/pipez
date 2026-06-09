@@ -36,7 +36,7 @@ class BeanOnesOutMod {
 }
 
 class BeanOnesOutExt {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var x: String = ""
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanOnesOutExt => a == o.a && x == o.x
@@ -47,9 +47,9 @@ class BeanOnesOutExt {
 }
 
 class BeanManyIn {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: Long   = 0L
+  @BeanProperty var c: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanManyIn => a == o.a && b == o.b && c == o.c
     case _             => false
@@ -59,9 +59,9 @@ class BeanManyIn {
 }
 
 class BeanManyOut {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: Long   = 0L
+  @BeanProperty var c: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanManyOut => a == o.a && b == o.b && c == o.c
     case _              => false
@@ -73,7 +73,7 @@ class BeanManyOut {
 class BeanManyOutMod {
   @BeanProperty var a: String = ""
   @BeanProperty var b: String = ""
-  @BeanProperty var c: Long   = 0L
+  @BeanProperty var c: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanManyOutMod => a == o.a && b == o.b && c == o.c
     case _                 => false
@@ -83,9 +83,9 @@ class BeanManyOutMod {
 }
 
 class BeanManyOutExt {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: Long   = 0L
+  @BeanProperty var c: Long = 0L
   @BeanProperty var x: String = ""
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanManyOutExt => a == o.a && b == o.b && c == o.c && x == o.x
@@ -106,9 +106,9 @@ class BeanZeroOutExt {
 }
 
 class BeanPolyIn[A] {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: A      = null.asInstanceOf[A]
+  @BeanProperty var c: A = null.asInstanceOf[A]
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanPolyIn[?] => a == o.a && b == o.b && c == o.c
     case _                => false
@@ -118,10 +118,10 @@ class BeanPolyIn[A] {
 }
 
 class BeanPolyOutExt[A] {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: A      = null.asInstanceOf[A]
-  @BeanProperty var x: A      = null.asInstanceOf[A]
+  @BeanProperty var c: A = null.asInstanceOf[A]
+  @BeanProperty var x: A = null.asInstanceOf[A]
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanPolyOutExt[?] => a == o.a && b == o.b && c == o.c && x == o.x
     case _                    => false
@@ -131,9 +131,9 @@ class BeanPolyOutExt[A] {
 }
 
 class BeanLower {
-  @BeanProperty var aaa: Int    = 0
+  @BeanProperty var aaa: Int = 0
   @BeanProperty var bbb: String = ""
-  @BeanProperty var ccc: Long   = 0L
+  @BeanProperty var ccc: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanLower => aaa == o.aaa && bbb == o.bbb && ccc == o.ccc
     case _            => false
@@ -142,9 +142,9 @@ class BeanLower {
 }
 
 class BeanUpper {
-  @BeanProperty var AAA: Int    = 0
+  @BeanProperty var AAA: Int = 0
   @BeanProperty var BBB: String = ""
-  @BeanProperty var CCC: Long   = 0L
+  @BeanProperty var CCC: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: BeanUpper => AAA == o.AAA && BBB == o.BBB && CCC == o.CCC
     case _            => false
@@ -153,9 +153,9 @@ class BeanUpper {
 }
 
 class Bean3ManyIn {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: Long   = 0L
+  @BeanProperty var c: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: Bean3ManyIn => a == o.a && b == o.b && c == o.c
     case _              => false
@@ -165,9 +165,9 @@ class Bean3ManyIn {
 }
 
 class Bean3ManyOut {
-  @BeanProperty var a: Int    = 0
+  @BeanProperty var a: Int = 0
   @BeanProperty var b: String = ""
-  @BeanProperty var c: Long   = 0L
+  @BeanProperty var c: Long = 0L
   override def equals(obj: Any): Boolean = obj match {
     case o: Bean3ManyOut => a == o.a && b == o.b && c == o.c
     case _               => false

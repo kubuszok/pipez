@@ -8,7 +8,9 @@ trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
       inline config: Config[In, Out]
   )(using
       pipeDerivation: PipeDerivation[Pipe]
-  ): Pipe[In, Out] = ${ pipez.internal.Macros.deriveConfigured[Pipe, In, Out]('config)('pipeDerivation) }
+  ): Pipe[In, Out] = ${
+    pipez.internal.compiletime.PipezMacros.deriveConfigured[Pipe, In, Out]('config)('pipeDerivation)
+  }
 
   /** Utility useful for providing configuration to macro.
     *

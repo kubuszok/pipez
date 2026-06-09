@@ -13,8 +13,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     outTpe: blackbox.Context#Type,
     pd: blackbox.Context#Expr[PipeDerivation[P]]
 ) extends MacroCommonsScala2
-    with PipezMacrosImpl
-    with PipezConfigParserScala2 {
+    with PipezMacrosImpl {
 
   import c.universe.*
 
@@ -111,19 +110,22 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val outT = tpeOf[Out]
     val arrName = TermName(c.freshName("arr"))
     val valName = TermName(c.freshName("value"))
+    val caName = TermName(c.freshName("ca"))
 
-    // arr(lastIndex) = value
-    val storeStmt = q"""$arrName($lastIndex) = $valName"""
-
-    // Build constructor args: arr(i).asInstanceOf[ParamType]
     val outParams = outClass.primaryConstructor.totalParameters.flatten
     val ctorArgs = outParams.zipWithIndex.map { case ((_, param), idx) =>
       val paramT = param.tpe.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
-      q"""$arrName($idx).asInstanceOf[$paramT]"""
+      q"""$caName($idx).asInstanceOf[$paramT]"""
     }
 
-    val newExpr = q"""new $outT(..$ctorArgs)"""
-    mkExpr(q"""((($arrName: _root_.scala.Array[Any], $valName: Any) => { $storeStmt; $newExpr }): (Any, Any) => Any)""")
+    val bodyTree = q"""
+      val $caName = $arrName.asInstanceOf[_root_.scala.Array[Any]]
+      $caName($lastIndex) = $valName
+      new $outT(..$ctorArgs)
+    """
+    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"Any", EmptyTree)
+    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"Any", EmptyTree)
+    mkExpr(Function(List(arrParam, valParam), bodyTree))
       .asInstanceOf[Expr[Any]]
   }
 
@@ -137,27 +139,24 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val arrName = TermName(c.freshName("arr"))
     val valName = TermName(c.freshName("value"))
     val beanName = TermName(c.freshName("bean"))
+    val caName = TermName(c.freshName("ca"))
 
-    // arr(lastIndex) = value
-    val storeStmt = q"""$arrName($lastIndex) = $valName"""
-
-    // Construct the bean
-    val beanValDef = q"""val $beanName = new $outT()"""
-
-    // Call each setter
     val setterStmts = beanFields.zipWithIndex.map { case ((fieldType, setter), idx) =>
       val paramT = fieldType.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
       val setterName = TermName(setter.name)
-      q"""$beanName.$setterName($arrName($idx).asInstanceOf[$paramT])"""
+      q"""$beanName.$setterName($caName($idx).asInstanceOf[$paramT])"""
     }
 
-    val body = q"""
-      $storeStmt
-      $beanValDef
+    val bodyTree = q"""
+      val $caName = $arrName.asInstanceOf[_root_.scala.Array[Any]]
+      $caName($lastIndex) = $valName
+      val $beanName = new $outT()
       ..$setterStmts
       $beanName
     """
-    mkExpr(q"""((($arrName: _root_.scala.Array[Any], $valName: Any) => { $body }): (Any, Any) => Any)""")
+    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"Any", EmptyTree)
+    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"Any", EmptyTree)
+    mkExpr(Function(List(arrParam, valParam), bodyTree))
       .asInstanceOf[Expr[Any]]
   }
 

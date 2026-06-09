@@ -99,6 +99,8 @@ val settings = Seq(
       "-Wconf:cat=unused-pat-vars:s",
       "-Wconf:cat=unused-locals:s",
       "-Wconf:cat=unused-imports:s",
+      "-Wconf:msg=unreachable code:s",
+      "-Wconf:msg=key not found:s",
       "-Wunused:patvars",
       "-Xfatal-warnings",
       "-Xlint:adapted-args",

@@ -11,7 +11,7 @@ trait PipezUseImplicitRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExten
 
   object PipezUseImplicitRule extends PipezRule("use implicit when available") {
 
-    def apply[In: Type, Out: Type](using ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
+    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
       Log.info(s"Attempting to use implicit Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >> {
         @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
         summonPipe[In, Out] match {

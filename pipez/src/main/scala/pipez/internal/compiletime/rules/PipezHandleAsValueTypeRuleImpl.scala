@@ -20,12 +20,12 @@ trait PipezHandleAsValueTypeRuleImpl { this: PipezMacrosImpl & MacroCommons & St
         Type[A] <:< Type.of[Char] ||
         Type[A] <:< Type.of[String]
 
-    def apply[In: Type, Out: Type](using ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
+    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
       Log.info(s"Attempting value type conversion") >> {
-        val inIsValue  = Type[In] match { case IsValueType(_) => true; case _ => false }
+        val inIsValue = Type[In] match { case IsValueType(_) => true; case _ => false }
         val outIsValue = Type[Out] match { case IsValueType(_) => true; case _ => false }
-        val inIsPrim   = isPrimitive[In]
-        val outIsPrim  = isPrimitive[Out]
+        val inIsPrim = isPrimitive[In]
+        val outIsPrim = isPrimitive[Out]
 
         if ((inIsValue || outIsValue) && (inIsValue || inIsPrim) && (outIsValue || outIsPrim))
           MIO {
@@ -49,8 +49,8 @@ trait PipezHandleAsValueTypeRuleImpl { this: PipezMacrosImpl & MacroCommons & St
             }
 
             {
-              import inInnerType.{Underlying as InInner}
-              import outInnerType.{Underlying as OutInner}
+              import inInnerType.Underlying as InInner
+              import outInnerType.Underlying as OutInner
               if (!(Type[InInner] <:< Type[OutInner]))
                 throw new RuntimeException(
                   s"AnyVal conversion impossible: ${Type[InInner].prettyPrint} is not a subtype of ${Type[OutInner].prettyPrint}"

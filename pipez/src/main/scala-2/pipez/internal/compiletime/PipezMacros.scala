@@ -11,6 +11,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     pipeTpe: blackbox.Context#Type,
     ctxTpe0: blackbox.Context#Type,
     resTpe0: blackbox.Context#Type,
+    resApply0: blackbox.Context#Type => blackbox.Context#Type,
     inTpe: blackbox.Context#Type,
     outTpe: blackbox.Context#Type,
     pd: blackbox.Context#Expr[PipeDerivation.Aux[P, Ctx0, Res0]]
@@ -39,12 +40,19 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
   private val pdStableName: TermName = TermName(c.freshName("pd"))
   private val pdStableRef: Tree = Ident(pdStableName)
 
+  private lazy val isIdentityResult: Boolean = resTpe =:= definitions.AnyTpe
+
   private lazy val pdInit: Tree = {
     val expr = pd.asInstanceOf[c.Expr[Any]]
     val PipeTc = pipeTpe.asInstanceOf[c.Type]
-    val CtxT = ctxTpe
-    val ResT = resTpe.typeConstructor
-    q"""val $pdStableName: _root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT] = $expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT]]"""
+    if (isIdentityResult) {
+      // Identity Result[A] = A — use base type, no Aux needed
+      q"""val $pdStableName = $expr"""
+    } else {
+      val CtxT = ctxTpe
+      val ResT = resTpe.typeConstructor
+      q"""val $pdStableName: _root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT] = $expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT]]"""
+    }
   }
 
   override lazy val pdExpr: Expr[Any] = mkExpr(pdStableRef).asInstanceOf[Expr[Any]]
@@ -62,7 +70,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     val ctxRef = c.Expr[Any](Ident(ctxName))(anyTag)
     val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
     val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
-    val resOutTpe = appliedType(resTpe.typeConstructor, outT)
+    val resOutTpe = resApply0(outT).asInstanceOf[c.Type]
     mkExpr(q"""{
       $pdInit
       $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $ctxTpe) => ($bodyTree).asInstanceOf[$resOutTpe])
@@ -177,7 +185,7 @@ final class PipezMacro(val c: blackbox.Context) {
 
   type ConstructorWeakTypeTag[F[_, _]] = WeakTypeTag[F[Any, Nothing]]
 
-  private def extractConcreteTypes(pdExpr: c.Expr[?]): (c.Type, c.Type) = {
+  private def extractConcreteTypes(pdExpr: c.Expr[?]): (c.Type, c.Type => c.Type) = {
     val pdTree = pdExpr.tree
     val declaredT = pdTree.tpe.widen
     // Re-summon the implicit to get its full refined type (including Aux type members)
@@ -192,22 +200,35 @@ final class PipezMacro(val c: blackbox.Context) {
     // For `type Result[A] = Either[..., A]`, resSig is a PolyType with resultType = Either[..., A]
     // For `type Result[A] = A`, resSig is a PolyType with resultType = A (the type param itself)
     // Use dealias to resolve through type aliases
-    val resTpe = resSig.dealias match {
-      case pt if pt.typeParams.nonEmpty => pt.resultType.dealias.typeConstructor
-      case other                        => other.typeConstructor
+    // Build a function: given a c.Type for Out, produce the concrete Result[Out] type.
+    // This handles all cases: Result[A] = A (identity), Result[A] = Either[E, A] (partial application), etc.
+    val resApply: c.Type => c.Type = resSig.dealias match {
+      case pt if pt.typeParams.nonEmpty =>
+        val tp = pt.typeParams.head
+        val rt = pt.resultType.dealias
+        (outTpe: c.Type) => rt.substituteTypes(List(tp), List(outTpe))
+      case _ =>
+        // Abstract — no concrete resolution available, fall back to Any (erased at runtime)
+        (_: c.Type) => definitions.AnyTpe
     }
-
-    (ctxTpe, resTpe)
+    (ctxTpe, resApply)
   }
 
   private def macros[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ) = {
-    val (ctxTpe, resTpe) = extractConcreteTypes(pipeDerivation)
+    val (ctxTpe, resApply) = extractConcreteTypes(pipeDerivation)
+    val resIntTpe = resApply(definitions.IntTpe)
+    // For identity Result[A] = A, resIntTpe = Int, typeConstructor gives Int (0 params)
+    // Use definitions.AnyTpe as sentinel for identity case
+    val resTpeForAux =
+      if (resIntTpe =:= definitions.IntTpe) definitions.AnyTpe
+      else resIntTpe.typeConstructor
     new PipezMacrosImpl2[P, Any, ({ type R[A] = Any })#R, In, Out](c)(
       pipeTpe = c.weakTypeOf[P[Any, Nothing]].typeConstructor,
       ctxTpe0 = ctxTpe,
-      resTpe0 = resTpe,
+      resTpe0 = resTpeForAux,
+      resApply0 = resApply.asInstanceOf[blackbox.Context#Type => blackbox.Context#Type],
       inTpe = c.weakTypeOf[In],
       outTpe = c.weakTypeOf[Out],
       pd = pipeDerivation.asInstanceOf[c.Expr[PipeDerivation.Aux[P, Any, ({ type R[A] = Any })#R]]]

@@ -1,10 +1,10 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.unused
 import scala.util.chaining.*
-import scala.quoted.{ Type as _, * }
+import scala.quoted.{Type as _, *}
 
 private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends SumCaseGeneration[Pipe, In, Out] {
   self: PlatformDefinitions[Pipe, In, Out] & PlatformGenerators[Pipe, In, Out] =>
@@ -12,9 +12,10 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
   import quotes.*
   import quotes.reflect.*
 
-  final def isADT[A: Type]: Boolean =
+  final def isADT[A: Type]: Boolean = {
     val sym = TypeRepr.of[A].typeSymbol
     sym.isClassDef && sym.flags.is(Flags.Sealed)
+  }
 
   final def areSubtypesEqual[A: Type, B: Type]: Boolean = TypeRepr.of[A] =:= TypeRepr.of[B]
 
@@ -22,11 +23,11 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
 
   final def extractEnumOutData: DerivationResult[EnumData[Out]] = extractEnumData[Out]
 
-  private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] =
+  private def extractEnumData[A: Type]: DerivationResult[EnumData[A]] = {
     def extractSubclasses(sym: Symbol): List[Symbol] =
-      if (sym.flags.is(Flags.Sealed)) sym.children.flatMap(extractSubclasses)
-      else if (sym.flags.is(Flags.Enum)) List(sym.typeRef.typeSymbol)
-      else if (sym.flags.is(Flags.Module)) List(sym.typeRef.typeSymbol.moduleClass)
+      if sym.flags.is(Flags.Sealed) then sym.children.flatMap(extractSubclasses)
+      else if sym.flags.is(Flags.Enum) then List(sym.typeRef.typeSymbol)
+      else if sym.flags.is(Flags.Module) then List(sym.typeRef.typeSymbol.moduleClass)
       else List(sym)
 
     DerivationResult.unsafe[EnumData[A]](
@@ -60,7 +61,7 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
             val name = subtypeType.name.pipe { n =>
               // case objects from Scala 2 has names with $ at the end (like all modules) while Scala 3's name
               // have all these suffixes like "$" or ".type" dropped. We need to align these names to allow comparing
-              if (n.endsWith("$")) n.substring(0, n.length - 1) else n
+              if n.endsWith("$") then n.substring(0, n.length - 1) else n
             }
             EnumData.Case(
               name = name,
@@ -75,6 +76,7 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
         s"${previewType[A]} seem like an ADT but cannot extract its subtypes: ${err.getMessage}"
       )
     )
+  }
 
   final def generateEnumCode(generatorData: EnumGeneratorData): DerivationResult[Expr[Pipe[In, Out]]] =
     generateSubtypes(generatorData.subtypes.values.toList)
@@ -87,14 +89,14 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
       }
       .map { case (generator, inSubtype) =>
         implicit val In: Type[In] = inSubtype.asInstanceOf[Type[In]]
-        val arg  = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
+        val arg = Symbol.newBind(Symbol.spliceOwner, "arg", Flags.EmptyFlags, TypeRepr.of[In])
         val argE = Ident(arg.termRef).asExpr.asInstanceOf[Expr[In]]
         val body = '{ ${ generator.unlifted(argE, ctx) }.asInstanceOf[Result[Out]] }
 
         // Scala 3's enums' parameterless cases are vals with type erased, so w have to match them by value
-        if (TypeRepr.of[In].typeSymbol.flags.is(Flags.Enum | Flags.JavaStatic))
-          // case arg @ Enum.Value => ...
-          CaseDef(Bind(arg, Ident(TypeRepr.of[In].typeSymbol.termRef)), None, body.asTerm)
+        if TypeRepr.of[In].typeSymbol.flags.is(Flags.Enum | Flags.JavaStatic) then
+        // case arg @ Enum.Value => ...
+        CaseDef(Bind(arg, Ident(TypeRepr.of[In].typeSymbol.termRef)), None, body.asTerm)
         else
           // case arg : Enum.Value => ...
           CaseDef(Bind(arg, Typed(Wildcard(), TypeTree.of[In])), None, body.asTerm)
@@ -104,7 +106,7 @@ private[internal] trait PlatformSumCaseGeneration[Pipe[_, _], In, Out] extends S
       .asInstanceOf[Expr[Result[Out]]]
 
     val body = lift[In, Out](
-      '{ (in: In, ctx: Context) => ${ cases('{ in }, '{ ctx }) } }
+      '{ (in: In, ctx: Context) => ${ cases('in, 'ctx) } }
     )
 
     DerivationResult

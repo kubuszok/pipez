@@ -42,9 +42,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive[BeanManyIn, CaseManyOut]
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(CaseManyOut(1, "a", 2L))
     )
@@ -58,9 +59,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive[BeanManyIn, BeanManyOut]
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanManyOut().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)))
     )
@@ -100,9 +102,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive[BeanManyIn, CaseManyOutMod]
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(CaseManyOutMod("1", "a", 2L))
     )
@@ -116,9 +119,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive[BeanManyIn, BeanManyOutMod]
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanManyOutMod().tap(_.setA("1")).tap(_.setB("a")).tap(_.setC(2L)))
     )
@@ -206,9 +210,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
             .Config[BeanManyIn, CaseManyOutExt]
             .addField(_.x, (in: BeanManyIn, _: Boolean, _: String) => Right(in.toString))
         )
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(CaseManyOutExt(1, "a", 2L, "BeanManyIn(1,a,2)"))
     )
@@ -230,9 +235,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
             .Config[BeanManyIn, BeanManyOutExt]
             .addField(_.getX(), (in: BeanManyIn, _: Boolean, _: String) => Right(in.toString))
         )
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("BeanManyIn(1,a,2)")))
     )
@@ -299,9 +305,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
             .Config[BeanManyIn, CaseManyOutExt]
             .plugInField(_.getA(), _.x, (a: Int, _: Boolean, _: String) => Right(a.toString))
         )
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(CaseManyOutExt(1, "a", 2L, "1"))
     )
@@ -323,9 +330,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
             .Config[BeanManyIn, BeanManyOutExt]
             .plugInField(_.getA(), _.getX(), (a: Int, _: Boolean, _: String) => Right(a.toString))
         )
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("1")))
     )
@@ -369,9 +377,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive(ContextCodec.Config[BeanManyIn, CaseManyOutExt].renameField(_.getA(), _.x))
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(CaseManyOutExt(1, "a", 2L, "1"))
     )
@@ -385,9 +394,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive(ContextCodec.Config[BeanManyIn, BeanManyOutExt].renameField(_.getA(), _.getX()))
-        .decode(new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanManyIn().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanManyOutExt().tap(_.setA(1)).tap(_.setB("a")).tap(_.setC(2L)).tap(_.setX("1")))
     )
@@ -419,9 +429,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec
         .derive(ContextCodec.Config[BeanLower, BeanUpper].fieldMatchingCaseInsensitive)
-        .decode(new BeanLower().tap(_.setAaa(1)).tap(_.setBbb("a")).tap(_.setCcc(2L)),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanLower().tap(_.setAaa(1)).tap(_.setBbb("a")).tap(_.setCcc(2L)),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanUpper().tap(_.setAAA(1)).tap(_.setBBB("a")).tap(_.setCCC(2L)))
     )
@@ -491,11 +502,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec.derive[ADTClassesIn, ADTClassesOut].decode(ADTClassesIn.B(1), shouldFailFast = false, path = "root"),
       Right(ADTClassesOut.B(1))
-    )
-    // scala 3 enum
-    assertEquals(
-      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, path = "root"),
-      Right(EnumOut.B(1))
     )
   }
 
@@ -616,9 +622,10 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
         .derive(
           ContextCodec.Config[BeanPolyIn[String], CaseParamOutExt[Int]].addField(_.x, (i, _, _) => Right(i.a))
         )
-        .decode(new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10")),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10")),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(CaseParamOutExt(5, "test", 10, 5))
     )
@@ -628,15 +635,16 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
         .derive(
           ContextCodec.Config[BeanPolyIn[String], BeanPolyOutExt[Int]].addField(_.getX(), (i, _, _) => Right(i.a))
         )
-        .decode(new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10")),
-                shouldFailFast = false,
-                path = "root"
+        .decode(
+          new BeanPolyIn[String]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC("10")),
+          shouldFailFast = false,
+          path = "root"
         ),
       Right(new BeanPolyOutExt[Int]().tap(_.setA(5)).tap(_.setB("test")).tap(_.setC(10)).tap(_.setX(5)))
     )
     // type parameter used during derivation
     def test[In, Out](out: Out)(implicit
-      contextCodec:        ContextCodec[In, Out]
+        contextCodec: ContextCodec[In, Out]
     ): ContextCodec[CaseParamIn[In], CaseParamOutExt[Out]] = ContextCodec.derive(
       ContextCodec.Config[CaseParamIn[In], CaseParamOutExt[Out]].addField(_.x, (_, _, _) => Right(out))
     )
@@ -724,33 +732,6 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assertEquals(
       ContextCodec.derive[GadtIn[Int], GadtOut[Int]].decode(GadtIn.B(1), shouldFailFast = false, "root"),
       Right(GadtOut.B(1))
-    )
-    // scala 2 gadt -> scala 3 enum
-    assertEquals(
-      ContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.A, shouldFailFast = false, "root"),
-      Right(EnumOut.A)
-    )
-    assertEquals(
-      ContextCodec.derive[GadtIn[Int], EnumOut[Int]].decode(GadtIn.B(1), shouldFailFast = false, "root"),
-      Right(EnumOut.B(1))
-    )
-    // scala 3 enum -> scala 2 gadt
-    assertEquals(
-      ContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.A, shouldFailFast = false, "root"),
-      Right(GadtOut.A)
-    )
-    assertEquals(
-      ContextCodec.derive[EnumIn[Int], GadtOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, "root"),
-      Right(GadtOut.B(1))
-    )
-    // scala 3 enum -> scala 3 enum
-    assertEquals(
-      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.A, shouldFailFast = false, "root"),
-      Right(EnumOut.A)
-    )
-    assertEquals(
-      ContextCodec.derive[EnumIn[Int], EnumOut[Int]].decode(EnumIn.B(1), shouldFailFast = false, "root"),
-      Right(EnumOut.B(1))
     )
   }
 

@@ -47,9 +47,9 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   final case class ProductInData(getters: ListMap[String, ProductInData.Getter[?]]) {
 
     def findGetter(
-      inParamName:           String,
-      outParamName:          String,
-      caseInsensitiveSearch: Boolean
+        inParamName: String,
+        outParamName: String,
+        caseInsensitiveSearch: Boolean
     ): DerivationResult[ProductInData.Getter[?]] =
       DerivationResult.fromOption(
         getters.collectFirst {
@@ -65,10 +65,10 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   object ProductInData {
 
     final case class Getter[InField](
-      name: String,
-      tpe:  Type[InField],
-      get:  Expr[In] => Expr[InField],
-      path: Path
+        name: String,
+        tpe: Type[InField],
+        get: Expr[In] => Expr[InField],
+        path: Path
     ) {
 
       override def toString: String = s"Getter($name : ${previewType(tpe)})"
@@ -80,13 +80,13 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   object ProductOutData {
 
     final case class ConstructorParam[OutField](
-      name:     String,
-      tpe:      Type[OutField],
-      fallback: Vector[FieldFallback[OutField]]
+        name: String,
+        tpe: Type[OutField],
+        fallback: Vector[FieldFallback[OutField]]
     )
     final case class CaseClass(
-      caller: Constructor,
-      params: List[ListMap[String, ConstructorParam[?]]]
+        caller: Constructor,
+        params: List[ListMap[String, ConstructorParam[?]]]
     ) extends ProductOutData {
       override def toString: String = s"CaseClass${params.map { list =>
           "(" + list.map { case (n, p) => s"$n : ${previewType(p.tpe)}" }.mkString(", ") + ")"
@@ -94,17 +94,17 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
     }
 
     final case class Setter[OutField](
-      name:     String,
-      tpe:      Type[OutField],
-      set:      (Expr[Out], Expr[OutField]) => Expr[Unit],
-      fallback: Vector[FieldFallback[OutField]]
+        name: String,
+        tpe: Type[OutField],
+        set: (Expr[Out], Expr[OutField]) => Expr[Unit],
+        fallback: Vector[FieldFallback[OutField]]
     ) {
 
       override def toString: String = s"Setter($name : ${previewType(tpe)})"
     }
     final case class JavaBean(
-      defaultConstructor: Expr[Out],
-      setters:            ListMap[String, Setter[?]]
+        defaultConstructor: Expr[Out],
+        setters: ListMap[String, Setter[?]]
     ) extends ProductOutData {
       override def toString: String = s"JavaBean(${setters.map { case (n, p) => s"$n : $p" }.mkString(", ")})"
     }
@@ -117,29 +117,29 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
     final case class DefaultField[OutField]() extends OutFieldLogic[OutField]
 
     final case class FieldAdded[OutField](
-      pipe: Expr[Pipe[In, OutField]]
+        pipe: Expr[Pipe[In, OutField]]
     ) extends OutFieldLogic[OutField] {
       override def toString: String = s"FieldAdded(${previewCode(pipe)})"
     }
 
     final case class FieldRenamed[InField, OutField](
-      inField:     String,
-      inFieldType: Type[InField]
+        inField: String,
+        inFieldType: Type[InField]
     ) extends OutFieldLogic[OutField] {
       override def toString: String = s"FieldRenamed($inField : ${previewType(inFieldType)})"
     }
 
     final case class PipeProvided[InField, OutField](
-      inField:     String,
-      inFieldType: Type[InField],
-      pipe:        Expr[Pipe[InField, OutField]]
+        inField: String,
+        inFieldType: Type[InField],
+        pipe: Expr[Pipe[InField, OutField]]
     ) extends OutFieldLogic[OutField] {
       override def toString: String = s"PipeProvided($inField : ${previewType(inFieldType)}, ${previewCode(pipe)})"
     }
 
     private def resolve[OutField: Type](
-      settings:     Settings,
-      outFieldName: String
+        settings: Settings,
+        outFieldName: String
     ): OutFieldLogic[OutField] = {
       import Path.*
       import ConfigEntry.*
@@ -164,11 +164,11 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 
     type InField
     def resolveField[OutField: Type](
-      settings:     Settings,
-      inData:       ProductInData,
-      outParamName: String,
-      indexOpt:     Option[Int],
-      fallback:     Vector[FieldFallback[OutField]]
+        settings: Settings,
+        inData: ProductInData,
+        outParamName: String,
+        indexOpt: Option[Int],
+        fallback: Vector[FieldFallback[OutField]]
     ): DerivationResult[ProductGeneratorData.OutputValue] = resolve[OutField](settings, outParamName) match {
       case DefaultField() =>
         // if inField (same name as out - same index if tuple) not found then error
@@ -187,9 +187,8 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
           }
           .orElse(fromFallbackValue(outParamName, fallback, settings))
           .log(
-            s"Field $outParamName uses default resolution (${
-                if (indexOpt.isEmpty) "matching input name" else "matching field position"
-              }, summoning)"
+            s"Field $outParamName uses default resolution (${if (indexOpt.isEmpty) "matching input name"
+              else "matching field position"}, summoning)"
           )
       case FieldAdded(pipe) =>
         // (in, ctx) => unlift(pipe, in, ctx) : Result[OutField]
@@ -230,30 +229,30 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
     object OutputValue {
 
       final case class Pure[A](
-        tpe:    Type[A],
-        caller: (Expr[In], Expr[Context]) => Expr[A]
+          tpe: Type[A],
+          caller: (Expr[In], Expr[Context]) => Expr[A]
       ) extends OutputValue {
         override def toString: String = s"Pure { (${previewType[In]}, Context) => ${previewType(tpe)} }"
       }
 
       final case class Result[A](
-        tpe:    Type[A],
-        caller: (Expr[In], Expr[Context]) => Expr[Definitions.Result[A]]
+          tpe: Type[A],
+          caller: (Expr[In], Expr[Context]) => Expr[Definitions.Result[A]]
       ) extends OutputValue {
         override def toString: String = s"Result { (${previewType[In]}, Context) => ${previewType(tpe)} }"
       }
     }
 
     final case class CaseClass(
-      constructor: Constructor,
-      output:      List[List[OutputValue]]
+        constructor: Constructor,
+        output: List[List[OutputValue]]
     ) extends ProductGeneratorData {
       override def toString: String = s"CaseClass${output.map(list => "(" + list.mkString(", ") + ")").mkString}"
     }
 
     final case class JavaBean(
-      defaultConstructor: Expr[Out],
-      output:             List[(OutputValue, ProductOutData.Setter[?])]
+        defaultConstructor: Expr[Out],
+        output: List[(OutputValue, ProductOutData.Setter[?])]
     ) extends ProductGeneratorData {
       override def toString: String = s"JavaBean(${output.mkString(", ")})"
     }
@@ -369,9 +368,9 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   // - additional fields in In can be safely ignored
   // - field by default are matched by their name
   private def matchFieldsByName(
-    inData:   ProductInData,
-    outData:  ProductOutData,
-    settings: Settings
+      inData: ProductInData,
+      outData: ProductOutData,
+      settings: Settings
   ): DerivationResult[ProductGeneratorData] = outData match {
     case ProductOutData.CaseClass(caller, listOfParamsList) =>
       listOfParamsList
@@ -404,9 +403,9 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   // - additional fields in In can be safely ignored
   // - field by default are matched by their position
   private def matchFieldsByPosition(
-    inData:   ProductInData,
-    outData:  ProductOutData,
-    settings: Settings
+      inData: ProductInData,
+      outData: ProductOutData,
+      settings: Settings
   ): DerivationResult[ProductGeneratorData] = outData match {
     case ProductOutData.CaseClass(caller, listOfParamsList) =>
       listOfParamsList
@@ -433,8 +432,8 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
   // if inField <:< outField then (in, ctx) => pure(in : OutField)
   // else (in, ctx) => unlift(summon[InField, OutField], in.inField, updateContext(ctx, path)) : Result[OutField]
   private def fromFieldConstructorParam[InField: Type, OutField: Type](
-    getter:   ProductInData.Getter[InField],
-    settings: Settings
+      getter: ProductInData.Getter[InField],
+      settings: Settings
   ): DerivationResult[ProductGeneratorData.OutputValue] =
     if (isSubtype[InField, OutField]) {
       DerivationResult.pure(
@@ -455,7 +454,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 
   // (in, ctx) => unlift(pipe, in, ctx) : Result[OutField]
   private def fieldAddedConstructorParam[OutField: Type](
-    pipe: Expr[Pipe[In, OutField]]
+      pipe: Expr[Pipe[In, OutField]]
   ): ProductGeneratorData.OutputValue = ProductGeneratorData.OutputValue.Result(
     typeOf[OutField],
     (in, ctx) => unlift[In, OutField](pipe, in, ctx)
@@ -463,8 +462,8 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 
   // (in, ctx) => unlift(summon[InField, OutField], in.used, updateContext(ctx, path)) : Result[OutField]
   private def pipeProvidedConstructorParam[InField: Type, OutField: Type](
-    getter: ProductInData.Getter[InField],
-    pipe:   Expr[Pipe[InField, OutField]]
+      getter: ProductInData.Getter[InField],
+      pipe: Expr[Pipe[InField, OutField]]
   ): ProductGeneratorData.OutputValue =
     ProductGeneratorData.OutputValue.Result(
       typeOf[OutField],
@@ -473,9 +472,9 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 
   type FallbackField
   private def fromFallbackValue[OutField: Type](
-    outParamName: String,
-    fallback:     Vector[FieldFallback[OutField]],
-    settings:     Settings
+      outParamName: String,
+      fallback: Vector[FieldFallback[OutField]],
+      settings: Settings
   ): DerivationResult[ProductGeneratorData.OutputValue] = fallback.headOption match {
     case Some(value @ FieldFallback.Value(_, _)) =>
       implicit val fallbackType: Type[FallbackField] = value.tpe.asInstanceOf[Type[FallbackField]]
@@ -517,7 +516,7 @@ private[internal] trait ProductCaseGeneration[Pipe[_, _], In, Out] {
 private[internal] object ProductCaseGeneration {
 
   private val getAccessor = raw"(?i)get(.)(.*)".r
-  private val isAccessor  = raw"(?i)is(.)(.*)".r
+  private val isAccessor = raw"(?i)is(.)(.*)".r
   private val dropGetIs: String => String = {
     case getAccessor(head, tail) => head.toLowerCase + tail
     case isAccessor(head, tail)  => head.toLowerCase + tail
@@ -533,11 +532,11 @@ private[internal] object ProductCaseGeneration {
   val isSetterName: String => Boolean = name => setAccessor.matches(name)
 
   def inputNameMatchesOutputName(
-    inFieldName:     String,
-    outFieldName:    String,
-    caseInsensitive: Boolean
+      inFieldName: String,
+      outFieldName: String,
+      caseInsensitive: Boolean
   ): Boolean = {
-    val in  = Set(inFieldName, dropGetIs(inFieldName))
+    val in = Set(inFieldName, dropGetIs(inFieldName))
     val out = Set(outFieldName, dropSet(outFieldName))
     if (caseInsensitive) in.exists(a => out.exists(b => a.equalsIgnoreCase(b)))
     else in.intersect(out).nonEmpty

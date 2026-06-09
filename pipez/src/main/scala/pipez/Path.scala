@@ -9,7 +9,7 @@ package pipez
   */
 sealed abstract class Path(override val toString: String) extends Product with Serializable {
 
-  final def field(name: String):   Path = Path.Field(this, name)
+  final def field(name: String): Path = Path.Field(this, name)
   final def subtype(name: String): Path = Path.Subtype(this, name)
 }
 object Path {

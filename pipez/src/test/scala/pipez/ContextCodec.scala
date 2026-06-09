@@ -35,10 +35,10 @@ object ContextCodec extends PipeSemiautoSupport[ContextCodec] with PipeSemiautoC
     }
 
     override def mergeResults[A, B, C](
-      context: Driver,
-      ra:      Either[List[String], A],
-      rb:      => Either[List[String], B],
-      f:       (A, B) => C
+        context: Driver,
+        ra: Either[List[String], A],
+        rb: => Either[List[String], B],
+        f: (A, B) => C
     ): Either[List[String], C] =
       if (context.shouldFailFast) {
         ra match {

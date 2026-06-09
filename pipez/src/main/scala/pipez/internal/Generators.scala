@@ -1,7 +1,7 @@
 package pipez.internal
 
 import pipez.PipeDerivationConfig
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.nowarn
 import scala.util.chaining.*
@@ -52,9 +52,8 @@ private[internal] trait Generators[Pipe[_, _], In, Out]
         case DerivationError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
           s"Couldn't find an implicit value converting ${previewType(inFieldType)} to ${previewType(outFieldType)}, required by $inType.$inField to $outType.$outField conversion; provide the right implicit or configuration"
         case DerivationError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
-          s"Couldn't convert $inType (${if (isInSumType) "sum type" else "value enumeration"}) into $outType (${
-              if (isOutSumType) "sum type" else "value enumeration"
-            })"
+          s"Couldn't convert $inType (${if (isInSumType) "sum type"
+            else "value enumeration"}) into $outType (${if (isOutSumType) "sum type" else "value enumeration"})"
         case DerivationError.InvalidConfiguration(msg) =>
           s"The configuration you provided was incorrect: $msg"
         case DerivationError.InvalidInput(msg) =>
@@ -74,20 +73,20 @@ private[internal] trait Generators[Pipe[_, _], In, Out]
 
   /** Should generate code `pipeDerivation.lift { (in, ctx) => ... }` */
   def lift[I: Type, O: Type](
-    call: Expr[(I, Context) => Result[O]]
+      call: Expr[(I, Context) => Result[O]]
   ): Expr[Pipe[I, O]]
 
   /** Should generate code `pipeDerivation.unlift(pipe)(in, ctx)` */
   def unlift[I: Type, O: Type](
-    pipe: Expr[Pipe[I, O]],
-    in:   Expr[I],
-    ctx:  Expr[Context]
+      pipe: Expr[Pipe[I, O]],
+      in: Expr[I],
+      ctx: Expr[Context]
   ): Expr[Result[O]]
 
   /** Should generate code `pipeDerivation.updateContext(ctx, path)` */
   def updateContext(
-    context: Expr[Context],
-    path:    Expr[pipez.Path]
+      context: Expr[Context],
+      path: Expr[pipez.Path]
   ): Expr[Context]
 
   /** Should generate code `pipeDerivation.pureResult(a)` */
@@ -95,16 +94,16 @@ private[internal] trait Generators[Pipe[_, _], In, Out]
 
   /** Should generate code `pipeDerivation.mergeResults(ctx, ra, rb, (a, b) => ...)` */
   def mergeResults[A: Type, B: Type, C: Type](
-    context: Expr[Context],
-    ra:      Expr[Result[A]],
-    rb:      Expr[Result[B]],
-    f:       Expr[(A, B) => C]
+      context: Expr[Context],
+      ra: Expr[Result[A]],
+      rb: Expr[Result[B]],
+      f: Expr[(A, B) => C]
   ): Expr[Result[C]]
 
   /** Used by `derive(Option[Expr[PipeDerivationConfig[Pipe, In, Out]]])` and `derivePipe[Input: Type, Output: Type]` */
   def derive(config: Settings): DerivationResult[Expr[Pipe[In, Out]]] = {
     val isDiagnosticsEnabled = config.isDiagnosticsEnabled
-    lazy val startTime       = java.time.Instant.now()
+    lazy val startTime = java.time.Instant.now()
     if (isDiagnosticsEnabled) {
       startTime.hashCode
     }

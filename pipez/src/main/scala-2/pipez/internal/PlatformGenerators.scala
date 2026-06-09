@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 
 private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
     extends Generators[Pipe, In, Out]
@@ -21,28 +21,28 @@ private[internal] trait PlatformGenerators[Pipe[_, _], In, Out]
     c.abort(c.enclosingPosition, errorMessage(errors))
 
   final def lift[I: Type, O: Type](
-    call: Expr[(I, Context) => Result[O]]
+      call: Expr[(I, Context) => Result[O]]
   ): Expr[Pipe[I, O]] = c.Expr[Pipe[I, O]](q"""$pipeDerivation.lift($call)""")
 
   final def unlift[I: Type, O: Type](
-    pipe: Expr[Pipe[I, O]],
-    in:   Expr[I],
-    ctx:  Expr[Context]
+      pipe: Expr[Pipe[I, O]],
+      in: Expr[I],
+      ctx: Expr[Context]
   ): Expr[Result[O]] = c.Expr[Result[O]](q"""$pipeDerivation.unlift($pipe, $in, $ctx)""")
 
   final def updateContext(
-    ctx:  Expr[Context],
-    path: Expr[pipez.Path]
+      ctx: Expr[Context],
+      path: Expr[pipez.Path]
   ): Expr[Context] = c.Expr[Context](q"""$pipeDerivation.updateContext($ctx, $path)""")
 
   final def pureResult[A: Type](a: Expr[A]): Expr[Result[A]] =
     c.Expr[Result[A]](q"""$pipeDerivation.pureResult($a)""")
 
   final def mergeResults[A: Type, B: Type, C: Type](
-    ctx: Expr[Context],
-    ra:  Expr[Result[A]],
-    rb:  Expr[Result[B]],
-    f:   Expr[(A, B) => C]
+      ctx: Expr[Context],
+      ra: Expr[Result[A]],
+      rb: Expr[Result[B]],
+      f: Expr[(A, B) => C]
   ): Expr[Result[C]] = c.Expr[Result[C]](q"""$pipeDerivation.mergeResults($ctx, $ra, $rb, $f)""")
 
   protected val isGarbage: Symbol => Boolean = ((s: Symbol) => s.name.toString) andThen Generators.isGarbage

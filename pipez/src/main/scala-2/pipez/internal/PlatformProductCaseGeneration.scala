@@ -1,6 +1,6 @@
 package pipez.internal
 
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.internal.Definitions.{Context, Result}
 import pipez.internal.ProductCaseGeneration.inputNameMatchesOutputName
 
 import scala.annotation.nowarn
@@ -24,7 +24,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     sym.isClass && sym.asClass.isCaseClass && !sym.isAbstract && sym.asClass.primaryConstructor.isPublic
   }
   final def isCaseObject[A: Type]: Boolean = {
-    val sym          = typeOf[A].typeSymbol
+    val sym = typeOf[A].typeSymbol
     def isScala2Enum = sym.asClass.isCaseClass
     def isScala3Enum = sym.isStatic && sym.isFinal // paramless case in S3 cannot be checked for "case"
     sym.isPublic && sym.isModuleClass && (isScala2Enum || isScala3Enum)
@@ -60,8 +60,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     isJavaSetter(setter) || isVar(setter)
 
   final private case class Getter[Extracted, ExtractedField](
-    tpe: Type[ExtractedField],
-    get: Expr[Extracted] => Expr[ExtractedField]
+      tpe: Type[ExtractedField],
+      get: Expr[Extracted] => Expr[ExtractedField]
   )
   private def extractGetters[Extracted: Type]: ListMap[String, Getter[Extracted, Any]] =
     typeOf[Extracted].decls
@@ -69,7 +69,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       .filterNot(isGarbage)
       .filter(m => isCaseClassField(m) || isJavaGetter(m))
       .map { getter =>
-        val name     = getter.name.toString
+        val name = getter.name.toString
         val termName = getter.asMethod.name.toTermName
         name -> Getter[Extracted, Any](
           tpe = returnTypeOf(typeOf[Extracted], getter).asInstanceOf[Type[Any]],
@@ -204,8 +204,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
     }
 
   private def generateCaseClass(
-    constructor:          Constructor,
-    outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
+      constructor: Constructor,
+      outputParameterLists: List[List[ProductGeneratorData.OutputValue]]
   ): DerivationResult[Expr[Pipe[In, Out]]] = {
     val paramToIdx: Map[ProductGeneratorData.OutputValue.Result[?], Constant] = outputParameterLists.flatten
       .collect { case result: ProductGeneratorData.OutputValue.Result[?] => result }
@@ -228,10 +228,10 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
 
     @scala.annotation.tailrec
     def generateBody(
-      in:          Expr[In],
-      ctx:         Expr[Context],
-      arrayResult: Expr[Result[Array[Any]]],
-      params:      List[(ProductGeneratorData.OutputValue.Result[?], Constant)]
+        in: Expr[In],
+        ctx: Expr[Context],
+        arrayResult: Expr[Result[Array[Any]]],
+        params: List[(ProductGeneratorData.OutputValue.Result[?], Constant)]
     ): Expr[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
@@ -242,7 +242,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         case (param, idx) :: Nil =>
           val rightCode = param.caller(in, ctx).asInstanceOf[Expr[Result[Any]]]
 
-          val left  = c.freshName(TermName("left"))
+          val left = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
           val fun: Expr[(Array[Any], Any) => Out] = c.Expr[(Array[Any], Any) => Out](
             q"""
@@ -259,7 +259,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         case (param, idx) :: tail =>
           val rightCode = param.caller(in, ctx).asInstanceOf[Expr[Result[Any]]]
 
-          val left  = c.freshName(TermName("left"))
+          val left = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Array[Any], Any) => Array[Any]](
             q"""
@@ -274,7 +274,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       }
 
     val body: Expr[Pipe[In, Out]] = {
-      val in  = c.freshName(TermName("in"))
+      val in = c.freshName(TermName("in"))
       val ctx = c.freshName(TermName("ctx"))
       lift[In, Out](
         c.Expr[(In, Context) => Result[Out]](
@@ -293,8 +293,8 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
   }
 
   private def generateJavaBean(
-    defaultConstructor: Expr[Out],
-    outputSettersList:  List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
+      defaultConstructor: Expr[Out],
+      outputSettersList: List[(ProductGeneratorData.OutputValue, ProductOutData.Setter[?])]
   ): DerivationResult[Expr[Pipe[In, Out]]] = {
     def pureValues(in: Expr[In], ctx: Expr[Context], result: Expr[Out]): List[Expr[Unit]] =
       outputSettersList.collect { case (ProductGeneratorData.OutputValue.Pure(_, caller), setter) =>
@@ -323,10 +323,10 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
 
     @scala.annotation.tailrec
     def generateBody(
-      in:        Expr[In],
-      ctx:       Expr[Context],
-      outResult: Expr[Result[Out]],
-      params:    List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])]
+        in: Expr[In],
+        ctx: Expr[Context],
+        outResult: Expr[Result[Out]],
+        params: List[(ProductGeneratorData.OutputValue.Result[?], ProductOutData.Setter[?])]
     ): Expr[Result[Out]] =
       params match {
         // all values are taken directly from input and wrapped in Result
@@ -337,7 +337,7 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
         case (param, setter) :: tail =>
           val rightCode = param.caller(in, ctx).asInstanceOf[Expr[Result[Any]]]
 
-          val left  = c.freshName(TermName("left"))
+          val left = c.freshName(TermName("left"))
           val right = c.freshName(TermName("right"))
           val fun = c.Expr[(Out, Any) => Out](
             q"""
@@ -352,16 +352,17 @@ private[internal] trait PlatformProductCaseGeneration[Pipe[_, _], In, Out]
       }
 
     val body: Expr[Pipe[In, Out]] = {
-      val in  = c.freshName(TermName("in"))
+      val in = c.freshName(TermName("in"))
       val ctx = c.freshName(TermName("ctx"))
       lift[In, Out](
         c.Expr[(In, Context) => Result[Out]](
           q"""
           ($in : $In, $ctx : $Context) =>
-            ${generateBody(c.Expr[In](q"$in"),
-                           c.Expr[Context](q"$ctx"),
-                           initialValue(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")),
-                           resultValues
+            ${generateBody(
+              c.Expr[In](q"$in"),
+              c.Expr[Context](q"$ctx"),
+              initialValue(c.Expr[In](q"$in"), c.Expr[Context](q"$ctx")),
+              resultValues
             )}
           """
         )

@@ -1,23 +1,23 @@
 package pipez.internal
 
-import pipez.{ PipeDerivation, PipeDerivationConfig }
-import pipez.internal.Definitions.{ Context, Result }
+import pipez.{PipeDerivation, PipeDerivationConfig}
+import pipez.internal.Definitions.{Context, Result}
 
 import scala.annotation.nowarn
-import scala.reflect.macros.{ TypecheckException, blackbox }
+import scala.reflect.macros.{blackbox, TypecheckException}
 
 // The way we are dispatching things here is one giant workaround for https://github.com/scala/bug/issues/5712
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
-  pipeTpe:                                         blackbox.Context#Type,
-  inTpe:                                           blackbox.Context#Type,
-  outTpe:                                          blackbox.Context#Type,
-  pd:                                              blackbox.Context#Expr[PipeDerivation[Pipe]]
+    pipeTpe: blackbox.Context#Type,
+    inTpe: blackbox.Context#Type,
+    outTpe: blackbox.Context#Type,
+    pd: blackbox.Context#Expr[PipeDerivation[Pipe]]
 ) extends PlatformDefinitions[Pipe, In, Out]
     with PlatformGenerators[Pipe, In, Out] {
 
-  override val In:  Type[In]  = inTpe.asInstanceOf[Type[In]]
+  override val In: Type[In] = inTpe.asInstanceOf[Type[In]]
   override val Out: Type[Out] = outTpe.asInstanceOf[Type[Out]]
 
   def PipeOf[I: Type, O: Type]: Type[Pipe[I, O]] =
@@ -33,24 +33,25 @@ final class MacrosImpl[Pipe[_, _], In, Out](val c: blackbox.Context)(
       pd = pd
     )
     val filteredSettings = settings.stripSpecificsToCurrentDerivation.asInstanceOf[m.Settings]
-    val result           = m.derive(filteredSettings)
-    val mError           = m.DerivationError
+    val result = m.derive(filteredSettings)
+    val mError = m.DerivationError
     import DerivationError.*
     // pattern matching is done through companion objects - which differ when objects exists in different MacroImpls
     def fixErrors(errors: List[m.DerivationError]): List[DerivationError] = errors.map {
-      case mError.MissingPublicConstructor            => MissingPublicConstructor
-      case mError.MissingPublicSource(outFieldName)   => MissingPublicSource(outFieldName)
-      case mError.MissingMatchingSubType(subtypeName) => MissingMatchingSubType(subtypeName)
-      case mError.MissingMatchingValue(valueName)     => MissingMatchingValue(valueName)
+      case mError.MissingPublicConstructor                            => MissingPublicConstructor
+      case mError.MissingPublicSource(outFieldName)                   => MissingPublicSource(outFieldName)
+      case mError.MissingMatchingSubType(subtypeName)                 => MissingMatchingSubType(subtypeName)
+      case mError.MissingMatchingValue(valueName)                     => MissingMatchingValue(valueName)
       case mError.RequiredImplicitNotFound(inFieldType, outFieldType) =>
         RequiredImplicitNotFound(inFieldType.asInstanceOf[Type[Any]], outFieldType.asInstanceOf[Type[Any]])
       case mError.RecursiveDerivationFailed(inType, outType, errors) =>
         RecursiveDerivationFailed(inType.asInstanceOf[Type[Any]], outType.asInstanceOf[Type[Any]], fixErrors(errors))
       case mError.NotSupportedFieldConversion(inField, inFieldType, outField, outFieldType) =>
-        NotSupportedFieldConversion(inField,
-                                    inFieldType.asInstanceOf[Type[Any]],
-                                    outField,
-                                    outFieldType.asInstanceOf[Type[Any]]
+        NotSupportedFieldConversion(
+          inField,
+          inFieldType.asInstanceOf[Type[Any]],
+          outField,
+          outFieldType.asInstanceOf[Type[Any]]
         )
       case mError.NotSupportedEnumConversion(isInSumType, isOutSumType) =>
         NotSupportedEnumConversion(isInSumType, isOutSumType)
@@ -88,7 +89,7 @@ final class Macro(val c: blackbox.Context) {
   type ConstructorWeakTypeTag[F[_, _]] = WeakTypeTag[F[Any, Nothing]]
 
   private def macros[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
-    pipeDerivation: c.Expr[PipeDerivation[Pipe]]
+      pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ) = new MacrosImpl[Pipe, In, Out](
     c
   )(
@@ -110,7 +111,7 @@ final class Macro(val c: blackbox.Context) {
   //
   // If we figured it out, we could remove this fix, as it only fails this case as far as I can tell.
   private def fixTypes[Pipe[_, _]: ConstructorWeakTypeTag, Out](
-    expr: blackbox.Context#Expr[Out]
+      expr: blackbox.Context#Expr[Out]
   ): c.Expr[Out] = try
     c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree.asInstanceOf[c.Tree])))
   catch {
@@ -119,7 +120,7 @@ final class Macro(val c: blackbox.Context) {
 
   /** Called with `macro pipez.internal.Macro.deriveDefault[Pipe, In, Out]` */
   def deriveDefault[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
-    pipeDerivation: c.Expr[PipeDerivation[Pipe]]
+      pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
     fixTypes(m.deriveDefault)
@@ -127,9 +128,9 @@ final class Macro(val c: blackbox.Context) {
 
   /** Called with `macro pipez.internal.Macro.deriveConfigured[Pipe, In, Out]` */
   def deriveConfigured[Pipe[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
-    config: c.Expr[PipeDerivationConfig[Pipe, In, Out]]
+      config: c.Expr[PipeDerivationConfig[Pipe, In, Out]]
   )(
-    pipeDerivation: c.Expr[PipeDerivation[Pipe]]
+      pipeDerivation: c.Expr[PipeDerivation[Pipe]]
   ): c.Expr[Pipe[In, Out]] = {
     val m = macros[Pipe, In, Out](pipeDerivation)
     fixTypes(m.deriveConfigured(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[Pipe, In, Out]]]))

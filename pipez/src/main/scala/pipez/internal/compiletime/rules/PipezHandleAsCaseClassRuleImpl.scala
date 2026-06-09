@@ -233,12 +233,12 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
     private def resolveField[In: Type, Out: Type](
         outName: String,
         outFieldType: ??
-    )(implicit dctx: DerivationCtx[In, Out]): FieldResult = {
+    )(implicit ctx: DerivationCtx[In, Out]): FieldResult = {
       import outFieldType.Underlying as OutField
 
-      val configAdd = dctx.settings.addedFields.find(e => matchFieldName(e.outFieldName, outName))
-      val configRename = dctx.settings.renamedFields.find(e => matchFieldName(e.outFieldName, outName))
-      val configPlugIn = dctx.settings.pluggedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configAdd = ctx.settings.addedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configRename = ctx.settings.renamedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configPlugIn = ctx.settings.pluggedFields.find(e => matchFieldName(e.outFieldName, outName))
 
       if (configAdd.isDefined) {
         val pipe = configAdd.get.pipe
@@ -254,7 +254,7 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           outName,
           outFieldType,
           (in, ctxE) => {
-            val fieldExpr = extractFieldFromIn[In](in.asInstanceOf[Expr[In]], inName)(implicitly[Type[In]], dctx)
+            val fieldExpr = extractFieldFromIn[In](in.asInstanceOf[Expr[In]], inName)
             val updCtx = generateUpdateContext(ctxE, pathFieldCode(outName))
             generateUnlift(entry.pipe, fieldExpr, updCtx)
           }

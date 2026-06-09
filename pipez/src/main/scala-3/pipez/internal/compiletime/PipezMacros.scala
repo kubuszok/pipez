@@ -179,6 +179,115 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
+  override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
+    val stats = statements.map(e => toTerm(e).asInstanceOf[quotes.reflect.Statement])
+    val resTerm = toTerm(result)
+    Block(stats.toList, resTerm).asExpr.asInstanceOf[Expr[Any]]
+  }
+
+  override def generateArrayToConstructorFn[Out: Type](
+      outClass: CaseClass[Out],
+      lastIndex: Int,
+      totalFields: Int
+  ): Expr[Any] = {
+    val outTR = UntypedType.fromTyped[Out].asInstanceOf[TypeRepr]
+
+    // Build constructor args metadata at macro time
+    val outParams = outClass.primaryConstructor.totalParameters.flatten
+    val ctorSym = outTR.typeSymbol.primaryConstructor
+    val typeParams = outTR match {
+      case AppliedType(_, args) => args
+      case _                    => Nil
+    }
+
+    // Precompute TypeReprs for each parameter
+    val paramTypeReprs: List[TypeRepr] = outParams.map { case (_, param) =>
+      val existential = param.tpe
+      import existential.Underlying as ParamT
+      UntypedType.fromTyped[ParamT].asInstanceOf[TypeRepr]
+    }
+
+    // Build the lambda using standard Scala 3 quotes.
+    // Inside the splice, we use tree-level APIs to construct the output from the array.
+    // The key: '{ arr } inside the splice references the lambda parameter.
+    '{ (arr: Array[Any], _dummy: Any) =>
+      ${
+        val arrTerm = 'arr.asTerm
+
+        val ctorArgs = paramTypeReprs.zipWithIndex.map { case (paramTR, idx) =>
+          val arrGet = Apply(Select.unique(arrTerm, "apply"), List(Literal(IntConstant(idx))))
+          TypeApply(Select.unique(arrGet, "asInstanceOf"), List(Inferred(paramTR)))
+        }
+
+        val outTypeTree = Inferred(outTR)
+        val newExpr =
+          if typeParams.nonEmpty then New(outTypeTree)
+            .select(ctorSym)
+            .appliedToTypes(typeParams)
+            .appliedToArgs(ctorArgs)
+          else
+            New(outTypeTree)
+              .select(ctorSym)
+              .appliedToArgs(ctorArgs)
+
+        newExpr.asExpr.asInstanceOf[SQExpr[Any]]
+      }
+    }.asInstanceOf[Expr[Any]]
+  }
+
+  override def generateArrayToBeanFn[Out: Type](
+      beanFields: List[(??, Method)],
+      defaultConstructor: Method,
+      lastIndex: Int,
+      totalFields: Int
+  ): Expr[Any] = {
+    val outTR = UntypedType.fromTyped[Out].asInstanceOf[TypeRepr]
+
+    // Precompute: construct the default bean expression at macro time
+    val beanExprResult = defaultConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Default constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => Map.empty
+    )
+    val beanConstructorTerm = beanExprResult match {
+      case Right(result) => toTerm(result.value.asInstanceOf[Expr[Any]])
+      case Left(err)     => throw new RuntimeException(s"Cannot call default constructor: $err")
+    }
+
+    // Precompute setter info: (TypeRepr, setter Symbol)
+    val setterInfo: List[(TypeRepr, Symbol)] = beanFields.map { case (fieldType, setter) =>
+      val existential = fieldType
+      import existential.Underlying as FT
+      val paramTR = UntypedType.fromTyped[FT].asInstanceOf[TypeRepr]
+      val setterSym = outTR.typeSymbol
+        .methodMember(setter.name)
+        .headOption
+        .getOrElse(throw new RuntimeException(s"Setter ${setter.name} not found on ${outTR.show}"))
+      (paramTR, setterSym)
+    }
+
+    // Build the lambda using standard Scala 3 quotes
+    '{ (arr: Array[Any], _dummy: Any) =>
+      ${
+        val arrTerm = 'arr.asTerm
+
+        // Create: val bean = new Out()
+        val beanSym = Symbol.newVal(Symbol.spliceOwner, "bean", outTR, Flags.EmptyFlags, Symbol.noSymbol)
+        val beanValDef = ValDef(beanSym, Some(beanConstructorTerm))
+        val beanRef = Ref(beanSym)
+
+        // Create setter calls: bean.setX(arr(i).asInstanceOf[ParamType])
+        val setterStmts = setterInfo.zipWithIndex.map { case ((paramTR, setterSym), idx) =>
+          val arrGet = Apply(Select.unique(arrTerm, "apply"), List(Literal(IntConstant(idx))))
+          val castedValue = TypeApply(Select.unique(arrGet, "asInstanceOf"), List(Inferred(paramTR)))
+          Apply(beanRef.select(setterSym), List(castedValue))
+        }
+
+        Block(beanValDef :: setterStmts, beanRef).asExpr.asInstanceOf[SQExpr[Any]]
+      }
+    }.asInstanceOf[Expr[Any]]
+  }
+
   // ---- Forwarding entry points ----
 
   def doDeriveDef: Expr[Pipe[In0, Out0]] = {

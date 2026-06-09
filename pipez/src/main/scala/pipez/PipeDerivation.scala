@@ -85,7 +85,7 @@ object PipeDerivation extends PipeDerivationPlatform {
   }
 
   /** Default instance for `In => Out` derivation */
-  implicit val simpleFunction: PipeDerivation[Function1] = new Simple[Function1] {
+  implicit val simpleFunction: PipeDerivation.Simple[Function1] = new Simple[Function1] {
     override def simpleLift[In, Out](f: In => Out): In => Out = f
     override def simpleUnlift[In, Out](pipe: In => Out, in: In): Out = pipe(in)
   }
@@ -93,7 +93,7 @@ object PipeDerivation extends PipeDerivationPlatform {
   /** Instance for `(In, Ctx) => Out` with customized `Ctx` update */
   def contextFunction[Ctx](
       contextUpdate: (Ctx, Path) => Ctx = (ctx: Ctx, _: Path) => ctx
-  ): PipeDerivation[Function2[*, Ctx, *]] = new NoParsing[Function2[*, Ctx, *]] {
+  ): PipeDerivation.NoParsing[Function2[*, Ctx, *]] = new NoParsing[Function2[*, Ctx, *]] {
     final type Context = Ctx
     override def lift[In, Out](f: (In, Context) => Out): (In, Ctx) => Out = f
     override def unlift[In, Out](pipe: (In, Ctx) => Out, in: In, ctx: Context): Out = pipe(in, ctx)
@@ -101,5 +101,5 @@ object PipeDerivation extends PipeDerivationPlatform {
   }
 
   /** Default instance for `(In, Ctx) => Out` with `Ctx` passed around without updating */
-  implicit def contextFunction[Ctx]: PipeDerivation[Function2[*, Ctx, *]] = contextFunction[Ctx]()
+  implicit def contextFunction[Ctx]: PipeDerivation.NoParsing[Function2[*, Ctx, *]] = contextFunction[Ctx]()
 }

@@ -162,23 +162,6 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
         case Left(err)     => throw new RuntimeException(s"Cannot call default constructor for ${Type[A].prettyPrint}: $err")
       }
 
-    private def callSetter[A: Type](
-        setter: Method,
-        instance: Expr[A],
-        value: Expr[Any]
-    ): Expr[Any] = {
-      // Setter takes the instance as "this", and the value as the single parameter
-      val paramName = setter.totalParameters.flatten.head._1
-      setter.fold(
-        onInstance = oi => instance.asInstanceOf[Expr[oi.Instance]].as_??(using oi.Instance),
-        onTypes = _ => Map.empty,
-        onValues = _ => Map(paramName -> value.as_??)
-      ) match {
-        case Right(result) => result.value.asInstanceOf[Expr[Any]]
-        case Left(err)     => throw new RuntimeException(s"Cannot call setter ${setter.name}: $err")
-      }
-    }
-
     private def deriveZeroFieldProduct[In: Type, Out: Type](outClass: CaseClass[Out]): Expr[Pipe[In, Out]] =
       generateLift[In, Out] { (_, _) =>
         callPrimaryConstructor(outClass, Map.empty) match {
@@ -518,6 +501,7 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           Expr.quote { new Array[Any](Expr.splice(Expr(n))) }
         )
 
+        // Fold all fields: each merge stores a value in the array and returns the array
         val merged = fieldResults.zipWithIndex.foldLeft(initResult) { case (accum, (fieldResult, index)) =>
           val fieldValue = fieldResult match {
             case FieldResult.Pure(_, _, get)      => generatePureResult(get(in, ctx))
@@ -530,28 +514,14 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           generateMergeResults(ctx, accum, fieldValue, merger.asInstanceOf[Expr[Any]])
         }
 
-        val constructor = Expr.quote { (arr: Array[Any]) =>
-          Expr.splice {
-            val outParams = outClass.primaryConstructor.totalParameters.flatten
-            val fieldMap = outParams.zipWithIndex.map { case ((name, param), idx) =>
-              val paramType = param.tpe
-              import paramType.{Underlying as P}
-              name -> Expr.quote(Expr.splice(Expr.quote(null: Array[Any]))(Expr.splice(Expr(idx))).asInstanceOf[P]).as_??
-            }.toMap
-            callPrimaryConstructor(outClass, fieldMap) match {
-              case Right(outExpr) => outExpr
-              case Left(err)      => throw new RuntimeException(s"Cannot construct ${Type[Out].prettyPrint}: $err")
-            }
-          }
-        }
-
+        // Final merge: extract all values from array and construct the output.
+        // The constructor function receives the array and a dummy Unit.
+        val constructorFn = generateArrayToConstructorFn[Out](outClass, -1, n)
         generateMergeResults(
           ctx,
           merged,
           generatePureResult(Expr.quote(()).asInstanceOf[Expr[Any]]),
-          Expr.quote { (arr: Array[Any], _: Unit) =>
-            Expr.splice(constructor).apply(arr)
-          }.asInstanceOf[Expr[Any]]
+          constructorFn
         )
       }
     }
@@ -561,26 +531,13 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
     private def buildBeanProduct[In: Type, Out: Type](
         fieldResults: List[FieldResult],
         beanInfo: BeanInfo[Out]
-    ): Expr[Pipe[In, Out]] = {
-      val allPure = fieldResults.forall(_.isInstanceOf[FieldResult.Pure])
-
-      if (allPure) {
-        generateLift[In, Out] { (in, _) =>
-          // Create bean instance, call each setter, return wrapped in pureResult
-          val beanExpr = callDefaultConstructor[Out](beanInfo.defaultConstructor)
-          fieldResults.zip(beanInfo.fields).foreach { case (fieldResult, beanField) =>
-            val value = fieldResult match {
-              case FieldResult.Pure(_, _, get) => get(in, in)
-              case _                           => throw new RuntimeException("Unreachable")
-            }
-            callSetter[Out](beanField.setter, beanExpr, value)
-          }
-          generatePureResult(beanExpr.asInstanceOf[Expr[Any]])
-        }
-      } else {
-        buildBeanProductWithEffects[In, Out](fieldResults, beanInfo)
-      }
-    }
+    ): Expr[Pipe[In, Out]] =
+      // Always use the array-based effectful path for beans.
+      // The pure path has issues with bean expressions being evaluated multiple times
+      // (creating separate instances for setter calls vs the returned value).
+      // The effectful path properly creates a single bean instance via the
+      // array-to-bean constructor function in the bridge.
+      buildBeanProductWithEffects[In, Out](fieldResults, beanInfo)
 
     private def buildBeanProductWithEffects[In: Type, Out: Type](
         fieldResults: List[FieldResult],
@@ -593,6 +550,7 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           Expr.quote { new Array[Any](Expr.splice(Expr(n))) }
         )
 
+        // Fold all fields: each merge stores a value in the array and returns the array
         val merged = fieldResults.zipWithIndex.foldLeft(initResult) { case (accum, (fieldResult, index)) =>
           val fieldValue = fieldResult match {
             case FieldResult.Pure(_, _, get)      => generatePureResult(get(in, ctx))
@@ -605,29 +563,14 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           generateMergeResults(ctx, accum, fieldValue, merger.asInstanceOf[Expr[Any]])
         }
 
-        // Build the bean constructor function
-        val constructor = Expr.quote { (arr: Array[Any]) =>
-          Expr.splice {
-            // Create bean with default constructor
-            val beanExpr = callDefaultConstructor[Out](beanInfo.defaultConstructor)
-            // Call each setter with the corresponding array element
-            beanInfo.fields.zipWithIndex.foreach { case (bf, idx) =>
-              val paramType = bf.fieldType
-              import paramType.{Underlying as P}
-              val valueExpr = Expr.quote(Expr.splice(Expr.quote(null: Array[Any]))(Expr.splice(Expr(idx))).asInstanceOf[P])
-              callSetter[Out](bf.setter, beanExpr, valueExpr.asInstanceOf[Expr[Any]])
-            }
-            beanExpr
-          }
-        }
-
+        // Final merge: extract all values from array and construct the bean.
+        val beanFieldsWithTypes = beanInfo.fields.map(bf => (bf.fieldType, bf.setter))
+        val constructorFn = generateArrayToBeanFn[Out](beanFieldsWithTypes, beanInfo.defaultConstructor, -1, n)
         generateMergeResults(
           ctx,
           merged,
           generatePureResult(Expr.quote(()).asInstanceOf[Expr[Any]]),
-          Expr.quote { (arr: Array[Any], _: Unit) =>
-            Expr.splice(constructor).apply(arr)
-          }.asInstanceOf[Expr[Any]]
+          constructorFn
         )
       }
     }

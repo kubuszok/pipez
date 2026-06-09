@@ -39,7 +39,8 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
             inEnum.matchOn[MIO, Any](in.asInstanceOf[Expr[In]]) { matched =>
               import matched.{value as matchedValue, Underlying as InCase}
               val inCaseName = Type[InCase].shortName
-              resolveSubtype(inCaseName, outChildTypes, matchedValue, ctxExpr)(using Type[InCase], ctx)
+              val inCaseFullName = Type[InCase].prettyPrint.replaceAll("\\[[0-9;]*m", "")
+              resolveSubtype(inCaseName, inCaseFullName, outChildTypes, matchedValue, ctxExpr)(using Type[InCase], ctx)
             }.map(_.getOrElse(throw new RuntimeException(s"Enum ${Type[In].prettyPrint} has no children")))
               .map(_.asInstanceOf[Expr[Any]])
           }
@@ -49,6 +50,7 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
 
     private def resolveSubtype[InCase: Type](
         inCaseName: String,
+        inCaseFullName: String,
         outChildren: Map[String, ??],
         matchedValue: Expr[InCase],
         ctxExpr: Expr[Any]
@@ -61,14 +63,14 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
         MIO.pure(generateUnlift(configRemove.get.pipe, matchedValue.asInstanceOf[Expr[Any]], ctxExpr))
       } else if (configPlugIn.isDefined) {
         val entry = configPlugIn.get
-        val path  = pathSubtypeCode(inCaseName)
+        val path  = pathSubtypeCode(inCaseFullName)
         val updCtx = generateUpdateContext(ctxExpr, path)
         MIO.pure(generateUnlift(entry.pipe, matchedValue.asInstanceOf[Expr[Any]], updCtx))
       } else {
         val lookupName = configRename.map(_.outSubtypeType.Underlying.shortName).getOrElse(inCaseName)
         val outChild = findOutChild(lookupName, outChildren)
         import outChild.{Underlying as OutCase}
-        val path   = pathSubtypeCode(inCaseName)
+        val path   = pathSubtypeCode(inCaseFullName)
         val updCtx = generateUpdateContext(ctxExpr, path)
 
         if (Type[InCase] <:< Type[OutCase]) {

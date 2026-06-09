@@ -4,9 +4,9 @@ import hearth.MacroCommonsScala2
 import pipez.PipeDerivationConfig
 import scala.reflect.macros.blackbox
 
-trait PipezConfigParserScala2 { this: PipezMacrosImpl & PipezMacrosImpl2[?, ?, ?] & MacroCommonsScala2 =>
+trait PipezConfigParserScala2 { this: PipezMacrosImpl & MacroCommonsScala2 =>
 
-  import c.universe.{Type as _, Expr as _, *}
+  import c.universe.{Expr as _, Type as _, *}
 
   def readConfig[In: Type, Out: Type](code: Expr[PipeDerivationConfig[Pipe, In, Out]]): Settings = {
     val tree = code.asInstanceOf[c.Expr[Any]].tree
@@ -19,7 +19,7 @@ trait PipezConfigParserScala2 { this: PipezMacrosImpl & PipezMacrosImpl2[?, ?, ?
       case _                            => Left(s"Unsupported path expression")
     }
 
-    def toHExpr(t: Tree): Expr[Any] = c.Expr(t).asInstanceOf[Expr[Any]]
+    def toHExpr(t: Tree): Expr[Any] = c.Expr(t)(typeOfAny.asInstanceOf[c.WeakTypeTag[Any]]).asInstanceOf[Expr[Any]]
 
     def extract(tree: Tree, acc: List[ConfigEntry]): Either[String, Settings] = tree match {
       case TypeApply(Select(_, name), _) if name.decodedName.toString == "apply" =>

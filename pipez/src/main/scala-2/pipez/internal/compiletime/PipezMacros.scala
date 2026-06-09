@@ -13,7 +13,8 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     outTpe: blackbox.Context#Type,
     pd: blackbox.Context#Expr[PipeDerivation[P]]
 ) extends MacroCommonsScala2
-    with PipezMacrosImpl {
+    with PipezMacrosImpl
+    with PipezConfigParserScala2 {
 
   import c.universe.*
 
@@ -29,25 +30,23 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     Type.Ctor2.fromUntyped[P](pipeTpe.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
 
   private lazy val ctxTpe: c.Type = {
-    val pdTpe = pd.actualType.asInstanceOf[c.Type]
-    pdTpe.member(TypeName("Context")).asType.toType.asSeenFrom(pdTpe, pdTpe.typeSymbol)
+    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
+    val updateContextCall = c.typecheck(q"""$pdTree.updateContext((??? : Any).asInstanceOf[${pd.actualType
+        .asInstanceOf[c.Type]
+        .member(TypeName("Context"))
+        .asType
+        .toType
+        .asSeenFrom(
+          pd.actualType.asInstanceOf[c.Type],
+          pd.actualType.asInstanceOf[c.Type].typeSymbol
+        )}], (??? : Any).asInstanceOf[_root_.pipez.Path])""")
+    updateContextCall.tpe.dealias
   }
 
   private lazy val resTpe: c.Type = {
-    val pdTpe = pd.actualType.asInstanceOf[c.Type]
-    val resultSym = pdTpe.member(TypeName("Result"))
-    val resultTpe = resultSym.asType.toType.asSeenFrom(pdTpe, pdTpe.typeSymbol)
-    if (resultTpe.takesTypeArgs) resultTpe
-    else resultTpe
-  }
-
-  private lazy val resolvedResTpe: c.Type = {
-    val pdTpe = pd.actualType.asInstanceOf[c.Type].dealias
-    val resultSym = pdTpe.member(TypeName("Result"))
-    resultSym.typeSignatureIn(pdTpe) match {
-      case tpe if tpe.takesTypeArgs => tpe.resultType.typeConstructor
-      case tpe                      => tpe.typeConstructor
-    }
+    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
+    val pureResultCall = c.typecheck(q"""$pdTree.pureResult[Int](1)""")
+    pureResultCall.tpe.dealias.typeConstructor
   }
 
   private lazy val pdTyped: c.Expr[Any] = {
@@ -74,27 +73,8 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val ctxRef = c.Expr[Any](Ident(ctxName))(anyTag)
     val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
     val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
-    val liftTree = q"""$pdE.lift[$inT, $outT]((($inName: $inT, $ctxName: $ctxTpe) => $bodyTree))"""
-    mkExpr(liftTree).asInstanceOf[Expr[Pipe[In, Out]]]
-  }
-
-  override def generateLiftForEnum[In: Type, Out: Type](
-      body: (Expr[Any], Expr[Any]) => Expr[Any]
-  ): Expr[Pipe[In, Out]] = {
-    val inT = tpeOf[In]
-    val outT = tpeOf[Out]
-    val pdE = pdTyped
-    val inName = TermName(c.freshName("in"))
-    val ctxName = TermName(c.freshName("ctx"))
-    val inRef = c.Expr[Any](Ident(inName))(anyTag)
-    val ctxRef = c.Expr[Any](Ident(ctxName))(anyTag)
-    val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
-    val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
-    // Use the Aux type's Result member (which pdTyped was cast to) for the asInstanceOf
-    val auxTpe = pdTyped.staticType.asInstanceOf[c.Type]
-    val auxResSym = auxTpe.member(TypeName("Result"))
-    val auxResTpe = appliedType(auxResSym, outT)
-    val castedBody = q"""$bodyTree.asInstanceOf[$auxResTpe]"""
+    val resOutTpe = appliedType(resTpe.typeConstructor, outT)
+    val castedBody = q"""$bodyTree.asInstanceOf[$resOutTpe]"""
     val liftTree = q"""$pdE.lift[$inT, $outT]((($inName: $inT, $ctxName: $ctxTpe) => $castedBody))"""
     mkExpr(liftTree).asInstanceOf[Expr[Pipe[In, Out]]]
   }
@@ -111,11 +91,6 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val pdE = pdTyped
     val ae = a.asInstanceOf[c.Expr[Any]]
     mkExpr(q"""$pdE.pureResult($ae)""").asInstanceOf[Expr[Any]]
-  }
-
-  override def eraseExprType(expr: Expr[Any]): Expr[Any] = {
-    val tree = expr.asInstanceOf[c.Expr[Any]].tree
-    mkExpr(q"""$tree: Any""").asInstanceOf[Expr[Any]]
   }
 
   override def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any] = {

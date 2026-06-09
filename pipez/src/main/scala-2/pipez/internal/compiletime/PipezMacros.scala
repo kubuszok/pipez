@@ -91,6 +91,68 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     c.Expr(q"""$pdE.updateContext($ce, $pe)""").asInstanceOf[Expr[Any]]
   }
 
+  override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
+    val stats = statements.map(_.asInstanceOf[c.Expr[Any]].tree)
+    val res   = result.asInstanceOf[c.Expr[Any]].tree
+    c.Expr(q"..$stats; $res").asInstanceOf[Expr[Any]]
+  }
+
+  override def generateArrayToConstructorFn[Out: Type](
+      outClass: CaseClass[Out],
+      lastIndex: Int,
+      totalFields: Int
+  ): Expr[Any] = {
+    val outT = typeOf[Out]
+    val arrName  = TermName(c.freshName("arr"))
+    val valName  = TermName(c.freshName("value"))
+
+    // arr(lastIndex) = value
+    val storeStmt = q"""$arrName($lastIndex) = $valName"""
+
+    // Build constructor args: arr(i).asInstanceOf[ParamType]
+    val outParams = outClass.primaryConstructor.totalParameters.flatten
+    val ctorArgs = outParams.zipWithIndex.map { case ((_, param), idx) =>
+      val paramT = param.tpe.asInstanceOf[c.Type]
+      q"""$arrName($idx).asInstanceOf[$paramT]"""
+    }
+
+    val newExpr = q"""new $outT(..$ctorArgs)"""
+    c.Expr(q"""((($arrName: _root_.scala.Array[Any], $valName: Any) => { $storeStmt; $newExpr }): (Any, Any) => Any)""").asInstanceOf[Expr[Any]]
+  }
+
+  override def generateArrayToBeanFn[Out: Type](
+      beanFields: List[(??, Method)],
+      defaultConstructor: Method,
+      lastIndex: Int,
+      totalFields: Int
+  ): Expr[Any] = {
+    val outT = typeOf[Out]
+    val arrName  = TermName(c.freshName("arr"))
+    val valName  = TermName(c.freshName("value"))
+    val beanName = TermName(c.freshName("bean"))
+
+    // arr(lastIndex) = value
+    val storeStmt = q"""$arrName($lastIndex) = $valName"""
+
+    // Construct the bean
+    val beanValDef = q"""val $beanName = new $outT()"""
+
+    // Call each setter
+    val setterStmts = beanFields.zipWithIndex.map { case ((fieldType, setter), idx) =>
+      val paramT = fieldType.asInstanceOf[c.Type]
+      val setterName = TermName(setter.name)
+      q"""$beanName.$setterName($arrName($idx).asInstanceOf[$paramT])"""
+    }
+
+    val body = q"""
+      $storeStmt
+      $beanValDef
+      ..$setterStmts
+      $beanName
+    """
+    c.Expr(q"""((($arrName: _root_.scala.Array[Any], $valName: Any) => { $body }): (Any, Any) => Any)""").asInstanceOf[Expr[Any]]
+  }
+
   // ---- Entry points ----
 
   def doDeriveDef: Expr[Pipe[In0, Out0]] = {

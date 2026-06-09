@@ -12,7 +12,7 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
 
   object PipezHandleAsEnumRule extends PipezRule("handle as enum/sealed trait") {
 
-    def apply[In: Type, Out: Type](using ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
+    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
       Log.info(s"Attempting enum derivation for ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}") >> {
         (Enum.parse[In].toEither, Enum.parse[Out].toEither) match {
           case (Right(inEnum), Right(outEnum)) =>
@@ -27,21 +27,23 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
     private def deriveEnum[In: Type, Out: Type](
         inEnum: Enum[In],
         outEnum: Enum[Out]
-    )(using ctx: DerivationCtx[In, Out]): MIO[Expr[Pipe[In, Out]]] = {
+    )(implicit ctx: DerivationCtx[In, Out]): MIO[Expr[Pipe[In, Out]]] = {
       val outChildTypes: Map[String, ??] = outEnum.directChildren.toList.map { case (name, child) =>
-        import child.{Underlying as ChildType}
+        import child.Underlying as ChildType
         name -> Type[ChildType].as_??
       }.toMap
 
       MIO.scoped { runSafe =>
         generateLift[In, Out] { (in, ctxExpr) =>
           runSafe {
-            inEnum.matchOn[MIO, Any](in.asInstanceOf[Expr[In]]) { matched =>
-              import matched.{value as matchedValue, Underlying as InCase}
-              val inCaseName = Type[InCase].shortName
-              val inCaseFullName = Type[InCase].prettyPrint.replaceAll("\\[[0-9;]*m", "")
-              resolveSubtype(inCaseName, inCaseFullName, outChildTypes, matchedValue, ctxExpr)(using Type[InCase], ctx)
-            }.map(_.getOrElse(throw new RuntimeException(s"Enum ${Type[In].prettyPrint} has no children")))
+            inEnum
+              .matchOn[MIO, Any](in.asInstanceOf[Expr[In]]) { matched =>
+                import matched.{value as matchedValue, Underlying as InCase}
+                val inCaseName = Type[InCase].shortName
+                val inCaseFullName = Type[InCase].prettyPrint.replaceAll("\\[[0-9;]*m", "")
+                resolveSubtype(inCaseName, inCaseFullName, outChildTypes, matchedValue, ctxExpr)(Type[InCase], ctx)
+              }
+              .map(_.getOrElse(throw new RuntimeException(s"Enum ${Type[In].prettyPrint} has no children")))
               .map(_.asInstanceOf[Expr[Any]])
           }
         }
@@ -54,7 +56,7 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
         outChildren: Map[String, ??],
         matchedValue: Expr[InCase],
         ctxExpr: Expr[Any]
-    )(using ctx: DerivationCtx[?, ?]): MIO[Expr[Any]] = {
+    )(implicit ctx: DerivationCtx[?, ?]): MIO[Expr[Any]] = {
       val configRemove = ctx.settings.removedSubtypes.find(e => e.inSubtypeType.Underlying =:= Type[InCase])
       val configRename = ctx.settings.renamedSubtypes.find(e => e.inSubtypeType.Underlying =:= Type[InCase])
       val configPlugIn = ctx.settings.pluggedSubtypes.find(e => e.inSubtypeType.Underlying =:= Type[InCase])
@@ -63,14 +65,14 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
         MIO.pure(generateUnlift(configRemove.get.pipe, matchedValue.asInstanceOf[Expr[Any]], ctxExpr))
       } else if (configPlugIn.isDefined) {
         val entry = configPlugIn.get
-        val path  = pathSubtypeCode(inCaseFullName)
+        val path = pathSubtypeCode(inCaseFullName)
         val updCtx = generateUpdateContext(ctxExpr, path)
         MIO.pure(generateUnlift(entry.pipe, matchedValue.asInstanceOf[Expr[Any]], updCtx))
       } else {
         val lookupName = configRename.map(_.outSubtypeType.Underlying.shortName).getOrElse(inCaseName)
         val outChild = findOutChild(lookupName, outChildren)
-        import outChild.{Underlying as OutCase}
-        val path   = pathSubtypeCode(inCaseFullName)
+        import outChild.Underlying as OutCase
+        val path = pathSubtypeCode(inCaseFullName)
         val updCtx = generateUpdateContext(ctxExpr, path)
 
         if (Type[InCase] <:< Type[OutCase]) {
@@ -94,7 +96,7 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
     private def summonOrDeriveAndUnlift[InCase: Type, OutCase: Type](
         value: Expr[InCase],
         ctx: Expr[Any]
-    )(using dctx: DerivationCtx[?, ?]): MIO[Expr[Any]] = {
+    )(implicit dctx: DerivationCtx[?, ?]): MIO[Expr[Any]] =
       // First try to summon an existing implicit
       summonPipe[InCase, OutCase] match {
         case Some(pipe) =>
@@ -107,13 +109,12 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
             settings = dctx.settings.stripForRecursion,
             derivedPipeType = dctx.derivedPipeType
           )
-          deriveResultRecursively[InCase, OutCase](using Type[InCase], Type[OutCase], newCtx).map { pipe =>
+          deriveResultRecursively[InCase, OutCase](Type[InCase], Type[OutCase], newCtx).map { pipe =>
             generateUnlift(pipe.asInstanceOf[Expr[Any]], value.asInstanceOf[Expr[Any]], ctx)
           }
       }
-    }
 
-    private def findOutChild(name: String, outChildren: Map[String, ??])(using ctx: DerivationCtx[?, ?]): ?? =
+    private def findOutChild(name: String, outChildren: Map[String, ??])(implicit ctx: DerivationCtx[?, ?]): ?? =
       outChildren
         .collectFirst {
           case (childName, child)

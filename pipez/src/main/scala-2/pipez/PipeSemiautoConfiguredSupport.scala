@@ -3,7 +3,7 @@ package pipez
 import scala.language.experimental.macros
 
 /** Mix-in providing `derive` method for semiautomatic `Pipe` derivation without recursion and custom configuration */
-trait PipeSemiautoConfiguredSupport[Pipe[_, _]] extends PipeSemiautoSupport[Pipe] {
+trait PipeSemiautoConfiguredSupport[Pipe[_, _]] {
 
   /** Derives `Pipe[In, Out]` using provided settings */
   def derive[In, Out](

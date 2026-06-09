@@ -1,0 +1,3 @@
+package pipez
+
+trait NoContextCodecCompanionCompat extends PipeSemiautoConfiguredSupport[NoContextCodec]

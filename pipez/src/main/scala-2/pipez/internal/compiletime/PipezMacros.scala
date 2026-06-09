@@ -7,11 +7,13 @@ import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
-final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.Context)(
+final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](val c: blackbox.Context)(
     pipeTpe: blackbox.Context#Type,
+    ctxTpe0: blackbox.Context#Type,
+    resTpe0: blackbox.Context#Type,
     inTpe: blackbox.Context#Type,
     outTpe: blackbox.Context#Type,
-    pd: blackbox.Context#Expr[PipeDerivation[P]]
+    pd: blackbox.Context#Expr[PipeDerivation.Aux[P, Ctx0, Res0]]
 ) extends MacroCommonsScala2
     with PipezMacrosImpl
     with PipezConfigParserScala2 {
@@ -29,38 +31,22 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
   implicit override lazy val PipeCtor: Type.Ctor2[Pipe] =
     Type.Ctor2.fromUntyped[P](pipeTpe.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
 
-  private lazy val ctxTpe: c.Type = {
-    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
-    c.typecheck(tq"""$pdTree.Context""", mode = c.TYPEmode).tpe.dealias
-  }
+  // Context and Result types are now concrete — provided by the Aux pattern at the entry point.
+  private lazy val ctxTpe: c.Type = ctxTpe0.asInstanceOf[c.Type]
+  private lazy val resTpe: c.Type = resTpe0.asInstanceOf[c.Type]
 
-  private lazy val resTpe: c.Type = {
-    val pdTree = pd.asInstanceOf[c.Expr[Any]].tree
-    val resIntType = c.typecheck(tq"""$pdTree.Result[Int]""", mode = c.TYPEmode).tpe
-    val f = new java.io.FileWriter("/tmp/pipez-debug.log", true)
-    f.write(s"[resTpe] resIntType=$resIntType\n")
-    f.write(s"[resTpe] resIntType.dealias=${resIntType.dealias}\n")
-    f.write(s"[resTpe] resIntType.dealias.typeConstructor=${resIntType.dealias.typeConstructor}\n")
-    f.close()
-    resIntType.dealias.typeConstructor
-  }
-
-  // Use a SINGLE stable name for pipeDerivation across all generated code.
-  // This ensures all path-dependent types (Context, Result) use the same stabilizer.
+  // Stable val for pipeDerivation — all generated code uses this single reference.
   private val pdStableName: TermName = TermName(c.freshName("pd"))
   private val pdStableRef: Tree = Ident(pdStableName)
 
-  // All generate* methods use pdStableRef. generateLift wraps with val pdStableName = pipeDerivation.
-  // Use Aux pattern so the stable val has resolved Context and Result types.
   private lazy val pdInit: Tree = {
-    val expr = pd.asInstanceOf[c.Expr[PipeDerivation[P]]]
+    val expr = pd.asInstanceOf[c.Expr[Any]]
     val PipeTc = pipeTpe.asInstanceOf[c.Type]
     val CtxT = ctxTpe
-    val ResT = resTpe
+    val ResT = resTpe.typeConstructor
     q"""val $pdStableName: _root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT] = $expr.asInstanceOf[_root_.pipez.PipeDerivation.Aux[$PipeTc, $CtxT, $ResT]]"""
   }
 
-  // pdExpr as used by shared code — refers to the stable name
   override lazy val pdExpr: Expr[Any] = mkExpr(pdStableRef).asInstanceOf[Expr[Any]]
 
   // ---- Code generation implementations ----
@@ -75,43 +61,38 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val inRef = c.Expr[Any](Ident(inName))(anyTag)
     val ctxRef = c.Expr[Any](Ident(ctxName))(anyTag)
     val bodyExpr = body(inRef.asInstanceOf[Expr[Any]], ctxRef.asInstanceOf[Expr[Any]])
-    val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree {
-      val f = new java.io.FileWriter("/tmp/pipez-debug.log", true); f.write(s"[generateLift] outT=$outT\n"); f.close()
-    }
+    val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
+    val resOutTpe = appliedType(resTpe.typeConstructor, outT)
     mkExpr(q"""{
       $pdInit
-      $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $pdStableRef.Context) => ($bodyTree).asInstanceOf[${tq"$pdStableRef.Result[$outT]"}])
+      $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $ctxTpe) => ($bodyTree).asInstanceOf[$resOutTpe])
     }""").asInstanceOf[Expr[Pipe[In, Out]]]
   }
 
   override def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any] = {
-    val pdE = mkExpr(pdStableRef)
     val p = pipe.asInstanceOf[c.Expr[Any]]
     val i = in.asInstanceOf[c.Expr[Any]]
     val ct = ctx.asInstanceOf[c.Expr[Any]]
-    mkExpr(q"""$pdE.unlift($p, $i, $ct)""").asInstanceOf[Expr[Any]]
+    mkExpr(q"""$pdStableRef.unlift($p, $i, $ct)""").asInstanceOf[Expr[Any]]
   }
 
   override def generatePureResult(a: Expr[Any]): Expr[Any] = {
-    val pdE = mkExpr(pdStableRef)
     val ae = a.asInstanceOf[c.Expr[Any]]
-    mkExpr(q"""$pdE.pureResult($ae)""").asInstanceOf[Expr[Any]]
+    mkExpr(q"""$pdStableRef.pureResult($ae)""").asInstanceOf[Expr[Any]]
   }
 
   override def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any] = {
-    val pdE = mkExpr(pdStableRef)
     val ce = ctx.asInstanceOf[c.Expr[Any]]
     val rae = ra.asInstanceOf[c.Expr[Any]]
     val rbe = rb.asInstanceOf[c.Expr[Any]]
     val fe = f.asInstanceOf[c.Expr[Any]]
-    mkExpr(q"""$pdE.mergeResults($ce, $rae, $rbe, $fe)""").asInstanceOf[Expr[Any]]
+    mkExpr(q"""$pdStableRef.mergeResults($ce, $rae, $rbe, $fe)""").asInstanceOf[Expr[Any]]
   }
 
   override def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any] = {
-    val pdE = mkExpr(pdStableRef)
     val ce = ctx.asInstanceOf[c.Expr[Any]]
     val pe = path.asInstanceOf[c.Expr[Path]]
-    mkExpr(q"""$pdE.updateContext($ce, $pe)""").asInstanceOf[Expr[Any]]
+    mkExpr(q"""$pdStableRef.updateContext($ce, $pe)""").asInstanceOf[Expr[Any]]
   }
 
   override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
@@ -129,13 +110,11 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val arrName = TermName(c.freshName("arr"))
     val valName = TermName(c.freshName("value"))
     val caName = TermName(c.freshName("ca"))
-
     val outParams = outClass.primaryConstructor.totalParameters.flatten
     val ctorArgs = outParams.zipWithIndex.map { case ((_, param), idx) =>
       val paramT = param.tpe.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
       q"""$caName($idx).asInstanceOf[$paramT]"""
     }
-
     val bodyTree = q"""
       val $caName = $arrName.asInstanceOf[_root_.scala.Array[Any]]
       $caName($lastIndex) = $valName
@@ -143,8 +122,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     """
     val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"Any", EmptyTree)
     val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"Any", EmptyTree)
-    mkExpr(Function(List(arrParam, valParam), bodyTree))
-      .asInstanceOf[Expr[Any]]
+    mkExpr(Function(List(arrParam, valParam), bodyTree)).asInstanceOf[Expr[Any]]
   }
 
   override def generateArrayToBeanFn[Out: Type](
@@ -158,13 +136,11 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val valName = TermName(c.freshName("value"))
     val beanName = TermName(c.freshName("bean"))
     val caName = TermName(c.freshName("ca"))
-
     val setterStmts = beanFields.zipWithIndex.map { case ((fieldType, setter), idx) =>
       val paramT = fieldType.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
       val setterName = TermName(setter.name)
       q"""$beanName.$setterName($caName($idx).asInstanceOf[$paramT])"""
     }
-
     val bodyTree = q"""
       val $caName = $arrName.asInstanceOf[_root_.scala.Array[Any]]
       $caName($lastIndex) = $valName
@@ -174,8 +150,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     """
     val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"Any", EmptyTree)
     val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"Any", EmptyTree)
-    mkExpr(Function(List(arrParam, valParam), bodyTree))
-      .asInstanceOf[Expr[Any]]
+    mkExpr(Function(List(arrParam, valParam), bodyTree)).asInstanceOf[Expr[Any]]
   }
 
   // ---- Entry points ----
@@ -204,12 +179,28 @@ final class PipezMacro(val c: blackbox.Context) {
 
   private def macros[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
-  ) = new PipezMacrosImpl2[P, In, Out](c)(
-    pipeTpe = c.weakTypeOf[P[Any, Nothing]].typeConstructor,
-    inTpe = c.weakTypeOf[In],
-    outTpe = c.weakTypeOf[Out],
-    pd = pipeDerivation
-  )
+  ) = {
+    // Extract Context and Result concrete types using c.typecheck on method calls.
+    // This resolves through the implicit value's refinement type.
+    val pdTree = pipeDerivation.tree
+    // Resolve Context by calling updateContext and extracting the return type
+    val ctxTpe = c
+      .typecheck(
+        q"""(null: _root_.pipez.Path) match { case _p => $pdTree.updateContext($pdTree.updateContext(null.asInstanceOf[Any], _p), _p) }"""
+      )
+      .tpe
+      .dealias
+    // Resolve Result by calling pureResult and extracting the return type
+    val resTpe = c.typecheck(q"""$pdTree.pureResult(1)""").tpe.dealias.typeConstructor
+    new PipezMacrosImpl2[P, Any, ({ type R[A] = Any })#R, In, Out](c)(
+      pipeTpe = c.weakTypeOf[P[Any, Nothing]].typeConstructor,
+      ctxTpe0 = ctxTpe,
+      resTpe0 = resTpe,
+      inTpe = c.weakTypeOf[In],
+      outTpe = c.weakTypeOf[Out],
+      pd = pipeDerivation.asInstanceOf[c.Expr[PipeDerivation.Aux[P, Any, ({ type R[A] = Any })#R]]]
+    )
+  }
 
   def deriveDefault[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]

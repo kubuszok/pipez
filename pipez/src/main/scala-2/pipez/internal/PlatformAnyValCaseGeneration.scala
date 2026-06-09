@@ -18,7 +18,7 @@ private[internal] trait PlatformAnyValCaseGeneration[Pipe[_, _], In, Out] extend
     if (isAnyVal[In])
       DerivationResult.fromOption(
         In.decls.to(List).filterNot(isGarbage).find(field => field.isMethod && field.asMethod.isGetter).map { getter =>
-          val name     = getter.name.toString
+          val name = getter.name.toString
           val termName = getter.asMethod.name.toTermName
           AnyValInData.InAnyVal(
             tpe = returnTypeOf(In, getter).asInstanceOf[Type[AnyValType]],

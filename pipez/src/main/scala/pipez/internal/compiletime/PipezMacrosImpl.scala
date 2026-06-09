@@ -10,8 +10,7 @@ import scala.collection.immutable.ListMap
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PipezMacrosImpl
-    extends PipezConfigParserShared
-    with rules.PipezUseImplicitRuleImpl
+    extends rules.PipezUseImplicitRuleImpl
     with rules.PipezHandleAsValueTypeRuleImpl
     with rules.PipezHandleAsCaseClassRuleImpl
     with rules.PipezHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
@@ -39,20 +38,8 @@ trait PipezMacrosImpl
   // This is safe because all generated code goes through pipeDerivation method calls.
 
   def generateLift[In: Type, Out: Type](body: (Expr[Any], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]]
-
-  /** Variant of generateLift that casts the body result to Result[Out] and the overall result to Pipe[In, Out]. Used by
-    * the enum rule where match branches may produce Result[OutCase] with specific subtypes, causing the Scala 2
-    * compiler to infer wrong types.
-    */
-  def generateLiftForEnum[In: Type, Out: Type](body: (Expr[Any], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]]
   def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any]
   def generatePureResult(a: Expr[Any]): Expr[Any]
-
-  /** Erase the tree-level type of an expression to Any. This is needed on Scala 2 where quasiquote match branches
-    * retain their specific types, causing the match result type to be a specific subtype instead of the parent sealed
-    * trait type. On Scala 3 this is a no-op since the bridge already applies casts at the generateLift level.
-    */
-  def eraseExprType(expr: Expr[Any]): Expr[Any]
   def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any]
   def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any]
 
@@ -297,4 +284,7 @@ trait PipezMacrosImpl
     }
   }
 
+  // ---- Config parser (implemented by platform-specific bridges) ----
+
+  def readConfig[In: Type, Out: Type](code: Expr[PipeDerivationConfig[Pipe, In, Out]]): Settings
 }

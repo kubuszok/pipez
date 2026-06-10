@@ -17,7 +17,7 @@ package object dsl {
 
     /** Converts values with possibility to fail-fast using provided configuration */
     def parseFastInto[To](
-      config: Parser.Config[From, To]
+        config: Parser.Config[From, To]
     ): Parser.ParsingResult[To] = macro dsl.internal.Macros.deriveAndParseFast[From, To]
 
     /** Converts values with possibility to full-error-aggregation using default configuration */
@@ -25,7 +25,7 @@ package object dsl {
 
     /** Converts values with possibility to full-error-aggregation using provided configuration */
     def parseFullInto[To](
-      config: Parser.Config[From, To]
+        config: Parser.Config[From, To]
     ): Parser.ParsingResult[To] = macro dsl.internal.Macros.deriveAndParseFull[From, To]
 
     /** Updates value with corresponding values from patch value using default configuration */
@@ -33,8 +33,8 @@ package object dsl {
 
     /** Updates value with corresponding values from patch value using provided configuration */
     def patchWith[Patch](
-      patch:  Patch,
-      config: PatchApplier.Config[Patch, From]
+        patch: Patch,
+        config: PatchApplier.Config[Patch, From]
     ): From = macro dsl.internal.Macros.deriveAndPatchWithConfig[From, Patch]
 
     @inline def __from: From = from

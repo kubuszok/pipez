@@ -33,11 +33,6 @@ trait PipezMacrosImpl
     r
   }
 
-  /** Erase the tree-level type of an expression to Any. Needed on Scala 2 to prevent invariance errors in enum match
-    * branches. On Scala 3 this is a no-op.
-    */
-  def eraseExprType(expr: Expr[Any]): Expr[Any]
-
   // ---- Code generation ----
   // All internal expression types use Expr[Any] with asInstanceOf casts.
   // This is safe because all generated code goes through pipeDerivation method calls.

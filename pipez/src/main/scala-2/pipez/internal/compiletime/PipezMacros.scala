@@ -104,11 +104,6 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     mkExpr(q"""$pdStableRef.updateContext($ce, $pe)""").asInstanceOf[Expr[Any]]
   }
 
-  override def eraseExprType(expr: Expr[Any]): Expr[Any] = {
-    val tree = expr.asInstanceOf[c.Expr[Any]].tree
-    mkExpr(q"""$tree: Any""").asInstanceOf[Expr[Any]]
-  }
-
   override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
     val stats = statements.map(_.asInstanceOf[c.Expr[Any]].tree)
     val res = result.asInstanceOf[c.Expr[Any]].tree
@@ -286,21 +281,11 @@ final class PipezMacro(val c: blackbox.Context) {
     )
   }
 
-  private def fixTypes[Out: WeakTypeTag](expr: c.Expr[Out]): c.Expr[Out] =
-    try c.Expr[Out](c.typecheck(tree = c.untypecheck(expr.tree)))
-    catch {
-      case _: scala.reflect.macros.TypecheckException =>
-        // If re-typechecking fails (e.g., enum invariance), wrap in asInstanceOf and try again
-        val outTpe = c.weakTypeOf[Out]
-        try c.Expr[Out](c.typecheck(tree = c.untypecheck(q"""${expr.tree}.asInstanceOf[$outTpe]""")))
-        catch { case e2: scala.reflect.macros.TypecheckException => c.abort(c.enclosingPosition, e2.msg) }
-    }
-
   def deriveDefault[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ): c.Expr[P[In, Out]] = {
     val m = macros[P, In, Out](pipeDerivation)
-    fixTypes(m.doDeriveDef.asInstanceOf[c.Expr[P[In, Out]]])
+    m.doDeriveDef.asInstanceOf[c.Expr[P[In, Out]]]
   }
 
   def deriveConfigured[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
@@ -309,8 +294,6 @@ final class PipezMacro(val c: blackbox.Context) {
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ): c.Expr[P[In, Out]] = {
     val m = macros[P, In, Out](pipeDerivation)
-    fixTypes(
-      m.doDeriveConf(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[P, In, Out]]]).asInstanceOf[c.Expr[P[In, Out]]]
-    )
+    m.doDeriveConf(config.asInstanceOf[m.c.Expr[PipeDerivationConfig[P, In, Out]]]).asInstanceOf[c.Expr[P[In, Out]]]
   }
 }

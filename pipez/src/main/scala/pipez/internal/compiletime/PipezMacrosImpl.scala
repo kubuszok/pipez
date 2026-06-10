@@ -123,6 +123,7 @@ trait PipezMacrosImpl
       inType: Type[In],
       outType: Type[Out],
       settings: Settings,
+      cache: MLocal[ValDefsCache],
       derivedPipeType: Option[??]
   )
 
@@ -176,6 +177,7 @@ trait PipezMacrosImpl
           inType = Type[In],
           outType = Type[Out],
           settings = ctx.settings.stripForRecursion,
+          cache = ctx.cache,
           derivedPipeType = ctx.derivedPipeType
         )
         deriveResultRecursively[In, Out](Type[In], Type[Out], newCtx)
@@ -260,7 +262,8 @@ trait PipezMacrosImpl
     debugLog(s"deriveWithSettings start: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
     @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
     debugLog(s"  pipeType constructed")
-    val ctx = DerivationCtx[In, Out](Type[In], Type[Out], settings, derivedPipeType = None)
+    val cache = ValDefsCache.mlocal
+    val ctx = DerivationCtx[In, Out](Type[In], Type[Out], settings, cache, derivedPipeType = None)
     debugLog(s"  ctx created, entering MIO")
 
     val result = Log.namedScope(s"PipeDerivation[${Type[In].prettyPrint} => ${Type[Out].prettyPrint}]") {
@@ -268,7 +271,8 @@ trait PipezMacrosImpl
       for {
         _ <- Environment.loadStandardExtensions().toMIO(allowFailures = true)
         result <- deriveTopLevel[In, Out](Type[In], Type[Out], ctx)
-      } yield result
+        cacheState <- cache.get
+      } yield cacheState.toValDefs.use(_ => result)
     }
     debugLog(s"  MIO created, calling runToExprOrFail")
     result.runToExprOrFail(

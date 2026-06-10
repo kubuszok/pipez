@@ -239,9 +239,14 @@ trait PipezMacrosImpl
 
   // ---- Summoning helpers ----
 
+  protected def ignoredImplicitMethods: Seq[UntypedMethod] = Seq.empty
+
   def summonPipe[In: Type, Out: Type]: Option[Expr[Pipe[In, Out]]] = {
     @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
-    Expr.summonImplicit[Pipe[In, Out]].toOption
+    if (ignoredImplicitMethods.nonEmpty)
+      PipeIO.summonExprIgnoring(ignoredImplicitMethods*).toOption
+    else
+      Expr.summonImplicit[Pipe[In, Out]].toOption
   }
 
   def summonOrDerive[In: Type, Out: Type](implicit

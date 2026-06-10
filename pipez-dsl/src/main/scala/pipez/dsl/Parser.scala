@@ -15,10 +15,7 @@ trait Parser[From, To] {
   final def parseFast(from: From): Parser.ParsingResult[To] = parse(from, Vector.empty, failFast = true)
   final def parseFull(from: From): Parser.ParsingResult[To] = parse(from, Vector.empty, failFast = false)
 }
-object Parser
-    extends pipez.PipeAutoSupport[Parser]
-    with pipez.PipeSemiautoConfiguredSupport[Parser]
-    with ParserInstances0 {
+object Parser extends ParserCompanionCompat with ParserInstances0 {
 
   /** Utility to create `Converter` without SAM */
   def instance[From, To](f: From => Either[Vector[String], To]): Parser[From, To] =
@@ -35,38 +32,50 @@ object Parser
     final case class WithKey(key: Any) extends PathSegment
   }
 
-  type Path             = Vector[PathSegment]
-  type ShouldFailFast   = Boolean
-  type Errors           = ListMap[Path, Vector[String]]
+  type Path = Vector[PathSegment]
+  type ShouldFailFast = Boolean
+  type Errors = ListMap[Path, Vector[String]]
   type ParsingResult[A] = Either[Errors, A]
 
-  implicit val pipeDerivation: pipez.PipeDerivation[Parser] = ParserDerivationDefinition
+  type ParserContext = (Path, ShouldFailFast)
+  type ParserResult[A] = ParsingResult[A]
+
+  implicit val pipeDerivation: pipez.PipeDerivation.Aux[Parser, ParserContext, ParserResult] =
+    ParserDerivationDefinition
 }
 
 private[dsl] trait ParserInstances0 extends ParserInstances1 {
 
   implicit def parseEither[FromLeft, FromRight, ToLeft, ToRight, FromEither[L, R] <: Either[L, R]](implicit
-    left:  Parser[FromLeft, ToLeft],
-    right: Parser[FromRight, ToRight]
+      left: Parser[FromLeft, ToLeft],
+      right: Parser[FromRight, ToRight]
   ): Parser[FromEither[FromLeft, FromRight], Either[ToLeft, ToRight]] =
-    pipez.PipeDerivation
-      .derive[Parser, Either[FromLeft, FromRight], Either[ToLeft, ToRight]]
-      .asInstanceOf[Parser[FromEither[FromLeft, FromRight], Either[ToLeft, ToRight]]]
+    (from, path, failFast) =>
+      (from: Either[FromLeft, FromRight]) match {
+        case Left(value) =>
+          left.parse(value, path :+ Parser.PathSegment.MatchType("Left"), failFast).map(Left(_))
+        case Right(value) =>
+          right.parse(value, path :+ Parser.PathSegment.MatchType("Right"), failFast).map(Right(_))
+      }
 
   implicit def parseOption[From, To, FromOption[A] <: Option[A]](implicit
-    parser: Parser[From, To]
+      parser: Parser[From, To]
   ): Parser[FromOption[From], Option[To]] =
-    pipez.PipeDerivation.derive[Parser, Option[From], Option[To]].asInstanceOf[Parser[FromOption[From], Option[To]]]
+    (from, path, failFast) =>
+      (from: Option[From]) match {
+        case Some(value) => parser.parse(value, path, failFast).map(Some(_))
+        case None        => Right(None)
+      }
 
   implicit def parseCollection[From, To, FromColl[A] <: Iterable[A], ToColl[_]](implicit
-    parser: Parser[From, To],
-    ToColl: Factory[To, ToColl[To]]
+      parser: Parser[From, To],
+      ToColl: Factory[To, ToColl[To]]
   ): Parser[FromColl[From], ToColl[To]] = (fromColl, path, failFast) =>
     if (failFast) {
       val toBuilder = ToColl.newBuilder
       var errorsStore: Parser.Errors = null.asInstanceOf[Parser.Errors]
       val iterator = fromColl.iterator.zipWithIndex
-      var noError  = true
+      var noError = true
       while (iterator.hasNext && noError) {
         val (from, index) = iterator.next()
         parser.parse(from, path :+ Parser.PathSegment.AtIndex(index), failFast) match {
@@ -79,10 +88,10 @@ private[dsl] trait ParserInstances0 extends ParserInstances1 {
       }
       if (noError) Right(toBuilder.result()) else Left(errorsStore)
     } else {
-      val toBuilder     = ToColl.newBuilder
+      val toBuilder = ToColl.newBuilder
       val errorsBuilder = ListMap.newBuilder[Parser.Path, Vector[String]]
-      val iterator      = fromColl.iterator.zipWithIndex
-      var noError       = true
+      val iterator = fromColl.iterator.zipWithIndex
+      var noError = true
       while (iterator.hasNext) {
         val (from, index) = iterator.next()
         parser.parse(from, path :+ Parser.PathSegment.AtIndex(index), failFast) match {
@@ -99,16 +108,16 @@ private[dsl] trait ParserInstances0 extends ParserInstances1 {
     }
 
   implicit def parseMap[FromKey, FromValue, ToKey, ToValue, FromMap[K, V] <: Map[K, V], ToMap[K, V] <: Map[K, V]](
-    implicit
-    key:   Parser[FromKey, ToKey],
-    value: Parser[FromValue, ToValue],
-    ToMap: Factory[(ToKey, ToValue), ToMap[ToKey, ToValue]]
+      implicit
+      key: Parser[FromKey, ToKey],
+      value: Parser[FromValue, ToValue],
+      ToMap: Factory[(ToKey, ToValue), ToMap[ToKey, ToValue]]
   ): Parser[FromMap[FromKey, FromValue], ToMap[ToKey, ToValue]] = (fromMap, path, failFast) =>
     if (failFast) {
       val toBuilder = ToMap.newBuilder
       var errorsStore: Parser.Errors = null.asInstanceOf[Parser.Errors]
       val iterator = fromMap.iterator
-      var noError  = true
+      var noError = true
       while (iterator.hasNext && noError) {
         val (k, v) = iterator.next()
         (for {
@@ -124,19 +133,20 @@ private[dsl] trait ParserInstances0 extends ParserInstances1 {
       }
       if (noError) Right(toBuilder.result()) else Left(errorsStore)
     } else {
-      val toBuilder     = ToMap.newBuilder
+      val toBuilder = ToMap.newBuilder
       val errorsBuilder = ListMap.newBuilder[Parser.Path, Vector[String]]
-      val iterator      = fromMap.iterator
-      var noError       = true
+      val iterator = fromMap.iterator
+      var noError = true
       while (iterator.hasNext) {
         val (k, v) = iterator.next()
-        (key.parse(k, path :+ Parser.PathSegment.WithKey(k), failFast),
-         value.parse(v, path :+ Parser.PathSegment.AtKey(k), failFast)
+        (
+          key.parse(k, path :+ Parser.PathSegment.WithKey(k), failFast),
+          value.parse(v, path :+ Parser.PathSegment.AtKey(k), failFast)
         ) match {
           case (Right(k2), Right(v2)) =>
-            toBuilder.addOne(k2, v2)
+            toBuilder.addOne((k2, v2))
           case (Left(e1), Left(e2)) =>
-            errorsBuilder.addAll(e1).addAll(e2)
+            val _ = errorsBuilder.addAll(e1).addAll(e2)
             noError = false
           case (Left(e), _) =>
             errorsBuilder.addAll(e)
@@ -169,7 +179,7 @@ private[dsl] trait ParserInstances2 {
 private[dsl] object ParserDerivationDefinition extends pipez.PipeDerivation[Parser] {
   import Parser.*
 
-  override type Context   = (Path, ShouldFailFast)
+  override type Context = (Path, ShouldFailFast)
   override type Result[A] = ParsingResult[A]
 
   override def lift[In, Out](f: (In, Context) => Result[Out]): Parser[In, Out] =

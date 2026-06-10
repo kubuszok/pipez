@@ -45,6 +45,17 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
 
   override lazy val pdExpr: Expr[Any] = mkExpr(pdStableRef).asInstanceOf[Expr[Any]]
 
+  override protected lazy val ignoredImplicitMethods: Seq[UntypedMethod] = {
+    val pipeCtorType = PipezMacrosImpl2.this.pipeTpe.asInstanceOf[c.Type]
+    val companionSym = pipeCtorType.typeSymbol.companion
+    if (companionSym != c.universe.NoSymbol) {
+      val companionTag: Type[Any] = c.WeakTypeTag(companionSym.info).asInstanceOf[Type[Any]]
+      companionTag.methods.collect {
+        case m if m.name == "deriveAutomatic" || m.name == "derive" => m.asUntyped
+      }.toSeq
+    } else Seq.empty
+  }
+
   override def postProcessResult[A: Type](expr: Expr[A]): Expr[A] = {
     val tree = expr.asInstanceOf[c.Expr[Any]].tree
     val tpe = implicitly[Type[A]].asInstanceOf[c.WeakTypeTag[A]].tpe

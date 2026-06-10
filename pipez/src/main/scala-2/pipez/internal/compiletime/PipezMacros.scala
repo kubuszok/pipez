@@ -72,10 +72,14 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     val resOutTpe = resApply0(outT).asInstanceOf[c.Type]
     val isIdentity = resOutTpe =:= outT
     val finalBody = if (isIdentity) bodyTree else q"""($bodyTree).asInstanceOf[$resOutTpe]"""
-    mkExpr(q"""{
+    val pipeOutTpe = pipeType[In, Out].asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val tree = q"""{
       $pdInit
       $pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $pdStableRef.Context) => $finalBody)
-    }""").asInstanceOf[Expr[Pipe[In, Out]]]
+    }"""
+    // Typecheck ensures lift[In,Out] resolves to Pipe[In,Out], not Pipe[InSubtype,OutSubtype]
+    val checked = c.typecheck(tree, pt = pipeOutTpe)
+    c.Expr(checked)(c.WeakTypeTag(pipeOutTpe)).asInstanceOf[Expr[Pipe[In, Out]]]
   }
 
   override def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any] = {

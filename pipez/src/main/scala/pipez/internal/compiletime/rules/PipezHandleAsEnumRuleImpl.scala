@@ -33,19 +33,45 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
         name -> Type[ChildType].as_??
       }.toMap
 
-      MIO.scoped { runSafe =>
-        generateLift[In, Out] { (in, ctxExpr) =>
+      // Step 1: For each In subtype, pre-derive the conversion and cache it as a def.
+      // The def takes (Any, Any) => Any, erasing all specific types.
+      // This prevents invariance issues because no Pipe[InCase, OutCase] expression
+      // appears in the match branches — only calls to the cached def.
+      val cacheKey = s"enumConvert_${Type[In].shortName}_${Type[Out].shortName}"
+
+      for {
+        // Build the cached conversion def: def convert(in: Any, ctx: Any): Any
+        _ <- MIO.scoped { runSafe =>
+          val defBuilder = ValDefBuilder.ofDef2[Any, Any, Any](cacheKey)(typeOfAny, typeOfAny, typeOfAny)
           runSafe {
-            inEnum
-              .matchOn[MIO, Any](in.asInstanceOf[Expr[In]]) { matched =>
-                import matched.{value as matchedValue, Underlying as InCase}
-                val inCaseName = Type[InCase].shortName
-                val inCaseFullName = Type[InCase].prettyPrint.replaceAll("\\[[0-9;]*m", "")
-                resolveSubtype(inCaseName, inCaseFullName, outChildTypes, matchedValue, ctxExpr)(Type[InCase], ctx)
+            ctx.cache.buildCachedWith(cacheKey, defBuilder) { case (_, (inExpr, ctxExpr)) =>
+              // Inside the def body: pattern match on in, dispatch to the right subtype handler
+              runSafe {
+                inEnum
+                  .matchOn[MIO, Any](inExpr.asInstanceOf[Expr[In]]) { matched =>
+                    import matched.{value as matchedValue, Underlying as InCase}
+                    val inCaseName = Type[InCase].shortName
+                    val inCaseFullName = Type[InCase].prettyPrint.replaceAll("\\[[0-9;]*m", "")
+                    resolveSubtype(inCaseName, inCaseFullName, outChildTypes, matchedValue, ctxExpr)(
+                      Type[InCase],
+                      ctx
+                    )
+                  }
+                  .map(_.getOrElse(throw new RuntimeException(s"Enum ${Type[In].prettyPrint} has no children")))
+                  .map(_.asInstanceOf[Expr[Any]])
               }
-              .map(_.getOrElse(throw new RuntimeException(s"Enum ${Type[In].prettyPrint} has no children")))
-              .map(_.asInstanceOf[Expr[Any]])
+            }
           }
+        }
+        // Step 2: Retrieve the cached def and generate the lift wrapper
+        convertOpt <- ctx.cache.get2Ary[Any, Any, Any](cacheKey)(typeOfAny, typeOfAny, typeOfAny)
+      } yield {
+        val convert = convertOpt.getOrElse(
+          throw new RuntimeException(s"Failed to build cached enum conversion for $cacheKey")
+        )
+        // Generate: pd.lift[In, Out] { (in, ctx) => convert(in, ctx).asInstanceOf[Result[Out]] }
+        generateLift[In, Out] { (in, ctxE) =>
+          convert(in.asInstanceOf[Expr[Any]], ctxE)
         }
       }
     }
@@ -97,16 +123,15 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
         value: Expr[InCase],
         ctx: Expr[Any]
     )(implicit dctx: DerivationCtx[?, ?]): MIO[Expr[Any]] =
-      // First try to summon an existing implicit
       summonPipe[InCase, OutCase] match {
         case Some(pipe) =>
           MIO.pure(generateUnlift(pipe.asInstanceOf[Expr[Any]], value.asInstanceOf[Expr[Any]], ctx))
         case None =>
-          // Try recursive derivation for case class subtypes
           val newCtx = DerivationCtx[InCase, OutCase](
             inType = Type[InCase],
             outType = Type[OutCase],
             settings = dctx.settings.stripForRecursion,
+            cache = dctx.cache,
             derivedPipeType = dctx.derivedPipeType
           )
           deriveResultRecursively[InCase, OutCase](Type[InCase], Type[OutCase], newCtx).map { pipe =>

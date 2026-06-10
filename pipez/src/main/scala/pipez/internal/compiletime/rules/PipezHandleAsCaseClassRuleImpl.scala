@@ -13,16 +13,17 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
 
   object PipezHandleAsCaseClassRule extends PipezRule("handle as case class") {
 
-    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
+    def apply[In: Type, Out: Type](in: Expr[In], ctx: Expr[Any])(implicit
+        dctx: DerivationCtx[In, Out]
+    ): MIO[Rule.Applicability[Expr[Any]]] =
       Log.info(s"Attempting product derivation for ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}") >> {
         CaseClass.parse[Out].toEither match {
           case Right(outClass) =>
-            deriveProduct[In, Out](outClass).map(Rule.matched)
+            deriveProduct[In, Out](in, ctx, outClass).map(Rule.matched)
           case Left(ccReason) =>
-            // Try Java Bean detection as fallback
             detectBeanOut[Out] match {
               case Some(beanInfo) =>
-                deriveBeanProduct[In, Out](beanInfo).map(Rule.matched)
+                deriveBeanProduct[In, Out](in, ctx, beanInfo).map(Rule.matched)
               case None =>
                 MIO.pure(Rule.yielded(s"${Type[Out].prettyPrint} is not a case class: $ccReason"))
             }
@@ -31,25 +32,24 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
 
     // ---- Field resolution result ----
 
-    sealed trait FieldResult
-    object FieldResult {
-      final case class Pure(name: String, tpe: ??, get: (Expr[Any], Expr[Any]) => Expr[Any]) extends FieldResult
-      final case class Effectful(name: String, tpe: ??, get: (Expr[Any], Expr[Any]) => Expr[Any]) extends FieldResult
+    sealed trait FieldResolution
+    object FieldResolution {
+      final case class Pure(name: String, tpe: ??, getValue: Expr[Any] => Expr[Any]) extends FieldResolution
+      final case class Effectful(name: String, tpe: ??, getValue: (Expr[Any], Expr[Any]) => Expr[Any])
+          extends FieldResolution
     }
 
     // ---- Java Bean support ----
 
-    /** Represents a detected Java Bean "field" via its setter method */
     final private case class BeanField(
-        name: String, // field name (e.g. "a" from setA)
-        fieldType: ??, // the setter parameter type
-        setter: Method // the setter method reference
+        name: String,
+        fieldType: ??,
+        setter: Method
     )
 
-    /** Represents a detected Java Bean output type */
     final private case class BeanInfo[A](
         fields: List[BeanField],
-        defaultConstructor: Method // no-arg constructor
+        defaultConstructor: Method
     )
 
     private val setterPattern = raw"set(.)(.*)".r
@@ -59,18 +59,12 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
       case _                         => None
     }
 
-    /** Detects if a type is a Java Bean: has a default (no-arg) constructor and setter methods */
     private def detectBeanOut[A: Type]: Option[BeanInfo[A]] = {
-      // Look for a no-arg constructor
-      val defaultCtorOpt = Type[A].constructors.find { ctor =>
-        ctor.totalParameters.flatten.isEmpty
-      }
+      val defaultCtorOpt = Type[A].constructors.find(_.totalParameters.flatten.isEmpty)
 
       defaultCtorOpt.flatMap { defaultCtor =>
-        // Find setter methods
         val setterFields = Type[A].methods.flatMap { method =>
-          val methodName = method.name
-          extractSetterFieldName(methodName).flatMap { fieldName =>
+          extractSetterFieldName(method.name).flatMap { fieldName =>
             val params = method.totalParameters.flatten
             if (params.size == 1) {
               val (_, param) = params.head
@@ -79,63 +73,66 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           }
         }
 
-        if (setterFields.nonEmpty) {
-          Some(BeanInfo[A](setterFields.toList, defaultCtor))
-        } else None
+        if (setterFields.nonEmpty) Some(BeanInfo[A](setterFields.toList, defaultCtor))
+        else None
       }
     }
 
     // ---- Product derivation entry (case class) ----
 
-    private def deriveProduct[In: Type, Out: Type](outClass: CaseClass[Out])(implicit
-        ctx: DerivationCtx[In, Out]
-    ): MIO[Expr[Pipe[In, Out]]] = {
+    private def deriveProduct[In: Type, Out: Type](
+        in: Expr[In],
+        ctx: Expr[Any],
+        outClass: CaseClass[Out]
+    )(implicit dctx: DerivationCtx[In, Out]): MIO[Expr[Any]] = {
       val outParams: List[(String, Parameter)] = outClass.primaryConstructor.totalParameters.flatten
 
-      if (outParams.isEmpty) {
+      if (outParams.isEmpty)
         MIO.pure(deriveZeroFieldProduct[In, Out](outClass))
-      } else {
+      else {
         val inIsTuple = isTuple[In]
         val outIsTuple = isTuple[Out]
-        MIO {
-          val fieldResults = outParams.zipWithIndex.map { case ((outName, outParam), idx) =>
-            val outFieldType = outParam.tpe
-            // For tuple input/output, try positional matching first
-            if (inIsTuple || outIsTuple) {
-              resolveFieldWithPositional[In, Out](outName, outFieldType, idx)
-            } else {
-              resolveField[In, Out](outName, outFieldType)
+        outParams.zipWithIndex
+          .foldLeft(MIO.pure(List.empty[FieldResolution])) { case (accMIO, ((outName, outParam), idx)) =>
+            accMIO.flatMap { acc =>
+              val resolve =
+                if (inIsTuple || outIsTuple) resolveFieldWithPositional[In, Out](outName, outParam.tpe, idx)
+                else resolveField[In, Out](outName, outParam.tpe)
+              resolve.map(fr => acc :+ fr)
             }
           }
-          buildProduct[In, Out](fieldResults, outClass)
-        }
+          .map { fieldResults =>
+            buildProduct[In, Out](fieldResults, in, ctx, outClass)
+          }
       }
     }
 
     // ---- Bean product derivation entry ----
 
-    private def deriveBeanProduct[In: Type, Out: Type](beanInfo: BeanInfo[Out])(implicit
-        ctx: DerivationCtx[In, Out]
-    ): MIO[Expr[Pipe[In, Out]]] = {
-      val beanFields = beanInfo.fields
-
-      if (beanFields.isEmpty) {
-        // No-arg bean with no setters - just construct it
-        MIO.pure(deriveZeroBeanProduct[In, Out](beanInfo))
-      } else {
+    private def deriveBeanProduct[In: Type, Out: Type](
+        in: Expr[In],
+        ctx: Expr[Any],
+        beanInfo: BeanInfo[Out]
+    )(implicit dctx: DerivationCtx[In, Out]): MIO[Expr[Any]] =
+      if (beanInfo.fields.isEmpty)
+        MIO.pure(deriveZeroBeanProduct[Out](beanInfo))
+      else {
         val inIsTuple = isTuple[In]
-        MIO {
-          val fieldResults = beanFields.zipWithIndex.map { case (bf, idx) =>
-            if (inIsTuple) {
-              resolveFieldWithPositional[In, Out](bf.name, bf.fieldType, idx)
-            } else {
-              resolveField[In, Out](bf.name, bf.fieldType)
+        beanInfo.fields.zipWithIndex
+          .foldLeft(MIO.pure(List.empty[FieldResolution])) { case (accMIO, (bf, idx)) =>
+            accMIO.flatMap { acc =>
+              val resolve =
+                if (inIsTuple) resolveFieldWithPositional[In, Out](bf.name, bf.fieldType, idx)
+                else resolveField[In, Out](bf.name, bf.fieldType)
+              resolve.map(fr => acc :+ fr)
             }
           }
-          buildBeanProduct[In, Out](fieldResults, beanInfo)
-        }
+          .map { fieldResults =>
+            buildBeanProduct[In, Out](fieldResults, in, ctx, beanInfo)
+          }
       }
-    }
+
+    // ---- Constructor helpers ----
 
     private def callPrimaryConstructor[A: Type](
         outClass: CaseClass[A],
@@ -152,9 +149,7 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           expr.asInstanceOf[Expr[A]]
         }
 
-    private def callDefaultConstructor[A: Type](
-        defaultCtor: Method
-    ): Expr[A] =
+    private def callDefaultConstructor[A: Type](defaultCtor: Method): Expr[A] =
       defaultCtor.fold(
         onInstance = _ => throw new RuntimeException("Default constructor should not need instance"),
         onTypes = _ => Map.empty,
@@ -165,99 +160,80 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           throw new RuntimeException(s"Cannot call default constructor for ${Type[A].prettyPrint}: $err")
       }
 
-    private def deriveZeroFieldProduct[In: Type, Out: Type](outClass: CaseClass[Out]): Expr[Pipe[In, Out]] =
-      generateLift[In, Out] { (_, _) =>
-        callPrimaryConstructor(outClass, Map.empty) match {
-          case Right(outExpr) => generatePureResult(outExpr.asInstanceOf[Expr[Any]])
-          case Left(err)      => throw new RuntimeException(s"Cannot construct ${Type[Out].prettyPrint}: $err")
-        }
+    private def deriveZeroFieldProduct[In: Type, Out: Type](outClass: CaseClass[Out]): Expr[Any] =
+      callPrimaryConstructor(outClass, Map.empty) match {
+        case Right(outExpr) => generatePureResult(outExpr.asInstanceOf[Expr[Any]])
+        case Left(err)      => throw new RuntimeException(s"Cannot construct ${Type[Out].prettyPrint}: $err")
       }
 
-    private def deriveZeroBeanProduct[In: Type, Out: Type](beanInfo: BeanInfo[Out]): Expr[Pipe[In, Out]] =
-      generateLift[In, Out] { (_, _) =>
-        val outExpr = callDefaultConstructor[Out](beanInfo.defaultConstructor)
-        generatePureResult(outExpr.asInstanceOf[Expr[Any]])
-      }
+    private def deriveZeroBeanProduct[Out: Type](beanInfo: BeanInfo[Out]): Expr[Any] = {
+      val outExpr = callDefaultConstructor[Out](beanInfo.defaultConstructor)
+      generatePureResult(outExpr.asInstanceOf[Expr[Any]])
+    }
 
     // ---- Field resolution ----
 
-    /** Resolve a field with positional matching for tuples. Config overrides still apply by name. */
     private def resolveFieldWithPositional[In: Type, Out: Type](
         outName: String,
         outFieldType: ??,
         positionIndex: Int
-    )(implicit ctx: DerivationCtx[In, Out]): FieldResult = {
+    )(implicit dctx: DerivationCtx[In, Out]): MIO[FieldResolution] = {
       import outFieldType.Underlying as OutField
 
-      // Config operations still use name-based matching
-      val configAdd = ctx.settings.addedFields.find(e => matchFieldName(e.outFieldName, outName))
-      val configRename = ctx.settings.renamedFields.find(e => matchFieldName(e.outFieldName, outName))
-      val configPlugIn = ctx.settings.pluggedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configAdd = dctx.settings.addedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configRename = dctx.settings.renamedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configPlugIn = dctx.settings.pluggedFields.find(e => matchFieldName(e.outFieldName, outName))
 
-      if (configAdd.isDefined || configRename.isDefined || configPlugIn.isDefined) {
-        // Delegate to name-based resolution for config overrides
+      if (configAdd.isDefined || configRename.isDefined || configPlugIn.isDefined)
         resolveField[In, Out](outName, outFieldType)
-      } else {
-        // Try positional matching first, then fall back to name-based
+      else
         findInFieldByIndex[In](positionIndex) match {
           case Some((inFieldTpe, getField)) =>
             import inFieldTpe.Underlying as InField
-            if (Type[InField] <:< Type[OutField]) {
-              FieldResult.Pure(outName, outFieldType, (in, _) => getField(in.asInstanceOf[Expr[In]]))
-            } else {
-              summonPipe[InField, OutField] match {
-                case Some(pipe) =>
-                  FieldResult.Effectful(
-                    outName,
-                    outFieldType,
-                    (in, ctx) => {
-                      val fieldExpr = getField(in.asInstanceOf[Expr[In]])
-                      val updCtx = generateUpdateContext(ctx, pathFieldCode(outName))
-                      generateUnlift(pipe.asInstanceOf[Expr[Any]], fieldExpr, updCtx)
-                    }
-                  )
-                case None =>
-                  throw new RuntimeException(
-                    s"Couldn't find implicit Pipe[${Type[InField].prettyPrint}, ${Type[OutField].prettyPrint}], " +
-                      s"required by ${Type[In].prettyPrint} position $positionIndex to ${Type[Out].prettyPrint}.$outName conversion"
-                  )
+            if (Type[InField] <:< Type[OutField])
+              MIO.pure(FieldResolution.Pure(outName, outFieldType, in => getField(in.asInstanceOf[Expr[In]])))
+            else
+              summonOrDerive[InField, OutField].map { pipe =>
+                FieldResolution.Effectful(
+                  outName,
+                  outFieldType,
+                  (in, ctxE) => {
+                    val fieldExpr = getField(in.asInstanceOf[Expr[In]])
+                    val updCtx = generateUpdateContext(ctxE, pathFieldCode(outName))
+                    generateUnlift(pipe.asInstanceOf[Expr[Any]], fieldExpr, updCtx)
+                  }
+                )
               }
-            }
           case None =>
-            // Fall back to name-based resolution
             resolveField[In, Out](outName, outFieldType)
         }
-      }
     }
 
     private def resolveField[In: Type, Out: Type](
         outName: String,
         outFieldType: ??
-    )(implicit ctx: DerivationCtx[In, Out]): FieldResult = {
+    )(implicit dctx: DerivationCtx[In, Out]): MIO[FieldResolution] = {
       import outFieldType.Underlying as OutField
 
-      val configAdd = ctx.settings.addedFields.find(e => matchFieldName(e.outFieldName, outName))
-      val configRename = ctx.settings.renamedFields.find(e => matchFieldName(e.outFieldName, outName))
-      val configPlugIn = ctx.settings.pluggedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configAdd = dctx.settings.addedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configRename = dctx.settings.renamedFields.find(e => matchFieldName(e.outFieldName, outName))
+      val configPlugIn = dctx.settings.pluggedFields.find(e => matchFieldName(e.outFieldName, outName))
 
       if (configAdd.isDefined) {
         val pipe = configAdd.get.pipe
-        FieldResult.Effectful(
-          outName,
-          outFieldType,
-          (in, ctx) => generateUnlift(pipe, in, ctx)
-        )
+        MIO.pure(FieldResolution.Effectful(outName, outFieldType, (in, ctxE) => generateUnlift(pipe, in, ctxE)))
       } else if (configPlugIn.isDefined) {
         val entry = configPlugIn.get
-        val inName = entry.inFieldName
-        FieldResult.Effectful(
-          outName,
-          outFieldType,
-          (in, ctxE) => {
-            val fieldExpr = extractFieldFromIn[In](in.asInstanceOf[Expr[In]], inName)
-            val updCtx = generateUpdateContext(ctxE, pathFieldCode(outName))
-            generateUnlift(entry.pipe, fieldExpr, updCtx)
-          }
+        MIO.pure(
+          FieldResolution.Effectful(
+            outName,
+            outFieldType,
+            (in, ctxE) => {
+              val fieldExpr = extractFieldFromIn[In](in.asInstanceOf[Expr[In]], entry.inFieldName)
+              val updCtx = generateUpdateContext(ctxE, pathFieldCode(outName))
+              generateUnlift(entry.pipe, fieldExpr, updCtx)
+            }
+          )
         )
       } else {
         val lookupName = configRename.map(_.inFieldName).getOrElse(outName)
@@ -269,62 +245,39 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
         inFieldName: String,
         outFieldName: String,
         outFieldType: ??
-    )(implicit ctx: DerivationCtx[In, Out]): FieldResult = {
-      val inFieldOpt = findInField[In](inFieldName)
-
-      inFieldOpt match {
+    )(implicit dctx: DerivationCtx[In, Out]): MIO[FieldResolution] =
+      findInField[In](inFieldName) match {
         case Some((inFieldTpe, getField)) =>
           import inFieldTpe.Underlying as InField
-          if (Type[InField] <:< Type[OutField]) {
-            FieldResult.Pure(outFieldName, outFieldType, (in, _) => getField(in.asInstanceOf[Expr[In]]))
-          } else {
-            // Try summoning an implicit pipe, or derive recursively if enabled
-            val pipeExpr = summonPipe[InField, OutField].getOrElse {
-              if (ctx.settings.isRecursiveDerivationEnabled) {
-                // Recursively derive Pipe[InField, OutField]
-                val newCtx = DerivationCtx[InField, OutField](
-                  inType = Type[InField],
-                  outType = Type[OutField],
-                  settings = ctx.settings.stripForRecursion,
-                  cache = ctx.cache,
-                  derivedPipeType = ctx.derivedPipeType
-                )
-                val mio = deriveResultRecursively[InField, OutField](Type[InField], Type[OutField], newCtx)
-                // Execute the MIO synchronously - we're already inside an MIO { } block
-                val (_, result) = mio.unsafe.runSync
-                result.fold(
-                  errors => throw errors.head,
-                  identity
-                )
-              } else {
-                throw new RuntimeException(
-                  s"Couldn't find implicit Pipe[${Type[InField].prettyPrint}, ${Type[OutField].prettyPrint}], " +
-                    s"required by ${Type[In].prettyPrint}.$inFieldName to ${Type[Out].prettyPrint}.$outFieldName conversion"
-                )
-              }
+          if (Type[InField] <:< Type[OutField])
+            MIO.pure(FieldResolution.Pure(outFieldName, outFieldType, in => getField(in.asInstanceOf[Expr[In]])))
+          else
+            summonOrDerive[InField, OutField].map { pipe =>
+              FieldResolution.Effectful(
+                outFieldName,
+                outFieldType,
+                (in, ctxE) => {
+                  val fieldExpr = getField(in.asInstanceOf[Expr[In]])
+                  val updCtx = generateUpdateContext(ctxE, pathFieldCode(outFieldName))
+                  generateUnlift(pipe.asInstanceOf[Expr[Any]], fieldExpr, updCtx)
+                }
+              )
             }
-            FieldResult.Effectful(
-              outFieldName,
-              outFieldType,
-              (in, ctx) => {
-                val fieldExpr = getField(in.asInstanceOf[Expr[In]])
-                val updCtx = generateUpdateContext(ctx, pathFieldCode(outFieldName))
-                generateUnlift(pipeExpr.asInstanceOf[Expr[Any]], fieldExpr, updCtx)
-              }
-            )
-          }
 
         case None =>
-          resolveFallback[In, Out](outFieldName).getOrElse(
-            throw new RuntimeException(
-              s"Couldn't find a field/method which could be used as a source for $outFieldName from ${Type[Out].prettyPrint}"
-            )
-          )
+          resolveFallback[In, Out](outFieldName) match {
+            case Some(fr) => MIO.pure(fr)
+            case None     =>
+              MIO.fail(
+                new RuntimeException(
+                  s"Couldn't find a field/method which could be used as a source for $outFieldName from ${Type[Out].prettyPrint}"
+                )
+              )
+          }
       }
-    }
 
-    private def matchFieldName(configName: String, paramName: String)(implicit ctx: DerivationCtx[?, ?]): Boolean =
-      inputNameMatchesOutputName(configName, paramName, ctx.settings.isFieldCaseInsensitive)
+    private def matchFieldName(configName: String, paramName: String)(implicit dctx: DerivationCtx[?, ?]): Boolean =
+      inputNameMatchesOutputName(configName, paramName, dctx.settings.isFieldCaseInsensitive)
 
     // ---- In field extraction ----
 
@@ -333,87 +286,78 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
 
     private def findInField[In: Type](
         name: String
-    )(implicit ctx: DerivationCtx[?, ?]): Option[(??, Expr[In] => Expr[Any])] =
+    )(implicit dctx: DerivationCtx[?, ?]): Option[(??, Expr[In] => Expr[Any])] =
       CaseClass.parse[In].toEither match {
         case Right(inClass) =>
           val inParams = inClass.primaryConstructor.totalParameters.flatten
           val fromCaseFields = inParams.collectFirst {
-            case (paramName, param)
-                if inputNameMatchesOutputName(paramName, name, ctx.settings.isFieldCaseInsensitive) =>
-              val paramType = param.tpe
+            case (paramName, _) if inputNameMatchesOutputName(paramName, name, dctx.settings.isFieldCaseInsensitive) =>
               val getter: Expr[In] => Expr[Any] = in =>
                 inClass
                   .caseFieldValuesAt(in)
                   .toList
-                  .collectFirst {
-                    case (n, fv) if n == paramName => fv.value.asInstanceOf[Expr[Any]]
-                  }
+                  .collectFirst { case (n, fv) if n == paramName => fv.value.asInstanceOf[Expr[Any]] }
                   .getOrElse(throw new RuntimeException(s"Field $paramName not found"))
+              val paramType: ?? = inParams.find(_._1 == paramName).get._2.tpe
               (paramType, getter)
           }
-          // If case class field not found, also try method getters
           fromCaseFields.orElse(findMethodGetter[In](name))
         case Left(_) =>
           findMethodGetter[In](name)
       }
 
-    /** For tuple output: find the corresponding tuple field from input by position index */
     private def findInFieldByIndex[In: Type](
         index: Int
-    )(implicit ctx: DerivationCtx[?, ?]): Option[(??, Expr[In] => Expr[Any])] =
+    )(implicit dctx: DerivationCtx[?, ?]): Option[(??, Expr[In] => Expr[Any])] =
       CaseClass.parse[In].toEither match {
         case Right(inClass) =>
           val inParams = inClass.primaryConstructor.totalParameters.flatten
           if (index < inParams.size) {
             val (paramName, param) = inParams(index)
-            val paramType = param.tpe
             val getter: Expr[In] => Expr[Any] = in =>
               inClass
                 .caseFieldValuesAt(in)
                 .toList
-                .collectFirst {
-                  case (n, fv) if n == paramName => fv.value.asInstanceOf[Expr[Any]]
-                }
+                .collectFirst { case (n, fv) if n == paramName => fv.value.asInstanceOf[Expr[Any]] }
                 .getOrElse(throw new RuntimeException(s"Field $paramName not found"))
-            Some((paramType, getter))
+            Some((param.tpe, getter))
           } else None
         case Left(_) =>
-          // Try method getter by _N name
           findMethodGetter[In](s"_${index + 1}")
       }
 
-    private def findMethodGetter[In: Type](name: String)(implicit
-        ctx: DerivationCtx[?, ?]
-    ): Option[(??, Expr[In] => Expr[Any])] = {
-      val garbage = Set(
-        "copy",
-        "canEqual",
-        "productArity",
-        "productElement",
-        "productElementName",
-        "productElementNames",
-        "productIterator",
-        "productPrefix",
-        "equals",
-        "hashCode",
-        "toString",
-        "clone",
-        "synchronized",
-        "wait",
-        "notify",
-        "notifyAll",
-        "getClass",
-        "asInstanceOf",
-        "isInstanceOf"
-      )
+    private val ignoredMethodNames = Set(
+      "copy",
+      "canEqual",
+      "productArity",
+      "productElement",
+      "productElementName",
+      "productElementNames",
+      "productIterator",
+      "productPrefix",
+      "equals",
+      "hashCode",
+      "toString",
+      "clone",
+      "synchronized",
+      "wait",
+      "notify",
+      "notifyAll",
+      "getClass",
+      "asInstanceOf",
+      "isInstanceOf"
+    )
 
+    private def findMethodGetter[In: Type](name: String)(implicit
+        dctx: DerivationCtx[?, ?]
+    ): Option[(??, Expr[In] => Expr[Any])] =
       Type[In].methods.iterator
         .flatMap { method =>
           if (
-            !garbage(method.name) &&
+            !ignoredMethodNames(method.name) &&
             !method.name.contains("$default$") &&
             method.totalParameters.flatten.isEmpty &&
-            inputNameMatchesOutputName(dropGetIs(method.name), name, ctx.settings.isFieldCaseInsensitive)
+            inputNameMatchesOutputName(dropGetIs(method.name), name, dctx.settings.isFieldCaseInsensitive)
           ) {
             val returnType: ?? = method.knownReturning.getOrElse(Type.of[Any].as_??)
             val getter: Expr[In] => Expr[Any] = in =>
@@ -429,10 +373,9 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
           } else None
         }
         .nextOption()
-    }
 
     private def extractFieldFromIn[In: Type](in: Expr[In], fieldName: String)(implicit
-        ctx: DerivationCtx[?, ?]
+        dctx: DerivationCtx[?, ?]
     ): Expr[Any] =
       findInField[In](fieldName) match {
         case Some((_, getter)) => getter(in)
@@ -443,21 +386,20 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
 
     private def resolveFallback[In: Type, Out: Type](
         outFieldName: String
-    )(implicit ctx: DerivationCtx[In, Out]): Option[FieldResult] = {
-      val fromFallbackValues = ctx.settings.fallbackValues.view.flatMap { fv =>
+    )(implicit dctx: DerivationCtx[In, Out]): Option[FieldResolution] = {
+      val fromFallbackValues = dctx.settings.fallbackValues.view.flatMap { fv =>
         import fv.fallbackType.Underlying as FV
-        // Try case class fields first
         CaseClass
           .parse[FV]
           .toEither
           .toOption
           .flatMap { fvClass =>
             fvClass.primaryConstructor.totalParameters.flatten.collectFirst {
-              case (n, _) if inputNameMatchesOutputName(n, outFieldName, ctx.settings.isFieldCaseInsensitive) =>
-                FieldResult.Pure(
+              case (n, _) if inputNameMatchesOutputName(n, outFieldName, dctx.settings.isFieldCaseInsensitive) =>
+                FieldResolution.Pure(
                   outFieldName,
                   fvClass.primaryConstructor.totalParameters.flatten.find(_._1 == n).get._2.tpe,
-                  (_, _) => {
+                  _ => {
                     val fvExpr = fv.fallbackValue.asInstanceOf[Expr[FV]]
                     fvClass.caseFieldValuesAt(fvExpr).toList.find(_._1 == n).get._2.value.asInstanceOf[Expr[Any]]
                   }
@@ -465,20 +407,18 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
             }
           }
           .orElse {
-            // Try bean getters for fallback values
-            findMethodGetter[FV](outFieldName)(Type.of[FV].asInstanceOf[Type[FV]], ctx).map { case (retType, getter) =>
-              FieldResult.Pure(
+            findMethodGetter[FV](outFieldName)(Type.of[FV].asInstanceOf[Type[FV]], dctx).map { case (retType, getter) =>
+              FieldResolution.Pure(
                 outFieldName,
                 retType,
-                (_, _) => getter(fv.fallbackValue.asInstanceOf[Expr[FV]])
+                _ => getter(fv.fallbackValue.asInstanceOf[Expr[FV]])
               )
             }
           }
       }.headOption
 
       fromFallbackValues.orElse {
-        if (ctx.settings.isFallbackToDefaultEnabled) {
-          // Try case class defaults (bean types don't have constructor defaults)
+        if (dctx.settings.isFallbackToDefaultEnabled) {
           CaseClass.parse[Out].toEither.toOption.flatMap { outClass =>
             outClass.primaryConstructor.totalParameters.flatten.toMap.get(outFieldName).flatMap { param =>
               param.defaultValue.flatMap { defaultMethod =>
@@ -490,10 +430,10 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
                   )
                   .toOption
                   .map { defaultExprExistential =>
-                    FieldResult.Pure(
+                    FieldResolution.Pure(
                       outFieldName,
                       param.tpe,
-                      (_, _) => defaultExprExistential.value.asInstanceOf[Expr[Any]]
+                      _ => defaultExprExistential.value.asInstanceOf[Expr[Any]]
                     )
                   }
               }
@@ -506,110 +446,96 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
     // ---- Code building (case class) ----
 
     private def buildProduct[In: Type, Out: Type](
-        fieldResults: List[FieldResult],
+        fieldResults: List[FieldResolution],
+        in: Expr[In],
+        ctx: Expr[Any],
         outClass: CaseClass[Out]
-    ): Expr[Pipe[In, Out]] = {
-      val allPure = fieldResults.forall(_.isInstanceOf[FieldResult.Pure])
+    ): Expr[Any] = {
+      val allPure = fieldResults.forall(_.isInstanceOf[FieldResolution.Pure])
+      val inAny = in.asInstanceOf[Expr[Any]]
 
       if (allPure) {
-        generateLift[In, Out] { (in, _) =>
-          val fieldMap = fieldResults.map {
-            case FieldResult.Pure(name, _, get) => name -> get(in, in).as_??
-            case _                              => throw new RuntimeException("Unreachable")
-          }.toMap
-          callPrimaryConstructor(outClass, fieldMap) match {
-            case Right(outExpr) => generatePureResult(outExpr.asInstanceOf[Expr[Any]])
-            case Left(err)      => throw new RuntimeException(s"Cannot construct ${Type[Out].prettyPrint}: $err")
-          }
+        val fieldMap = fieldResults.map {
+          case FieldResolution.Pure(name, _, get) => name -> get(inAny).as_??
+          case _                                  => throw new RuntimeException("Unreachable")
+        }.toMap
+        callPrimaryConstructor(outClass, fieldMap) match {
+          case Right(outExpr) => generatePureResult(outExpr.asInstanceOf[Expr[Any]])
+          case Left(err)      => throw new RuntimeException(s"Cannot construct ${Type[Out].prettyPrint}: $err")
         }
-      } else {
-        buildProductWithEffects[In, Out](fieldResults, outClass)
-      }
+      } else
+        buildProductWithEffects[In, Out](fieldResults, in, ctx, outClass)
     }
 
     private def buildProductWithEffects[In: Type, Out: Type](
-        fieldResults: List[FieldResult],
+        fieldResults: List[FieldResolution],
+        in: Expr[In],
+        ctx: Expr[Any],
         outClass: CaseClass[Out]
-    ): Expr[Pipe[In, Out]] = {
+    ): Expr[Any] = {
       val n = fieldResults.size
+      val inAny = in.asInstanceOf[Expr[Any]]
 
-      generateLift[In, Out] { (in, ctx) =>
-        val initResult: Expr[Any] = generatePureResult(
-          Expr.quote(new Array[Any](Expr.splice(Expr(n))))
-        )
+      val initResult: Expr[Any] = generatePureResult(
+        Expr.quote(new Array[Any](Expr.splice(Expr(n))))
+      )
 
-        // Fold all fields: each merge stores a value in the array and returns the array
-        val merged = fieldResults.zipWithIndex.foldLeft(initResult) { case (accum, (fieldResult, index)) =>
-          val fieldValue = fieldResult match {
-            case FieldResult.Pure(_, _, get)      => generatePureResult(get(in, ctx))
-            case FieldResult.Effectful(_, _, get) => get(in, ctx)
-          }
-          val merger = Expr.quote { (arr: Array[Any], value: Any) =>
-            arr(Expr.splice(Expr(index))) = value
-            arr
-          }
-          generateMergeResults(ctx, accum, fieldValue, merger.asInstanceOf[Expr[Any]])
+      val merged = fieldResults.zipWithIndex.foldLeft(initResult) { case (accum, (fieldResult, index)) =>
+        val fieldValue = fieldResult match {
+          case FieldResolution.Pure(_, _, get)      => generatePureResult(get(inAny))
+          case FieldResolution.Effectful(_, _, get) => get(inAny, ctx)
         }
-
-        // Final merge: extract all values from array and construct the output.
-        // The constructor function receives the array and a dummy Unit.
-        val constructorFn = generateArrayToConstructorFn[Out](outClass, -1, n)
-        generateMergeResults(
-          ctx,
-          merged,
-          generatePureResult(Expr.quote(()).asInstanceOf[Expr[Any]]),
-          constructorFn
-        )
+        val merger = Expr.quote { (arr: Array[Any], value: Any) =>
+          arr(Expr.splice(Expr(index))) = value
+          arr
+        }
+        generateMergeResults(ctx, accum, fieldValue, merger.asInstanceOf[Expr[Any]])
       }
+
+      val constructorFn = generateArrayToConstructorFn[Out](outClass, -1, n)
+      generateMergeResults(
+        ctx,
+        merged,
+        generatePureResult(Expr.quote(()).asInstanceOf[Expr[Any]]),
+        constructorFn
+      )
     }
 
     // ---- Code building (bean) ----
 
     private def buildBeanProduct[In: Type, Out: Type](
-        fieldResults: List[FieldResult],
+        fieldResults: List[FieldResolution],
+        in: Expr[In],
+        ctx: Expr[Any],
         beanInfo: BeanInfo[Out]
-    ): Expr[Pipe[In, Out]] =
-      // Always use the array-based effectful path for beans.
-      // The pure path has issues with bean expressions being evaluated multiple times
-      // (creating separate instances for setter calls vs the returned value).
-      // The effectful path properly creates a single bean instance via the
-      // array-to-bean constructor function in the bridge.
-      buildBeanProductWithEffects[In, Out](fieldResults, beanInfo)
-
-    private def buildBeanProductWithEffects[In: Type, Out: Type](
-        fieldResults: List[FieldResult],
-        beanInfo: BeanInfo[Out]
-    ): Expr[Pipe[In, Out]] = {
+    ): Expr[Any] = {
       val n = fieldResults.size
+      val inAny = in.asInstanceOf[Expr[Any]]
 
-      generateLift[In, Out] { (in, ctx) =>
-        val initResult: Expr[Any] = generatePureResult(
-          Expr.quote(new Array[Any](Expr.splice(Expr(n))))
-        )
+      val initResult: Expr[Any] = generatePureResult(
+        Expr.quote(new Array[Any](Expr.splice(Expr(n))))
+      )
 
-        // Fold all fields: each merge stores a value in the array and returns the array
-        val merged = fieldResults.zipWithIndex.foldLeft(initResult) { case (accum, (fieldResult, index)) =>
-          val fieldValue = fieldResult match {
-            case FieldResult.Pure(_, _, get)      => generatePureResult(get(in, ctx))
-            case FieldResult.Effectful(_, _, get) => get(in, ctx)
-          }
-          val merger = Expr.quote { (arr: Array[Any], value: Any) =>
-            arr(Expr.splice(Expr(index))) = value
-            arr
-          }
-          generateMergeResults(ctx, accum, fieldValue, merger.asInstanceOf[Expr[Any]])
+      val merged = fieldResults.zipWithIndex.foldLeft(initResult) { case (accum, (fieldResult, index)) =>
+        val fieldValue = fieldResult match {
+          case FieldResolution.Pure(_, _, get)      => generatePureResult(get(inAny))
+          case FieldResolution.Effectful(_, _, get) => get(inAny, ctx)
         }
-
-        // Final merge: extract all values from array and construct the bean.
-        val beanFieldsWithTypes = beanInfo.fields.map(bf => (bf.fieldType, bf.setter))
-        val constructorFn = generateArrayToBeanFn[Out](beanFieldsWithTypes, beanInfo.defaultConstructor, -1, n)
-        generateMergeResults(
-          ctx,
-          merged,
-          generatePureResult(Expr.quote(()).asInstanceOf[Expr[Any]]),
-          constructorFn
-        )
+        val merger = Expr.quote { (arr: Array[Any], value: Any) =>
+          arr(Expr.splice(Expr(index))) = value
+          arr
+        }
+        generateMergeResults(ctx, accum, fieldValue, merger.asInstanceOf[Expr[Any]])
       }
+
+      val beanFieldsWithTypes = beanInfo.fields.map(bf => (bf.fieldType, bf.setter))
+      val constructorFn = generateArrayToBeanFn[Out](beanFieldsWithTypes, beanInfo.defaultConstructor, -1, n)
+      generateMergeResults(
+        ctx,
+        merged,
+        generatePureResult(Expr.quote(()).asInstanceOf[Expr[Any]]),
+        constructorFn
+      )
     }
   }
 }

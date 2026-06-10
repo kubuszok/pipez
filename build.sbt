@@ -134,6 +134,7 @@ val dependencies = Seq(
     "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test,
     "org.scalameta" %%% "munit"       % versions.munit  % Test
   ),
+  testFrameworks += new TestFramework("munit.Framework"),
   libraryDependencies ++= foldVersion(scalaVersion.value)(
     for3 = Seq.empty,
     for2_13 = Seq(
@@ -169,7 +170,7 @@ lazy val aliases = new Aliases(
 
 lazy val pipezTestcases213 = projectMatrix
   .in(file("pipez-testcases-213"))
-  .someVariations(List(versions.scala213), List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native))()
+  .someVariations(versions.scalas, versions.platforms)()
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "pipez-testcases-213",

@@ -286,6 +286,7 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
                   inType = Type[InField],
                   outType = Type[OutField],
                   settings = ctx.settings.stripForRecursion,
+                  cache = ctx.cache,
                   derivedPipeType = ctx.derivedPipeType
                 )
                 val mio = deriveResultRecursively[InField, OutField](Type[InField], Type[OutField], newCtx)

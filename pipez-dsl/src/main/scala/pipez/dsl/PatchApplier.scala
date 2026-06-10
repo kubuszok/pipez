@@ -5,12 +5,9 @@ trait PatchApplier[Patch, Patched] {
 
   def apply(patch: Patch): Patched
 }
-object PatchApplier
-    extends pipez.PipeSemiautoSupport[PatchApplier]
-    with pipez.PipeSemiautoConfiguredSupport[PatchApplier]
-    with PatchApplierInstances0 {
+object PatchApplier extends PatchApplierCompanionCompat with PatchApplierInstances0 {
 
-  implicit val pipeDerivation: pipez.PipeDerivation[PatchApplier] = PatchApplierDerivationDefinition
+  implicit val pipeDerivation: pipez.PipeDerivation.Simple[PatchApplier] = PatchApplierDerivationDefinition
 }
 private[dsl] trait PatchApplierInstances0 { self: PatchApplier.type =>
 
@@ -18,6 +15,6 @@ private[dsl] trait PatchApplierInstances0 { self: PatchApplier.type =>
 }
 private[dsl] object PatchApplierDerivationDefinition extends pipez.PipeDerivation.Simple[PatchApplier] {
 
-  override def simpleLift[In, Out](f: In => Out):                          PatchApplier[In, Out] = f(_)
-  override def simpleUnlift[In, Out](pipe: PatchApplier[In, Out], in: In): Out                   = pipe(in)
+  override def simpleLift[In, Out](f: In => Out): PatchApplier[In, Out] = f(_)
+  override def simpleUnlift[In, Out](pipe: PatchApplier[In, Out], in: In): Out = pipe(in)
 }

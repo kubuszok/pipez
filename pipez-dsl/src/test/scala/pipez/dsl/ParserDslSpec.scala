@@ -1,6 +1,6 @@
 package pipez.dsl
 
-import scala.collection.immutable.{ HashMap, ListMap }
+import scala.collection.immutable.{HashMap, ListMap}
 
 class ParserDslSpec extends munit.FunSuite {
 
@@ -46,7 +46,7 @@ class ParserDslSpec extends munit.FunSuite {
   }
 
   test("from.parseFastInto[To] and from.parseFullInto[To] should handle automatic derivation") {
-    import pipez.{ `Backtick ADT In`, `Backtick ADT Out` }
+    import pipez.{`Backtick ADT In`, `Backtick ADT Out`}
     assertEquals(
       (`Backtick ADT In`.`Case Class`("test"): `Backtick ADT In`).parseFastInto[`Backtick ADT Out`],
       Right(`Backtick ADT Out`.`Case Class`("test"))
@@ -54,7 +54,7 @@ class ParserDslSpec extends munit.FunSuite {
   }
 
   test("from.parseFastInto[To] and from.parseFullInto[To] should handle configured derivation") {
-    import pipez.{ CaseParamIn, CaseParamOutExt }
+    import pipez.{CaseParamIn, CaseParamOutExt}
     implicit val intToSting: Parser[Int, String] = Parser.instance(i => Right(i.toString))
     assertEquals(
       CaseParamIn(1, "test", 2).parseFastInto[CaseParamOutExt[String]](
@@ -65,7 +65,7 @@ class ParserDslSpec extends munit.FunSuite {
   }
 
   test("from.parseFastInto[To] and from.parseFullInto[To] should provide error paths on failures") {
-    import pipez.{ CaseParamIn, CaseParamOutExt }
+    import pipez.{CaseParamIn, CaseParamOutExt}
     import Parser.PathSegment.*
     implicit val stringToInt: Parser[String, Int] =
       Parser.instance(i => scala.util.Try(i.toInt).toEither.left.map(_ => Vector(s"$i is not integer")))

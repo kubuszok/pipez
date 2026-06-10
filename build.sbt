@@ -206,7 +206,7 @@ lazy val pipezDsl = projectMatrix
   .settings(settings *)
   .settings(dependencies *)
   .settings(publishSettings *)
-  .dependsOn(pipez)
+  .dependsOn(pipez % "compile->compile;test->test")
 
 lazy val root = project
   .in(file("."))

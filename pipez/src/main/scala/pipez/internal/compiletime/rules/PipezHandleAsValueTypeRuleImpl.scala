@@ -20,8 +20,10 @@ trait PipezHandleAsValueTypeRuleImpl { this: PipezMacrosImpl & MacroCommons & St
         Type[A] <:< Type.of[Char] ||
         Type[A] <:< Type.of[String]
 
-    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]] =
-      Log.info(s"Attempting value type conversion") >> {
+    def apply[In: Type, Out: Type](in: Expr[In], ctx: Expr[Any])(implicit
+        dctx: DerivationCtx[In, Out]
+    ): MIO[Rule.Applicability[Expr[Any]]] =
+      Log.info(s"Attempting value type conversion for ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}") >> {
         val inIsValue = Type[In] match { case IsValueType(_) => true; case _ => false }
         val outIsValue = Type[Out] match { case IsValueType(_) => true; case _ => false }
         val inIsPrim = isPrimitive[In]
@@ -29,20 +31,20 @@ trait PipezHandleAsValueTypeRuleImpl { this: PipezMacrosImpl & MacroCommons & St
 
         if ((inIsValue || outIsValue) && (inIsValue || inIsPrim) && (outIsValue || outIsPrim))
           MIO {
-            val (inInnerType, unwrapFn) = Type[In] match {
+            val (inInnerType, unwrapped) = Type[In] match {
               case IsValueType(isValue) =>
-                import isValue.{Underlying as Inner, value as proof}
-                (Type[Inner].as_??, (in: Expr[Any]) => proof.unwrap(in.asInstanceOf[Expr[In]]).asInstanceOf[Expr[Any]])
+                import isValue.Underlying as Inner
+                (Type[Inner].as_??, isValue.value.unwrap(in).asInstanceOf[Expr[Any]])
               case _ =>
-                (Type[In].as_??, (in: Expr[Any]) => in)
+                (Type[In].as_??, in.asInstanceOf[Expr[Any]])
             }
 
             val (outInnerType, wrapFn) = Type[Out] match {
               case IsValueType(isValue) =>
-                import isValue.{Underlying as Inner, value as proof}
+                import isValue.Underlying as Inner
                 (
                   Type[Inner].as_??,
-                  (v: Expr[Any]) => proof.wrap.apply(v.asInstanceOf[Expr[Inner]]).asInstanceOf[Expr[Any]]
+                  (v: Expr[Any]) => isValue.value.wrap.apply(v.asInstanceOf[Expr[Inner]]).asInstanceOf[Expr[Any]]
                 )
               case _ =>
                 (Type[Out].as_??, (v: Expr[Any]) => v)
@@ -57,9 +59,7 @@ trait PipezHandleAsValueTypeRuleImpl { this: PipezMacrosImpl & MacroCommons & St
                 )
             }
 
-            Rule.matched(generateLift[In, Out] { (in, _) =>
-              generatePureResult(wrapFn(unwrapFn(in)))
-            })
+            Rule.matched(generatePureResult(wrapFn(unwrapped)))
           }
         else
           MIO.pure(Rule.yielded(s"Not a value type conversion"))

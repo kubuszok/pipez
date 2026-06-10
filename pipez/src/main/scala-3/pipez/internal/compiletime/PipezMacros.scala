@@ -5,7 +5,6 @@ import pipez.{Path, PipeDerivation, PipeDerivationConfig}
 
 import scala.annotation.nowarn
 
-// Import scala.quoted types under aliases to avoid cross-quotes plugin interference
 import scala.quoted.{Expr as SQExpr, Quotes, Type as SQType}
 
 final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
@@ -22,27 +21,14 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
 
   override type Pipe[A, B] = P[A, B]
 
-  private def debugLog(msg: String): Unit = {
-    val f = new java.io.FileWriter("/tmp/pipez-debug.log", true)
-    f.write(s"[${java.time.Instant.now}] BRIDGE: $msg\n")
-    f.close()
-  }
-
-  // Override to avoid cross-quotes plugin recursive implicit self-reference.
-  // Use direct scala.quoted.Type.of instead of hearth's cross-quotes Type.of.
   @nowarn("msg=unused") implicit override lazy val typeOfAny: Type[Any] =
     SQType.of[Any](using quotes).asInstanceOf[Type[Any]]
 
   @nowarn("msg=Infinite loop|unused") implicit override lazy val PipeCtor: Type.Ctor2[Pipe] = {
-    debugLog("PipeCtor init start")
     val pipeTypeRepr = TypeRepr.of(using pipeTypeQ)
-    debugLog(s"PipeCtor typeRepr: $pipeTypeRepr")
-    val result = Type.Ctor2.fromUntyped[P](pipeTypeRepr.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
-    debugLog("PipeCtor init done")
-    result
+    Type.Ctor2.fromUntyped[P](pipeTypeRepr.asInstanceOf[UntypedType]).asInstanceOf[Type.Ctor2[Pipe]]
   }
 
-  // Extract Context and Result types from PipeDerivation
   private val (ctxQType, resCtorUntypedType) = {
     given SQType[P] = pipeTypeQ
     val ctxTpe = '{ $pdQ.updateContext(???, ???) }.asTerm.tpe.widen
@@ -73,10 +59,8 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
   // ---- Code generation implementations ----
 
   override def generateLift[In: Type, Out: Type](
-      body: (Expr[Any], Expr[Any]) => Expr[Any]
+      body: (Expr[In], Expr[Any]) => Expr[Any]
   ): Expr[Pipe[In, Out]] =
-    // Extract implicit types in a separate block to avoid recursive given self-reference (SOE)
-    // and forward reference errors between the val and given definitions
     generateLiftImpl[In, Out](
       summon[Type[In]].asInstanceOf[SQType[In]],
       summon[Type[Out]].asInstanceOf[SQType[Out]],
@@ -86,7 +70,7 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
   private def generateLiftImpl[In, Out](
       inSQType: SQType[In],
       outSQType: SQType[Out],
-      body: (Expr[Any], Expr[Any]) => Expr[Any]
+      body: (Expr[In], Expr[Any]) => Expr[Any]
   ): Expr[Pipe[In, Out]] = {
     given SQType[P] = pipeTypeQ
     given SQType[In] = inSQType
@@ -99,10 +83,9 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
         val _ctx = ctx
         ${
           val bodyResult = body(
-            '{ _in }.asInstanceOf[Expr[Any]],
+            '{ _in }.asInstanceOf[Expr[In]],
             '{ _ctx }.asInstanceOf[Expr[Any]]
           )
-          // Insert tree-level asInstanceOf to cast Result[Any] to Result[Out]
           val bodyTerm = bodyResult.asInstanceOf[SQExpr[Any]].asTerm
           val expectedType = resCtorUntypedType.appliedTo(TypeRepr.of[Out])
           val casted = TypeApply(Select.unique(bodyTerm, "asInstanceOf"), List(Inferred(expectedType)))
@@ -112,13 +95,7 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     }.asInstanceOf[Expr[Pipe[In, Out]]]
   }
 
-  // Use tree construction with proper type handling to avoid ScopeException.
-  // The key insight: expressions from one splice (like '{ _ctx }) can be used in
-  // tree construction (Select/Apply) without triggering ScopeException, as long as
-  // we don't create new quote blocks that would check splice ownership.
-
   private def pdTerm: Term = pdExpr.asInstanceOf[SQExpr[Any]].asTerm
-
   private def toTerm(e: Expr[Any]): Term = e.asInstanceOf[SQExpr[Any]].asTerm
 
   override def generateUnlift(
@@ -130,7 +107,6 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     val pipeTR = PipeCtor.apply[Any, Any](using typeOfAny, typeOfAny).asInstanceOf[SQType[?]] match {
       case '[t] => TypeRepr.of[t]
     }
-    // pd.unlift[Any, Any](pipe.asInstanceOf[Pipe[Any, Any]], in, ctx)
     val unliftSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("unlift").head)
     val pipeCast = TypeApply(Select.unique(toTerm(pipe), "asInstanceOf"), List(Inferred(pipeTR)))
     val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
@@ -142,11 +118,8 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
 
   override def generatePureResult(a: Expr[Any]): Expr[Any] = {
     val anyTR = TypeRepr.of[Any]
-    // pd.pureResult[Any](a) using tree construction to stay in same splice context
     val pureResultSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("pureResult").head)
-    val applied = pureResultSel
-      .appliedToType(anyTR)
-      .appliedTo(toTerm(a))
+    val applied = pureResultSel.appliedToType(anyTR).appliedTo(toTerm(a))
     applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
@@ -159,9 +132,7 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     val anyTR = TypeRepr.of[Any]
     val resTR = resCtorUntypedType.appliedTo(anyTR)
     val fn2TR = TypeRepr.of[(Any, Any) => Any]
-    // pd.mergeResults[Any, Any, Any](ctx, ra, rb, f)
     val mergeResultsSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("mergeResults").head)
-    // Cast arguments to expected types
     val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
     val raCast = TypeApply(Select.unique(toTerm(ra), "asInstanceOf"), List(Inferred(resTR)))
     val rbCast = TypeApply(Select.unique(toTerm(rb), "asInstanceOf"), List(Inferred(resTR)))
@@ -179,20 +150,12 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     applied.asExpr.asInstanceOf[Expr[Any]]
   }
 
-  override def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any] = {
-    val stats = statements.map(e => toTerm(e).asInstanceOf[quotes.reflect.Statement])
-    val resTerm = toTerm(result)
-    Block(stats.toList, resTerm).asExpr.asInstanceOf[Expr[Any]]
-  }
-
   override def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
   ): Expr[Any] = {
     val outTR = UntypedType.fromTyped[Out].asInstanceOf[TypeRepr]
-
-    // Build constructor args metadata at macro time
     val outParams = outClass.primaryConstructor.totalParameters.flatten
     val ctorSym = outTR.typeSymbol.primaryConstructor
     val typeParams = outTR match {
@@ -200,36 +163,26 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
       case _                    => Nil
     }
 
-    // Precompute TypeReprs for each parameter
     val paramTypeReprs: List[TypeRepr] = outParams.map { case (_, param) =>
       val existential = param.tpe
       import existential.Underlying as ParamT
       UntypedType.fromTyped[ParamT].asInstanceOf[TypeRepr]
     }
 
-    // Build the lambda using standard Scala 3 quotes.
-    // Inside the splice, we use tree-level APIs to construct the output from the array.
-    // The key: '{ arr } inside the splice references the lambda parameter.
     '{ (arr: Array[Any], _dummy: Any) =>
       ${
         val arrTerm = 'arr.asTerm
-
         val ctorArgs = paramTypeReprs.zipWithIndex.map { case (paramTR, idx) =>
           val arrGet = Apply(Select.unique(arrTerm, "apply"), List(Literal(IntConstant(idx))))
           TypeApply(Select.unique(arrGet, "asInstanceOf"), List(Inferred(paramTR)))
         }
-
         val outTypeTree = Inferred(outTR)
         val newExpr =
           if typeParams.nonEmpty then New(outTypeTree)
             .select(ctorSym)
             .appliedToTypes(typeParams)
             .appliedToArgs(ctorArgs)
-          else
-            New(outTypeTree)
-              .select(ctorSym)
-              .appliedToArgs(ctorArgs)
-
+          else New(outTypeTree).select(ctorSym).appliedToArgs(ctorArgs)
         newExpr.asExpr.asInstanceOf[SQExpr[Any]]
       }
     }.asInstanceOf[Expr[Any]]
@@ -243,18 +196,15 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
   ): Expr[Any] = {
     val outTR = UntypedType.fromTyped[Out].asInstanceOf[TypeRepr]
 
-    // Precompute: construct the default bean expression at macro time
-    val beanExprResult = defaultConstructor.fold(
+    val beanConstructorTerm = defaultConstructor.fold(
       onInstance = _ => throw new RuntimeException("Default constructor should not need instance"),
       onTypes = _ => Map.empty,
       onValues = _ => Map.empty
-    )
-    val beanConstructorTerm = beanExprResult match {
+    ) match {
       case Right(result) => toTerm(result.value.asInstanceOf[Expr[Any]])
       case Left(err)     => throw new RuntimeException(s"Cannot call default constructor: $err")
     }
 
-    // Precompute setter info: (TypeRepr, setter Symbol)
     val setterInfo: List[(TypeRepr, Symbol)] = beanFields.map { case (fieldType, setter) =>
       val existential = fieldType
       import existential.Underlying as FT
@@ -266,17 +216,13 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
       (paramTR, setterSym)
     }
 
-    // Build the lambda using standard Scala 3 quotes
     '{ (arr: Array[Any], _dummy: Any) =>
       ${
         val arrTerm = 'arr.asTerm
-
-        // Create: val bean = new Out()
         val beanSym = Symbol.newVal(Symbol.spliceOwner, "bean", outTR, Flags.EmptyFlags, Symbol.noSymbol)
         val beanValDef = ValDef(beanSym, Some(beanConstructorTerm))
         val beanRef = Ref(beanSym)
 
-        // Create setter calls: bean.setX(arr(i).asInstanceOf[ParamType])
         val setterStmts = setterInfo.zipWithIndex.map { case ((paramTR, setterSym), idx) =>
           val arrGet = Apply(Select.unique(arrTerm, "apply"), List(Literal(IntConstant(idx))))
           val castedValue = TypeApply(Select.unique(arrGet, "asInstanceOf"), List(Inferred(paramTR)))

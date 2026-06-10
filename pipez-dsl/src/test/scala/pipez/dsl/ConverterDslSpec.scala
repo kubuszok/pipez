@@ -1,6 +1,6 @@
 package pipez.dsl
 
-import scala.collection.immutable.{ HashMap, ListMap }
+import scala.collection.immutable.{HashMap, ListMap}
 
 class ConverterDslSpec extends munit.FunSuite {
 
@@ -49,7 +49,7 @@ class ConverterDslSpec extends munit.FunSuite {
   }
 
   test("from.convertInto[To] should handle automatic derivation") {
-    import pipez.{ `Backtick ADT In`, `Backtick ADT Out` }
+    import pipez.{`Backtick ADT In`, `Backtick ADT Out`}
     assertEquals(
       (`Backtick ADT In`.`Case Class`("test"): `Backtick ADT In`).convertInto[`Backtick ADT Out`],
       `Backtick ADT Out`.`Case Class`("test")
@@ -57,7 +57,7 @@ class ConverterDslSpec extends munit.FunSuite {
   }
 
   test("from.convertInto[To] should handle configured derivation") {
-    import pipez.{ CaseParamIn, CaseParamOutExt }
+    import pipez.{CaseParamIn, CaseParamOutExt}
     implicit val intToSting: Converter[Int, String] = _.toString
     assertEquals(
       CaseParamIn(1, "test", 2).convertInto[CaseParamOutExt[String]](

@@ -48,6 +48,18 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
   private given resCtorSQType: SQType[Res0] =
     resCtorUntypedType.asType.asInstanceOf[SQType[Res0]]
 
+  override protected lazy val ignoredImplicitMethods: Seq[UntypedMethod] = {
+    val pipeTypeRepr = TypeRepr.of(using pipeTypeQ)
+    val companionModule = pipeTypeRepr.typeSymbol.companionModule
+    if companionModule != Symbol.noSymbol then {
+      val companionType: Type[Any] =
+        companionModule.moduleClass.typeRef.asType.asInstanceOf[scala.quoted.Type[Any]].asInstanceOf[Type[Any]]
+      companionType.methods.collect {
+        case m if m.name == "deriveAutomatic" || m.name == "derive" => m.asUntyped
+      }.toSeq
+    } else Seq.empty
+  }
+
   override lazy val pdExpr: Expr[Any] = {
     given SQType[P] = pipeTypeQ
     '{ $pdQ.asInstanceOf[PipeDerivation.Aux[P, Ctx0, Res0]] }.asInstanceOf[Expr[Any]]

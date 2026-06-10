@@ -4,7 +4,7 @@ import pipez.dsl.{ Converter, Parser, PatchApplier }
 
 import scala.quoted.*
 
-object Macros:
+object Macros {
 
   def deriveAndConvert[From: Type, To: Type](
     from:         Expr[From],
@@ -40,3 +40,4 @@ object Macros:
     config:       Expr[PatchApplier.Config[Patch, From]]
   )(using quotes: Quotes): Expr[From] =
     '{ _root_.pipez.dsl.PatchApplier.derive[Patch, From](${ config }.addFallbackToValue(${ from })).apply(${ patch }) }
+}

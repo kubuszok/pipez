@@ -784,18 +784,22 @@ class ContextCodecDerivationSpec extends munit.FunSuite {
     assert(
       Set[Either[List[String], Either[Int, Int]]](
         Left(List(s"($l: scala.util.Left[String,String]).value cannot be converted to Int")),
+        Left(List(s"($l: scala.util.Left[String, String]).value cannot be converted to Int")),
         Left(List(s"($l: scala.util.Left[scala.Predef.String, scala.Predef.String]).value cannot be converted to Int")),
         Left(List(s"($l: scala.util.Left[java.lang.String, java.lang.String]).value cannot be converted to Int"))
-      ).contains(codec.decode(l, false, l.toString))
+      ).contains(codec.decode(l, false, l.toString)),
+      s"Unexpected: ${codec.decode(l, false, l.toString)}"
     )
     assert(
       Set[Either[List[String], Either[Int, Int]]](
         Left(List(s"($r: scala.util.Right[String,String]).value cannot be converted to Int")),
+        Left(List(s"($r: scala.util.Right[String, String]).value cannot be converted to Int")),
         Left(
           List(s"($r: scala.util.Right[scala.Predef.String, scala.Predef.String]).value cannot be converted to Int")
         ),
         Left(List(s"($r: scala.util.Right[java.lang.String, java.lang.String]).value cannot be converted to Int"))
-      ).contains(codec.decode(r, false, r.toString))
+      ).contains(codec.decode(r, false, r.toString)),
+      s"Unexpected: ${codec.decode(r, false, r.toString)}"
     )
   }
 }

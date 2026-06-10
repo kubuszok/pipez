@@ -10,61 +10,43 @@ import scala.collection.immutable.ListMap
 
 @nowarn("msg=The outer reference in this type test cannot be checked at run time.")
 trait PipezMacrosImpl
-    extends rules.PipezUseImplicitRuleImpl
-    with rules.PipezHandleAsValueTypeRuleImpl
+    extends rules.PipezHandleAsValueTypeRuleImpl
     with rules.PipezHandleAsCaseClassRuleImpl
     with rules.PipezHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
 
   type Pipe[_, _]
 
-  // Provide Type[Any] for rule impls that need it in implicit scope.
-  // Implemented in platform-specific bridges to avoid cross-quotes plugin
-  // recursive implicit self-reference on Scala 3.
   implicit def typeOfAny: Type[Any]
-
   implicit def PipeCtor: Type.Ctor2[Pipe]
 
   def pdExpr: Expr[Any]
 
-  def pipeType[I: Type, O: Type]: Type[Pipe[I, O]] = {
-    debugLog(s"  pipeType called for [${Type[I].prettyPrint}, ${Type[O].prettyPrint}]")
-    val r = PipeCtor.apply[I, O]
-    debugLog(s"  pipeType done")
-    r
-  }
+  def pipeType[I: Type, O: Type]: Type[Pipe[I, O]] = PipeCtor.apply[I, O]
 
-  // ---- Code generation ----
-  // All internal expression types use Expr[Any] with asInstanceOf casts.
-  // This is safe because all generated code goes through pipeDerivation method calls.
+  // ---- Code generation (abstract, implemented by platform-specific bridges) ----
+  // Context and Result are abstract type members of PipeDerivation, so code generation
+  // involving them uses Expr[Any]. The bridges cast to the concrete types internally.
 
-  def generateLift[In: Type, Out: Type](body: (Expr[Any], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]]
+  def generateLift[In: Type, Out: Type](body: (Expr[In], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]]
   def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any]
   def generatePureResult(a: Expr[Any]): Expr[Any]
   def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any]
   def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any]
 
-  /** Build a block expression: { stmt0; stmt1; ...; result } */
-  def generateBlock(statements: List[Expr[Any]], result: Expr[Any]): Expr[Any]
-
-  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index, then reads all fields from the
-    * array and calls the case class primary constructor. The parameter types and constructor are resolved from the case
-    * class info.
-    */
   def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
   ): Expr[Any]
 
-  /** Build a lambda (Array[Any], Any) => Any that stores the value at the given index, then reads all fields from the
-    * array, calls each bean setter, and returns the bean.
-    */
   def generateArrayToBeanFn[Out: Type](
       beanFields: List[(??, Method)],
       defaultConstructor: Method,
       lastIndex: Int,
       totalFields: Int
   ): Expr[Any]
+
+  def postProcessResult[A: Type](expr: Expr[A]): Expr[A] = expr
 
   // ---- Settings ----
 
@@ -124,70 +106,162 @@ trait PipezMacrosImpl
       outType: Type[Out],
       settings: Settings,
       cache: MLocal[ValDefsCache],
-      derivedPipeType: Option[??]
+      isTopLevel: Boolean
   )
 
   // ---- Rule infrastructure ----
 
   abstract class PipezRule(val name: String) extends Rule {
-    def apply[In: Type, Out: Type](implicit ctx: DerivationCtx[In, Out]): MIO[Rule.Applicability[Expr[Pipe[In, Out]]]]
+
+    /** Given typed input and context expressions (from inside a cached def body), produce the body expression. The body
+      * has runtime type Result[Out] but is typed as Any in the shared code because Result is abstract.
+      */
+    def apply[In: Type, Out: Type](in: Expr[In], ctx: Expr[Any])(implicit
+        dctx: DerivationCtx[In, Out]
+    ): MIO[Rule.Applicability[Expr[Any]]]
   }
+
+  // ---- ValDefsCache helpers ----
+
+  private def helperKey[In: Type, Out: Type]: String =
+    s"pipe-helper:${Type[In].prettyPrint}:${Type[Out].prettyPrint}"
+
+  private def getHelper[In: Type, Out: Type](
+      cache: MLocal[ValDefsCache]
+  ): MIO[Option[(Expr[In], Expr[Any]) => Expr[Any]]] =
+    cache.get2Ary[In, Any, Any](helperKey[In, Out])(implicitly[Type[In]], typeOfAny, typeOfAny)
+
+  private def setHelper[In: Type, Out: Type](
+      cache: MLocal[ValDefsCache]
+  )(
+      body: (Expr[In], Expr[Any]) => MIO[Expr[Any]]
+  ): MIO[Unit] = {
+    val key = helperKey[In, Out]
+    val defName = s"transform_${Type[In].shortName}_${Type[Out].shortName}"
+    val defBuilder = ValDefBuilder.ofDef2[In, Any, Any](defName)(implicitly[Type[In]], typeOfAny, typeOfAny)
+    for {
+      _ <- Log.info(s"Forward-declaring helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]")
+      _ <- cache.forwardDeclare(key, defBuilder)
+      _ <- MIO.scoped { runSafe =>
+        runSafe(cache.buildCachedWith(key, defBuilder) { case (_, (inExpr, ctxExpr)) =>
+          runSafe(body(inExpr, ctxExpr))
+        })
+      }
+      _ <- Log.info(s"Built helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]")
+    } yield ()
+  }
+
+  private def pipeKey[In: Type, Out: Type]: String =
+    s"pipe-instance:${Type[In].prettyPrint}:${Type[Out].prettyPrint}"
+
+  private def getPipe[In: Type, Out: Type](
+      cache: MLocal[ValDefsCache]
+  ): MIO[Option[Expr[Pipe[In, Out]]]] = {
+    @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
+    cache.get0Ary[Pipe[In, Out]](pipeKey[In, Out])
+  }
+
+  private def setPipe[In: Type, Out: Type](
+      cache: MLocal[ValDefsCache]
+  )(pipe: Expr[Pipe[In, Out]]): MIO[Unit] = {
+    @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
+    cache.buildCachedWith(
+      pipeKey[In, Out],
+      ValDefBuilder.ofLazy[Pipe[In, Out]](s"pipe_${Type[In].shortName}_${Type[Out].shortName}")
+    )(_ => pipe)
+  }
+
+  // ---- Derivation ----
 
   def deriveResultRecursively[In: Type, Out: Type](implicit
       ctx: DerivationCtx[In, Out]
-  ): MIO[Expr[Pipe[In, Out]]] = {
-    debugLog(s"  deriveResultRecursively: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
+  ): MIO[Expr[Pipe[In, Out]]] =
     Log.namedScope(s"Deriving Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") {
-      debugLog(s"    about to run Rules")
-      Rules(
-        PipezUseImplicitRule,
-        PipezHandleAsValueTypeRule,
-        PipezHandleAsCaseClassRule,
-        PipezHandleAsEnumRule
-      ) { rule => debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }.flatMap {
-        case Right(result) =>
-          debugLog(s"    rule matched!")
-          MIO.pure(result)
-        case Left(failures) =>
-          val reasons = failures.toList.map(_._2.mkString(", ")).mkString("; ")
-          debugLog(s"    all rules failed: $reasons")
-          MIO.fail(
-            new RuntimeException(
-              s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated: $reasons"
-            )
-          )
+      getHelper[In, Out](ctx.cache).flatMap {
+        case Some(helperCall) =>
+          Log.info(s"Found cached helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+            MIO.pure(generateLift[In, Out]((in, ctxE) => helperCall(in, ctxE)))
+        case None =>
+          getPipe[In, Out](ctx.cache).flatMap {
+            case Some(pipe) =>
+              Log.info(s"Found cached pipe for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+                MIO.pure(pipe)
+            case None =>
+              val summoned = if (!ctx.isTopLevel) summonPipe[In, Out] else None
+              summoned match {
+                case Some(pipe) =>
+                  Log.info(s"Summoned implicit Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+                    setPipe[In, Out](ctx.cache)(pipe) >> MIO.pure(pipe)
+                case None =>
+                  val ruleCtx = ctx.copy(isTopLevel = false)
+                  setHelper[In, Out](ctx.cache) { (inExpr, ctxExpr) =>
+                    deriveBodyViaRules[In, Out](inExpr, ctxExpr, ruleCtx)
+                  } >> getHelper[In, Out](ctx.cache).flatMap {
+                    case Some(helperCall) =>
+                      MIO.pure(generateLift[In, Out]((in, ctxE) => helperCall(in, ctxE)))
+                    case None =>
+                      MIO.fail(
+                        new RuntimeException(
+                          s"Failed to build helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]"
+                        )
+                      )
+                  }
+              }
+          }
       }
+    }
+
+  private def deriveBodyViaRules[In: Type, Out: Type](
+      in: Expr[In],
+      ctx: Expr[Any],
+      dctx: DerivationCtx[In, Out]
+  ): MIO[Expr[Any]] = {
+    implicit val implicitDctx: DerivationCtx[In, Out] = dctx
+    Rules(
+      PipezHandleAsValueTypeRule,
+      PipezHandleAsCaseClassRule,
+      PipezHandleAsEnumRule
+    ) { rule =>
+      Log.info(s"Trying rule: ${rule.name}") >> rule.apply[In, Out](in, ctx)
+    }.flatMap {
+      case Right(result) =>
+        Log.info(s"Rule matched for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+          MIO.pure(result)
+      case Left(failures) =>
+        val reasons = failures.toList.map(_._2.mkString(", ")).mkString("; ")
+        MIO.fail(
+          new RuntimeException(
+            s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated: $reasons"
+          )
+        )
     }
   }
 
   // ---- Summoning helpers ----
 
   def summonPipe[In: Type, Out: Type]: Option[Expr[Pipe[In, Out]]] = {
-    implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
+    @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
     Expr.summonImplicit[Pipe[In, Out]].toOption
   }
 
   def summonOrDerive[In: Type, Out: Type](implicit
       ctx: DerivationCtx[?, ?]
   ): MIO[Expr[Pipe[In, Out]]] =
-    summonPipe[In, Out] match {
-      case Some(pipe)                                        => MIO.pure(pipe)
-      case None if ctx.settings.isRecursiveDerivationEnabled =>
-        val newCtx = DerivationCtx[In, Out](
-          inType = Type[In],
-          outType = Type[Out],
-          settings = ctx.settings.stripForRecursion,
-          cache = ctx.cache,
-          derivedPipeType = ctx.derivedPipeType
-        )
-        deriveResultRecursively[In, Out](Type[In], Type[Out], newCtx)
-      case None =>
-        MIO.fail(
-          new RuntimeException(
-            s"Couldn't find implicit Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] and recursive derivation was not enabled"
+    if (ctx.settings.isRecursiveDerivationEnabled) {
+      implicit val nestedCtx: DerivationCtx[In, Out] =
+        DerivationCtx(Type[In], Type[Out], ctx.settings.stripForRecursion, ctx.cache, isTopLevel = false)
+      deriveResultRecursively[In, Out]
+    } else
+      summonPipe[In, Out] match {
+        case Some(pipe) => MIO.pure(pipe)
+        case None       =>
+          MIO.fail(
+            new RuntimeException(
+              s"Couldn't find implicit Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] " +
+                "and recursive derivation was not enabled"
+            )
           )
-        )
-    }
+      }
 
   // ---- Path helpers ----
 
@@ -223,69 +297,29 @@ trait PipezMacrosImpl
   def deriveConfigured[In: Type, Out: Type](config: Expr[PipeDerivationConfig[Pipe, In, Out]]): Expr[Pipe[In, Out]] =
     deriveWithSettings[In, Out](readConfig(config))
 
-  private def debugLog(msg: String): Unit = {
-    val f = new java.io.FileWriter("/tmp/pipez-debug.log", true)
-    f.write(s"[${java.time.Instant.now}] $msg\n")
-    f.close()
-  }
-
-  /** Top-level derivation skips PipezUseImplicitRule to avoid self-referential implicit cycles (e.g. implicit lazy val
-    * codec = derive(config) would summon itself via the implicit rule).
-    */
-  private def deriveTopLevel[In: Type, Out: Type](implicit
-      ctx: DerivationCtx[In, Out]
-  ): MIO[Expr[Pipe[In, Out]]] = {
-    debugLog(s"  deriveTopLevel: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
-    Log.namedScope(s"Deriving Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") {
-      debugLog(s"    about to run Rules (top-level, no implicit rule)")
-      Rules(
-        PipezHandleAsValueTypeRule,
-        PipezHandleAsCaseClassRule,
-        PipezHandleAsEnumRule
-      ) { rule => debugLog(s"    trying rule: ${rule.name}"); rule.apply[In, Out] }.flatMap {
-        case Right(result) =>
-          debugLog(s"    rule matched!")
-          MIO.pure(result)
-        case Left(failures) =>
-          val reasons = failures.toList.map(_._2.mkString(", ")).mkString("; ")
-          debugLog(s"    all rules failed: $reasons")
-          MIO.fail(
-            new RuntimeException(
-              s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated: $reasons"
-            )
-          )
-      }
-    }
-  }
-
-  def deriveWithSettings[In: Type, Out: Type](settings: Settings): Expr[Pipe[In, Out]] = {
-    debugLog(s"deriveWithSettings start: ${Type[In].prettyPrint} => ${Type[Out].prettyPrint}")
+  private def deriveWithSettings[In: Type, Out: Type](settings: Settings): Expr[Pipe[In, Out]] = {
     @nowarn("msg=unused") implicit val PipeIO: Type[Pipe[In, Out]] = pipeType[In, Out]
-    debugLog(s"  pipeType constructed")
     val cache = ValDefsCache.mlocal
-    val ctx = DerivationCtx[In, Out](Type[In], Type[Out], settings, cache, derivedPipeType = None)
-    debugLog(s"  ctx created, entering MIO")
+    implicit val ctx: DerivationCtx[In, Out] =
+      DerivationCtx[In, Out](Type[In], Type[Out], settings, cache, isTopLevel = true)
 
-    val result = Log.namedScope(s"PipeDerivation[${Type[In].prettyPrint} => ${Type[Out].prettyPrint}]") {
-      debugLog(s"  inside Log.namedScope")
-      for {
-        _ <- Environment.loadStandardExtensions().toMIO(allowFailures = true)
-        result <- deriveTopLevel[In, Out](Type[In], Type[Out], ctx)
-        cacheState <- cache.get
-      } yield cacheState.toValDefs.use(_ => result)
-    }
-    debugLog(s"  MIO created, calling runToExprOrFail")
-    result.runToExprOrFail(
-      "PipeDerivation.derive",
-      infoRendering = DontRender,
-      errorRendering = DontRender,
-      timeout = scala.concurrent.duration.FiniteDuration(5, java.util.concurrent.TimeUnit.SECONDS)
-    ) { (_, errors) =>
-      val msg = s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated:\n" +
-        errors.map(e => s" - ${e.getMessage}").mkString("\n")
-      debugLog(s"  ERROR: $msg")
-      msg
-    }
+    Log
+      .namedScope(s"PipeDerivation[${Type[In].prettyPrint} => ${Type[Out].prettyPrint}]") {
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = true)
+          result <- deriveResultRecursively[In, Out]
+          cacheState <- cache.get
+        } yield postProcessResult(cacheState.toValDefs.use(_ => result))
+      }
+      .runToExprOrFail(
+        "PipeDerivation.derive",
+        infoRendering = DontRender,
+        errorRendering = DontRender,
+        timeout = scala.concurrent.duration.FiniteDuration(5, java.util.concurrent.TimeUnit.SECONDS)
+      ) { (_, errors) =>
+        s"Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}] couldn't be generated:\n" +
+          errors.map(e => s" - ${e.getMessage}").mkString("\n")
+      }
   }
 
   // ---- Config parser (implemented by platform-specific bridges) ----

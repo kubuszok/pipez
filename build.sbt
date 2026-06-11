@@ -12,9 +12,9 @@ val versions = new {
   val scalas    = List(scala213, scala3)
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
-  val hearth       = "0.3.0-62-g29ea430-SNAPSHOT"
+  val hearth       = "0.3.1-13-ga748b84-SNAPSHOT"
   val kindProjector = "0.13.4"
-  val munit        = "1.1.0"
+  val munit        = "1.3.3"
 }
 
 val dev = new DevProperties(

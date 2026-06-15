@@ -1,34 +1,59 @@
-name: CI build
+name: CI Build
 
 on:
   push:
     branches: [ master ]
+    tags: [ '*' ]
   pull_request:
     branches: [ master ]
+    types: [ opened, reopened, labeled, synchronize ]
 
 jobs:
-  build:
-    name: Build pipez${{matrix.scalaPlatform}}${{matrix.scalaVersion}} pipezDsl${{matrix.scalaPlatform}}${{matrix.scalaVersion}}
+  check-formatting:
 
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.action != 'labeled' # run for 'opened', 'reopened' and 'synchronize'
+
+    name: Check formatting
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: coursier/setup-action@v3.0.0
+        with:
+          apps: scalafmt
+      - name: Check code formatting
+        run: scalafmt --check
+
+  build:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.action != 'labeled' # run for 'opened', 'reopened' and 'synchronize'
 
     strategy:
       matrix:
-        jvm: ['temurin-jre:1.19.0.1']
-        scalaVersion: ["", 3]
-        scalaPlatform: ["", JS, Native]
+        scala: ['2_13', '3']
+        platform: ['jvm', 'js', 'native']
+        jvm: ['temurin:1.17.0.15']
       fail-fast: false
 
-    env:
-      SUFFIX: ${{matrix.scalaPlatform}}${{matrix.scalaVersion}}
+    name: "Scala: ${{ matrix.scala == '2_13' && '2.13' || '3' }} / Platform: ${{ matrix.platform }} / JVM: ${{ matrix.jvm }}"
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: coursier/cache-action@v6
-      - uses: coursier/setup-action@v1.3.0
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: coursier/cache-action@v8
+      - uses: coursier/setup-action@v3.0.0
         with:
           jvm: ${{ matrix.jvm }}
-      - name: Clean, Check code formatting, compile, test
-        run: sbt clean scalafmtCheck Test/scalafmtCheck pipez$SUFFIX/Test/compile pipezDsl$SUFFIX/Test/compile pipez$SUFFIX/test pipezDsl$SUFFIX/test
-      - name: TOC Generator
-        uses: technote-space/toc-generator@v4.0.0
+          apps: sbt
+      - name: Install native dependencies
+        if: matrix.platform == 'native'
+        run: sudo apt-get update && sudo apt-get install -y libidn2-dev
+      - name: "Clean, compile, test${{matrix.platform == 'jvm' && ', generate coverage report' || ''}}"
+        run: sbt ci-${{ matrix.platform }}-${{ matrix.scala }}
+      - uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

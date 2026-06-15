@@ -17,8 +17,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     outTpe: blackbox.Context#Type,
     pd: blackbox.Context#Expr[PipeDerivation.Aux[P, Ctx0, Res0]]
 ) extends MacroCommonsScala2
-    with PipezMacrosImpl
-    with PipezConfigParserScala2 {
+    with PipezMacrosImpl {
 
   import c.universe.*
 

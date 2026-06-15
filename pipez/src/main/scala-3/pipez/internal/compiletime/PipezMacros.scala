@@ -59,13 +59,12 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     } else Seq.empty
   }
 
-  override lazy val pdExpr: Expr[Any] = {
+  // Scala 3 needs no stable val / `postProcessResult` dance: `scala.quoted` constructs the refined `Aux` type
+  // (including the higher-kinded `Result`) natively inside the quote.
+  private def pdTyped: Expr[PipeDerivation.Aux[P, Ctx0, Res0]] = {
     given SQType[P] = pipeTypeQ
-    '{ $pdQ.asInstanceOf[PipeDerivation.Aux[P, Ctx0, Res0]] }.asInstanceOf[Expr[Any]]
+    '{ $pdQ.asInstanceOf[PipeDerivation.Aux[P, Ctx0, Res0]] }.asInstanceOf[Expr[PipeDerivation.Aux[P, Ctx0, Res0]]]
   }
-
-  private def pdTyped: Expr[PipeDerivation.Aux[P, Ctx0, Res0]] =
-    pdExpr.asInstanceOf[Expr[PipeDerivation.Aux[P, Ctx0, Res0]]]
 
   // ---- Context / Result evidence + the typed `pd` (all `gen*` codegen is shared) ----
   // `Ctx`/`Res` stay abstract (inherited); the `Type`/`Ctor` evidence carries the real extracted types, which the

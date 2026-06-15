@@ -23,28 +23,46 @@ trait PipezMacrosImpl
 
   def pipeType[I: Type, O: Type]: Type[Pipe[I, O]] = PipeCtor.apply[I, O]
 
-  // ---- Code generation (abstract, implemented by platform-specific bridges) ----
-  // Context and Result are abstract type members of PipeDerivation, so code generation
-  // involving them uses Expr[Any]. The bridges cast to the concrete types internally.
+  // ---- The type class's abstract Context / Result, threaded as real Hearth types ----
+  // `PipeDerivation#Context` and `#Result[_]` are abstract type members, known concretely only from the user's
+  // instance at the call site. Both platforms extract them at the entry point and expose them here as `Ctx`/`Res` plus
+  // their `Type` evidence, so the whole derivation is typed (`Expr[Ctx]`, `Expr[Res[X]]`, `Expr[Pipe[In, Out]]`) with
+  // no `Expr[Any]`/`asInstanceOf` erasure. `Ctx`/`Res` stay abstract phantoms; the evidence values carry the real
+  // types into the generated trees.
 
-  def generateLift[In: Type, Out: Type](body: (Expr[In], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]]
-  def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any]
-  def generatePureResult(a: Expr[Any]): Expr[Any]
-  def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any]
-  def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any]
+  type Ctx
+  type Res[_]
 
+  implicit def ctxType: Type[Ctx]
+  implicit def resType[A: Type]: Type[Res[A]]
+
+  // ---- Code generation (abstract, implemented by platform-specific bridges, fully typed) ----
+
+  def generateLift[In: Type, Out: Type](body: (Expr[In], Expr[Ctx]) => Expr[Res[Out]]): Expr[Pipe[In, Out]]
+  def generateUnlift[In: Type, Out: Type](pipe: Expr[Pipe[In, Out]], in: Expr[In], ctx: Expr[Ctx]): Expr[Res[Out]]
+  def generatePureResult[A: Type](a: Expr[A]): Expr[Res[A]]
+  def generateMergeResults[A: Type, B: Type, C: Type](
+      ctx: Expr[Ctx],
+      ra: Expr[Res[A]],
+      rb: Expr[Res[B]],
+      f: Expr[(A, B) => C]
+  ): Expr[Res[C]]
+  def generateUpdateContext(ctx: Expr[Ctx], path: Expr[Path]): Expr[Ctx]
+
+  // The accumulator array is genuinely heterogeneous (`Array[Any]` holding every field value before constructing
+  // `Out`), and the second `Unit` parameter is the merger's ignored "value" slot. `Out` is fully typed.
   def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
-  ): Expr[Any]
+  ): Expr[(Array[Any], Unit) => Out]
 
   def generateArrayToBeanFn[Out: Type](
       beanFields: List[(??, Method)],
       defaultConstructor: Method,
       lastIndex: Int,
       totalFields: Int
-  ): Expr[Any]
+  ): Expr[(Array[Any], Unit) => Out]
 
   def postProcessResult[A: Type](expr: Expr[A]): Expr[A] = expr
 
@@ -83,18 +101,20 @@ trait PipezMacrosImpl
     )
   }
 
+  // Config pipes/values come from the user's DSL (`addField(_, pipe)`, `addFallbackToValue(v)`, …); they carry their
+  // real type from the call site as an `Expr_??` existential rather than being erased to `Expr[Any]`.
   sealed trait ConfigEntry
   object ConfigEntry {
     case object EnableDiagnostics extends ConfigEntry
-    final case class AddField(outFieldName: String, pipe: Expr[Any]) extends ConfigEntry
+    final case class AddField(outFieldName: String, pipe: Expr_??) extends ConfigEntry
     final case class RenameField(inFieldName: String, outFieldName: String) extends ConfigEntry
-    final case class PlugInField(inFieldName: String, outFieldName: String, pipe: Expr[Any]) extends ConfigEntry
+    final case class PlugInField(inFieldName: String, outFieldName: String, pipe: Expr_??) extends ConfigEntry
     case object FieldCaseInsensitive extends ConfigEntry
-    final case class AddFallbackValue(fallbackType: ??, fallbackValue: Expr[Any]) extends ConfigEntry
+    final case class AddFallbackValue(fallbackType: ??, fallbackValue: Expr_??) extends ConfigEntry
     case object EnableFallbackToDefaults extends ConfigEntry
-    final case class RemoveSubtype(inSubtypeType: ??, pipe: Expr[Any]) extends ConfigEntry
+    final case class RemoveSubtype(inSubtypeType: ??, pipe: Expr_??) extends ConfigEntry
     final case class RenameSubtype(inSubtypeType: ??, outSubtypeType: ??) extends ConfigEntry
-    final case class PlugInSubtype(inSubtypeType: ??, outSubtypeType: ??, pipe: Expr[Any]) extends ConfigEntry
+    final case class PlugInSubtype(inSubtypeType: ??, outSubtypeType: ??, pipe: Expr_??) extends ConfigEntry
     case object EnumCaseInsensitive extends ConfigEntry
     case object EnableRecursiveDerivation extends ConfigEntry
   }
@@ -113,12 +133,12 @@ trait PipezMacrosImpl
 
   abstract class PipezRule(val name: String) extends Rule {
 
-    /** Given typed input and context expressions (from inside a cached def body), produce the body expression. The body
-      * has runtime type Result[Out] but is typed as Any in the shared code because Result is abstract.
+    /** Given the typed input and context expressions (from inside a cached def body), produce the typed `Result[Out]`
+      * body expression.
       */
-    def apply[In: Type, Out: Type](in: Expr[In], ctx: Expr[Any])(implicit
+    def apply[In: Type, Out: Type](in: Expr[In], ctx: Expr[Ctx])(implicit
         dctx: DerivationCtx[In, Out]
-    ): MIO[Rule.Applicability[Expr[Any]]]
+    ): MIO[Rule.Applicability[Expr[Res[Out]]]]
   }
 
   // ---- ValDefsCache helpers ----
@@ -128,17 +148,17 @@ trait PipezMacrosImpl
 
   private def getHelper[In: Type, Out: Type](
       cache: MLocal[ValDefsCache]
-  ): MIO[Option[(Expr[In], Expr[Any]) => Expr[Any]]] =
-    cache.get2Ary[In, Any, Any](helperKey[In, Out])(implicitly[Type[In]], typeOfAny, typeOfAny)
+  ): MIO[Option[(Expr[In], Expr[Ctx]) => Expr[Res[Out]]]] =
+    cache.get2Ary[In, Ctx, Res[Out]](helperKey[In, Out])(implicitly[Type[In]], ctxType, resType[Out])
 
   private def setHelper[In: Type, Out: Type](
       cache: MLocal[ValDefsCache]
   )(
-      body: (Expr[In], Expr[Any]) => MIO[Expr[Any]]
+      body: (Expr[In], Expr[Ctx]) => MIO[Expr[Res[Out]]]
   ): MIO[Unit] = {
     val key = helperKey[In, Out]
     val defName = s"transform_${Type[In].shortName}_${Type[Out].shortName}"
-    val defBuilder = ValDefBuilder.ofDef2[In, Any, Any](defName)(implicitly[Type[In]], typeOfAny, typeOfAny)
+    val defBuilder = ValDefBuilder.ofDef2[In, Ctx, Res[Out]](defName)(implicitly[Type[In]], ctxType, resType[Out])
     for {
       _ <- Log.info(s"Forward-declaring helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]")
       _ <- cache.forwardDeclare(key, defBuilder)
@@ -213,9 +233,9 @@ trait PipezMacrosImpl
 
   private def deriveBodyViaRules[In: Type, Out: Type](
       in: Expr[In],
-      ctx: Expr[Any],
+      ctx: Expr[Ctx],
       dctx: DerivationCtx[In, Out]
-  ): MIO[Expr[Any]] = {
+  ): MIO[Expr[Res[Out]]] = {
     implicit val implicitDctx: DerivationCtx[In, Out] = dctx
     Rules(
       PipezHandleAsValueTypeRule,
@@ -343,7 +363,7 @@ trait PipezMacrosImpl
     def typesOf(mc: MethodCall): List[??] =
       mc.applied.collect { case at: MethodCall.AppliedTypes => at.typeArgs }.flatten
 
-    def toHExpr(node: DestructuredExpr): Expr[Any] = node.toUntypedExpr.asTyped[Any]
+    def toHExpr(node: DestructuredExpr): Expr_?? = node.toUntypedExpr.as_??
 
     // Leaf field name of a path lambda `_.field` (or zero-arg accessor `_.getField`). Mirrors the old `extractPath`:
     // for a nested `_.a.b` the outermost selection (the leaf) is what the config records.

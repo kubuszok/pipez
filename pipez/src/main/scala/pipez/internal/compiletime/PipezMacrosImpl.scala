@@ -1,6 +1,7 @@
 package pipez.internal.compiletime
 
 import hearth.*
+import hearth.fp.DirectStyle
 import hearth.fp.effect.*
 import hearth.std.*
 import pipez.{Path, PipeDerivation, PipeDerivationConfig}
@@ -34,35 +35,180 @@ trait PipezMacrosImpl
   type Res[_]
 
   implicit def ctxType: Type[Ctx]
-  implicit def resType[A: Type]: Type[Res[A]]
+  implicit def resultCtor: Type.Ctor1[Res]
+  implicit final def resType[A: Type]: Type[Res[A]] = resultCtor.apply[A]
 
-  // ---- Code generation (abstract, implemented by platform-specific bridges, fully typed) ----
+  /** The user's `PipeDerivation` instance, typed (via the adapter's one sanctioned cast) against the `Aux` refinement
+    * that equates its abstract `Context`/`Result` members with the carried `Ctx`/`Res`.
+    */
+  def pdAux: Expr[PipeDerivation.Aux[Pipe, Ctx, Res]]
 
-  def generateLift[In: Type, Out: Type](body: (Expr[In], Expr[Ctx]) => Expr[Res[Out]]): Expr[Pipe[In, Out]]
-  def generateUnlift[In: Type, Out: Type](pipe: Expr[Pipe[In, Out]], in: Expr[In], ctx: Expr[Ctx]): Expr[Res[Out]]
-  def generatePureResult[A: Type](a: Expr[A]): Expr[Res[A]]
-  def generateMergeResults[A: Type, B: Type, C: Type](
+  /** Everything the shared, generic codegen needs. `Pipe`/`Ctx`/`Res` are inferred from this value at each call site,
+    * so inside the `gen*` helpers they are *method* type parameters — which the cross-quotes plugin resolves from
+    * block-level `implicit` `Type.Ctor2`/`Type.Ctor1`/`Type` evidence (a context bound is NOT enough for the `Aux`).
+    */
+  final def codegenCtx: CodegenCtx[Pipe, Ctx, Res] = CodegenCtx(pdAux, PipeCtor, resultCtor, ctxType)
+
+  // ---- Code generation: thin typed facade over the shared, generic `gen*` cross-quote helpers ----
+
+  final def generateLift[In: Type, Out: Type](body: (Expr[In], Expr[Ctx]) => Expr[Res[Out]]): Expr[Pipe[In, Out]] =
+    genLift[Pipe, Ctx, Res, In, Out](codegenCtx, body)
+  final def generateUnlift[In: Type, Out: Type](
+      pipe: Expr[Pipe[In, Out]],
+      in: Expr[In],
+      ctx: Expr[Ctx]
+  ): Expr[Res[Out]] = genUnlift[Pipe, Ctx, Res, In, Out](codegenCtx, pipe, in, ctx)
+  final def generatePureResult[A: Type](a: Expr[A]): Expr[Res[A]] = genPure[Pipe, Ctx, Res, A](codegenCtx, a)
+  final def generateMergeResults[A: Type, B: Type, C: Type](
       ctx: Expr[Ctx],
       ra: Expr[Res[A]],
       rb: Expr[Res[B]],
       f: Expr[(A, B) => C]
-  ): Expr[Res[C]]
-  def generateUpdateContext(ctx: Expr[Ctx], path: Expr[Path]): Expr[Ctx]
+  ): Expr[Res[C]] = genMerge[Pipe, Ctx, Res, A, B, C](codegenCtx, ctx, ra, rb, f)
+  final def generateUpdateContext(ctx: Expr[Ctx], path: Expr[Path]): Expr[Ctx] =
+    genUpdate[Pipe, Ctx, Res](codegenCtx, ctx, path)
 
-  // The accumulator array is genuinely heterogeneous (`Array[Any]` holding every field value before constructing
-  // `Out`), and the second `Unit` parameter is the merger's ignored "value" slot. `Out` is fully typed.
+  // ---- Shared, generic codegen (`Pipe`/`Ctx`/`Res` are method type params here, resolved in the cross-quotes via the
+  //      block-level `implicit` Ctor/Type evidence — this is what lets the codegen be platform-agnostic) ----
+
+  final case class CodegenCtx[P2[_, _], C2, R2[_]](
+      pd: Expr[PipeDerivation.Aux[P2, C2, R2]],
+      pipeCtor: Type.Ctor2[P2],
+      resCtor: Type.Ctor1[R2],
+      ctxTpe: Type[C2]
+  )
+
+  private def genPure[P2[_, _], C2, R2[_], A: Type](cg: CodegenCtx[P2, C2, R2], a: Expr[A]): Expr[R2[A]] = {
+    implicit val pc: Type.Ctor2[P2] = cg.pipeCtor
+    implicit val rc: Type.Ctor1[R2] = cg.resCtor
+    implicit val ct: Type[C2] = cg.ctxTpe
+    implicit val auxT: Type[PipeDerivation.Aux[P2, C2, R2]] = Type.of[PipeDerivation.Aux[P2, C2, R2]]
+    implicit val rA: Type[R2[A]] = cg.resCtor.apply[A]
+    Expr.quote(Expr.splice(cg.pd).pureResult(Expr.splice(a)))
+  }
+
+  private def genUnlift[P2[_, _], C2, R2[_], In: Type, Out: Type](
+      cg: CodegenCtx[P2, C2, R2],
+      pipe: Expr[P2[In, Out]],
+      in: Expr[In],
+      ctx: Expr[C2]
+  ): Expr[R2[Out]] = {
+    implicit val pc: Type.Ctor2[P2] = cg.pipeCtor
+    implicit val rc: Type.Ctor1[R2] = cg.resCtor
+    implicit val ct: Type[C2] = cg.ctxTpe
+    implicit val auxT: Type[PipeDerivation.Aux[P2, C2, R2]] = Type.of[PipeDerivation.Aux[P2, C2, R2]]
+    implicit val pipeIO: Type[P2[In, Out]] = cg.pipeCtor.apply[In, Out]
+    implicit val rOut: Type[R2[Out]] = cg.resCtor.apply[Out]
+    Expr.quote(Expr.splice(cg.pd).unlift[In, Out](Expr.splice(pipe), Expr.splice(in), Expr.splice(ctx)))
+  }
+
+  private def genUpdate[P2[_, _], C2, R2[_]](cg: CodegenCtx[P2, C2, R2], ctx: Expr[C2], path: Expr[Path]): Expr[C2] = {
+    implicit val pc: Type.Ctor2[P2] = cg.pipeCtor
+    implicit val rc: Type.Ctor1[R2] = cg.resCtor
+    implicit val ct: Type[C2] = cg.ctxTpe
+    implicit val auxT: Type[PipeDerivation.Aux[P2, C2, R2]] = Type.of[PipeDerivation.Aux[P2, C2, R2]]
+    Expr.quote(Expr.splice(cg.pd).updateContext(Expr.splice(ctx), Expr.splice(path)))
+  }
+
+  private def genMerge[P2[_, _], C2, R2[_], A: Type, B: Type, C: Type](
+      cg: CodegenCtx[P2, C2, R2],
+      ctx: Expr[C2],
+      ra: Expr[R2[A]],
+      rb: Expr[R2[B]],
+      f: Expr[(A, B) => C]
+  ): Expr[R2[C]] = {
+    implicit val pc: Type.Ctor2[P2] = cg.pipeCtor
+    implicit val rc: Type.Ctor1[R2] = cg.resCtor
+    implicit val ct: Type[C2] = cg.ctxTpe
+    implicit val auxT: Type[PipeDerivation.Aux[P2, C2, R2]] = Type.of[PipeDerivation.Aux[P2, C2, R2]]
+    implicit val rA: Type[R2[A]] = cg.resCtor.apply[A]
+    implicit val rB: Type[R2[B]] = cg.resCtor.apply[B]
+    implicit val rC: Type[R2[C]] = cg.resCtor.apply[C]
+    Expr.quote(
+      Expr.splice(cg.pd).mergeResults[A, B, C](Expr.splice(ctx), Expr.splice(ra), Expr.splice(rb), Expr.splice(f))
+    )
+  }
+
+  private def genLift[P2[_, _], C2, R2[_], In: Type, Out: Type](
+      cg: CodegenCtx[P2, C2, R2],
+      body: (Expr[In], Expr[C2]) => Expr[R2[Out]]
+  ): Expr[P2[In, Out]] = {
+    implicit val pc: Type.Ctor2[P2] = cg.pipeCtor
+    implicit val rc: Type.Ctor1[R2] = cg.resCtor
+    implicit val ct: Type[C2] = cg.ctxTpe
+    implicit val auxT: Type[PipeDerivation.Aux[P2, C2, R2]] = Type.of[PipeDerivation.Aux[P2, C2, R2]]
+    implicit val pipeIO: Type[P2[In, Out]] = cg.pipeCtor.apply[In, Out]
+    implicit val rOut: Type[R2[Out]] = cg.resCtor.apply[Out]
+    val lam: Expr[(In, C2) => R2[Out]] =
+      LambdaBuilder.of2[In, C2]().buildWith[R2[Out]] { case (inE, ctxE) => body(inE, ctxE) }
+    Expr.quote(Expr.splice(cg.pd).lift[In, Out](Expr.splice(lam)))
+  }
+
+  // ---- Array → Out builders (shared; no Pipe/Ctx/Res, just construction via Hearth's `CaseClass`/`JavaBean`) ----
+
   def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
-  ): Expr[(Array[Any], Unit) => Out]
+  ): Expr[(Array[Any], Unit) => Out] = {
+    implicit val arrT: Type[Array[Any]] = Type.of[Array[Any]]
+    implicit val unitT: Type[Unit] = Type.of[Unit]
+    LambdaBuilder.of2[Array[Any], Unit]().buildWith[Out] { case (arrE, _) =>
+      val args: Map[String, Expr_??] = outClass.primaryConstructor.totalParameters.flatten.zipWithIndex.map {
+        case ((name, param), i) =>
+          import param.tpe.Underlying as Pi
+          name -> arrayGet[Pi](arrE, i).as_??
+      }.toMap
+      callConstructor[Out](outClass.primaryConstructor, args)
+    }
+  }
 
   def generateArrayToBeanFn[Out: Type](
       beanFields: List[(??, Method)],
       defaultConstructor: Method,
       lastIndex: Int,
       totalFields: Int
-  ): Expr[(Array[Any], Unit) => Out]
+  ): Expr[(Array[Any], Unit) => Out] = {
+    implicit val arrT: Type[Array[Any]] = Type.of[Array[Any]]
+    implicit val unitT: Type[Unit] = Type.of[Unit]
+    LambdaBuilder.of2[Array[Any], Unit]().buildWith[Out] { case (arrE, _) =>
+      // Construct in `beanFields` order so each setter reads its OWN array slot — keying by the setter's parameter name
+      // would collapse, since `var` setters often share a synthesized param name (e.g. `x$1`).
+      DirectStyle[ValDefs].scoped { runSafe =>
+        val beanRef: Expr[Out] = runSafe(ValDefs.createVal[Out](callConstructor[Out](defaultConstructor, Map.empty)))
+        val setterCalls: List[Expr[Unit]] = beanFields.zipWithIndex.map { case ((fieldType, setter), i) =>
+          import fieldType.Underlying as Fi
+          callSetter[Out](beanRef, setter, arrayGet[Fi](arrE, i).as_??)
+        }
+        setterCalls.foldRight(beanRef)((call, acc) => Expr.quote { Expr.splice(call); Expr.splice(acc) })
+      }.close
+    }
+  }
+
+  private def callSetter[A: Type](bean: Expr[A], setter: Method, value: Expr_??): Expr[Unit] =
+    setter.fold(
+      onInstance = _ => bean.as_??,
+      onTypes = _ => Map.empty,
+      onValues = _ => Map(setter.totalParameters.flatten.head._1 -> value)
+    ) match {
+      case Right(e)  => e.value.asInstanceOf[Expr[Unit]]
+      case Left(err) => throw new RuntimeException(s"Cannot call setter ${setter.name}: $err")
+    }
+
+  private def arrayGet[A: Type](arrE: Expr[Array[Any]], i: Int): Expr[A] = {
+    implicit val arrT: Type[Array[Any]] = Type.of[Array[Any]]
+    Expr.quote(Expr.splice(arrE).apply(Expr.splice(Expr(i))).asInstanceOf[A])
+  }
+
+  private def callConstructor[A: Type](ctor: Method, args: Map[String, Expr_??]): Expr[A] =
+    ctor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need an instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => args
+    ) match {
+      case Right(e)  => e.value.asInstanceOf[Expr[A]]
+      case Left(err) => throw new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $err")
+    }
 
   def postProcessResult[A: Type](expr: Expr[A]): Expr[A] = expr
 

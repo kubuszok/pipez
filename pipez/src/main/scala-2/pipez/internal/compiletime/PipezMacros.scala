@@ -11,7 +11,6 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     pipeTpe: blackbox.Context#Type,
     ctxTpe0: blackbox.Context#Type,
     resTpe0: blackbox.Context#Type,
-    resApply0: blackbox.Context#Type => blackbox.Context#Type,
     pdRefinedType0: blackbox.Context#Type,
     inTpe: blackbox.Context#Type,
     outTpe: blackbox.Context#Type,
@@ -72,114 +71,18 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
     c.Expr(untyped)(c.WeakTypeTag(tpe)).asInstanceOf[Expr[A]]
   }
 
-  // ---- Code generation implementations ----
+  // ---- Context / Result evidence + the stable-val `pd` (all `gen*` codegen is shared) ----
 
-  private def tpeOf[A: Type]: c.Type = implicitly[Type[A]].asInstanceOf[c.WeakTypeTag[A]].tpe
-  private def treeOf(e: Expr[?]): Tree = e.asInstanceOf[c.Expr[Any]].tree
-  private def mkTyped[A: Type](tree: Tree): Expr[A] =
-    c.Expr[A](tree)(implicitly[Type[A]].asInstanceOf[c.WeakTypeTag[A]]).asInstanceOf[Expr[A]]
-
-  // `Ctx`/`Res` stay abstract (inherited); the evidence carries the real extracted Context/Result types. The generated
-  // trees themselves are typed against the stable val's `pd.Context` / `pd.Result[A]` path-dependent members.
   implicit override def ctxType: Type[Ctx] =
     c.WeakTypeTag(ctxTpe).asInstanceOf[Type[Ctx]]
-  override def resType[A: Type]: Type[Res[A]] =
-    c.WeakTypeTag(resApply0(tpeOf[A]).asInstanceOf[c.Type]).asInstanceOf[Type[Res[A]]]
 
-  override def generateLift[In: Type, Out: Type](
-      body: (Expr[In], Expr[Ctx]) => Expr[Res[Out]]
-  ): Expr[Pipe[In, Out]] = {
-    val inT = tpeOf[In]
-    val outT = tpeOf[Out]
-    val inName = TermName(c.freshName("in"))
-    val ctxName = TermName(c.freshName("ctx"))
-    val inRef = mkTyped[In](Ident(inName))
-    val ctxRef = mkTyped[Ctx](Ident(ctxName))
-    val bodyTree = treeOf(body(inRef, ctxRef))
-    val finalBody = q"""($bodyTree).asInstanceOf[$pdStableRef.Result[$outT]]"""
-    val tree = q"""$pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $pdStableRef.Context) => $finalBody)"""
-    mkTyped[Pipe[In, Out]](tree)(pipeType[In, Out])
-  }
+  override def resultCtor: Type.Ctor1[Res] =
+    Type.Ctor1.fromUntyped[Res](resTpe0.asInstanceOf[UntypedType])
 
-  private val ctxCastTpe = tq"$pdStableRef.Context"
-
-  override def generateUnlift[In: Type, Out: Type](
-      pipe: Expr[Pipe[In, Out]],
-      in: Expr[In],
-      ctx: Expr[Ctx]
-  ): Expr[Res[Out]] =
-    mkTyped[Res[Out]](
-      q"""$pdStableRef.unlift(${treeOf(pipe)}, ${treeOf(in)}, ${treeOf(ctx)}.asInstanceOf[$ctxCastTpe])"""
-    )
-
-  override def generatePureResult[A: Type](a: Expr[A]): Expr[Res[A]] =
-    mkTyped[Res[A]](q"""$pdStableRef.pureResult(${treeOf(a)})""")
-
-  override def generateMergeResults[A: Type, B: Type, C: Type](
-      ctx: Expr[Ctx],
-      ra: Expr[Res[A]],
-      rb: Expr[Res[B]],
-      f: Expr[(A, B) => C]
-  ): Expr[Res[C]] =
-    mkTyped[Res[C]](
-      q"""$pdStableRef.mergeResults(${treeOf(ctx)}.asInstanceOf[$ctxCastTpe], ${treeOf(ra)}, ${treeOf(rb)}, ${treeOf(
-          f
-        )})"""
-    )
-
-  override def generateUpdateContext(ctx: Expr[Ctx], path: Expr[Path]): Expr[Ctx] =
-    mkTyped[Ctx](q"""$pdStableRef.updateContext(${treeOf(ctx)}.asInstanceOf[$ctxCastTpe], ${treeOf(path)})""")
-
-  override def generateArrayToConstructorFn[Out: Type](
-      outClass: CaseClass[Out],
-      lastIndex: Int,
-      totalFields: Int
-  ): Expr[(Array[Any], Unit) => Out] = {
-    val outT = tpeOf[Out]
-    val arrName = TermName(c.freshName("arr"))
-    val valName = TermName(c.freshName("value"))
-    val outParams = outClass.primaryConstructor.totalParameters.flatten
-    val ctorArgs = outParams.zipWithIndex.map { case ((_, param), idx) =>
-      val paramT = param.tpe.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
-      q"""$arrName($idx).asInstanceOf[$paramT]"""
-    }
-    val storeStmts = if (lastIndex >= 0) List(q"""$arrName($lastIndex) = $valName""") else Nil
-    val bodyTree = q"""
-      ..$storeStmts
-      new $outT(..$ctorArgs)
-    """
-    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"_root_.scala.Array[Any]", EmptyTree)
-    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"_root_.scala.Unit", EmptyTree)
-    mkTyped[(Array[Any], Unit) => Out](Function(List(arrParam, valParam), bodyTree))(Type.of[(Array[Any], Unit) => Out])
-  }
-
-  override def generateArrayToBeanFn[Out: Type](
-      beanFields: List[(??, Method)],
-      defaultConstructor: Method,
-      lastIndex: Int,
-      totalFields: Int
-  ): Expr[(Array[Any], Unit) => Out] = {
-    val outT = tpeOf[Out]
-    val arrName = TermName(c.freshName("arr"))
-    val valName = TermName(c.freshName("value"))
-    val beanName = TermName(c.freshName("bean"))
-    val setterStmts = beanFields.zipWithIndex.map { case ((fieldType, setter), idx) =>
-      val paramT = fieldType.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
-      val setterName = TermName(setter.name)
-      q"""$beanName.$setterName($arrName($idx).asInstanceOf[$paramT])"""
-    }
-    val storeStmts2 = if (lastIndex >= 0) List(q"""$arrName($lastIndex) = $valName""") else Nil
-    val bodyTree = q"""
-      ..$storeStmts2
-      val $beanName = new $outT()
-      ..$setterStmts
-      $beanName
-    """
-    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"_root_.scala.Array[Any]", EmptyTree)
-    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"_root_.scala.Unit", EmptyTree)
-    mkTyped[(Array[Any], Unit) => Out](Function(List(arrParam, valParam), bodyTree))(Type.of[(Array[Any], Unit) => Out])
-  }
-
+  // The adapter's one sanctioned cast: the raw `pd` (here the stable val injected by postProcessResult, carrying the
+  // refined `Aux` type) typed against `Aux[Pipe, Ctx, Res]` so the shared cross-quotes can call its methods.
+  override def pdAux: Expr[PipeDerivation.Aux[Pipe, Ctx, Res]] =
+    mkExpr(pdStableRef).asInstanceOf[Expr[PipeDerivation.Aux[Pipe, Ctx, Res]]]
   // ---- Entry points ----
 
   private def wrapType[A](tpe: blackbox.Context#Type): Type[A] =
@@ -204,39 +107,24 @@ final class PipezMacro(val c: blackbox.Context) {
 
   type ConstructorWeakTypeTag[F[_, _]] = WeakTypeTag[F[Any, Nothing]]
 
-  private def extractConcreteTypes(pdExpr: c.Expr[?]): (c.Type, c.Type => c.Type) = {
+  // Extracts the `Context` type and the `Result[_]` type CONSTRUCTOR (its member signature, a poly-type like
+  // `[X] => Either[List[String], X]`) from the user's `PipeDerivation` instance — the only platform-specific reflection
+  // the shared codegen needs (turned into `Type[Ctx]` / `Type.Ctor1[Res]` evidence inside `PipezMacrosImpl2`).
+  private def extractConcreteTypes(pdExpr: c.Expr[?]): (c.Type, c.Type) = {
     val pdTree = pdExpr.tree
     val declaredT = pdTree.tpe.widen
     val implTree = c.inferImplicitValue(declaredT, silent = true)
     val pdTpe = if (implTree != EmptyTree) implTree.tpe.widen else declaredT
 
-    val ctxMember = pdTpe.member(TypeName("Context"))
-    val ctxTpe = ctxMember.typeSignatureIn(pdTpe).dealias
-
-    val resMember = pdTpe.member(TypeName("Result"))
-    val resSig = resMember.typeSignatureIn(pdTpe)
-
-    val resApply: c.Type => c.Type = resSig.dealias match {
-      case pt if pt.typeParams.nonEmpty =>
-        val tp = pt.typeParams.head
-        val rt = pt.resultType.dealias
-        if (rt.isInstanceOf[scala.reflect.internal.Types#TypeBounds] || rt.typeSymbol == tp)
-          (outTpe: c.Type) => outTpe
-        else (outTpe: c.Type) => rt.substituteTypes(List(tp), List(outTpe))
-      case _ =>
-        (_: c.Type) => definitions.AnyTpe
-    }
-    (ctxTpe, resApply)
+    val ctxTpe = pdTpe.member(TypeName("Context")).typeSignatureIn(pdTpe).dealias
+    val resSig = pdTpe.member(TypeName("Result")).typeSignatureIn(pdTpe)
+    (ctxTpe, resSig)
   }
 
   private def macros[P[_, _]: ConstructorWeakTypeTag, In: WeakTypeTag, Out: WeakTypeTag](
       pipeDerivation: c.Expr[PipeDerivation[P]]
   ) = {
-    val (ctxTpe, resApply) = extractConcreteTypes(pipeDerivation)
-    val resIntTpe = resApply(definitions.IntTpe)
-    val resTpeForAux =
-      if (resIntTpe =:= definitions.IntTpe) definitions.AnyTpe
-      else resIntTpe.typeConstructor
+    val (ctxTpe, resSig) = extractConcreteTypes(pipeDerivation)
 
     val pdTree = pipeDerivation.tree
     val declaredT = pdTree.tpe.widen
@@ -249,8 +137,7 @@ final class PipezMacro(val c: blackbox.Context) {
     new PipezMacrosImpl2[P, Any, ({ type R[A] = Any })#R, In, Out](c)(
       pipeTpe = c.weakTypeOf[P[Any, Nothing]].typeConstructor,
       ctxTpe0 = ctxTpe,
-      resTpe0 = resTpeForAux,
-      resApply0 = resApply.asInstanceOf[blackbox.Context#Type => blackbox.Context#Type],
+      resTpe0 = resSig,
       pdRefinedType0 = pdRefinedType,
       inTpe = c.weakTypeOf[In],
       outTpe = c.weakTypeOf[Out],

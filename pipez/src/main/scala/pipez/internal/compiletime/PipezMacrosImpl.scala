@@ -20,8 +20,6 @@ trait PipezMacrosImpl
   implicit def typeOfAny: Type[Any]
   implicit def PipeCtor: Type.Ctor2[Pipe]
 
-  def pdExpr: Expr[Any]
-
   def pipeType[I: Type, O: Type]: Type[Pipe[I, O]] = PipeCtor.apply[I, O]
 
   // ---- The type class's abstract Context / Result, threaded as real Hearth types ----

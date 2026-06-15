@@ -13,8 +13,7 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
     outTypeQ: SQType[Out0],
     pdQ: SQExpr[PipeDerivation[P]]
 ) extends MacroCommonsScala3(using q),
-      PipezMacrosImpl,
-      PipezConfigParserScala3 {
+      PipezMacrosImpl {
 
   import quotes.*
   import quotes.reflect.*

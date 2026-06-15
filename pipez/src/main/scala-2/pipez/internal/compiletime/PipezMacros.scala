@@ -75,73 +75,82 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
   // ---- Code generation implementations ----
 
   private def tpeOf[A: Type]: c.Type = implicitly[Type[A]].asInstanceOf[c.WeakTypeTag[A]].tpe
+  private def treeOf(e: Expr[?]): Tree = e.asInstanceOf[c.Expr[Any]].tree
+  private def mkTyped[A: Type](tree: Tree): Expr[A] =
+    c.Expr[A](tree)(implicitly[Type[A]].asInstanceOf[c.WeakTypeTag[A]]).asInstanceOf[Expr[A]]
 
-  override def generateLift[In: Type, Out: Type](body: (Expr[In], Expr[Any]) => Expr[Any]): Expr[Pipe[In, Out]] = {
+  // `Ctx`/`Res` stay abstract (inherited); the evidence carries the real extracted Context/Result types. The generated
+  // trees themselves are typed against the stable val's `pd.Context` / `pd.Result[A]` path-dependent members.
+  implicit override def ctxType: Type[Ctx] =
+    c.WeakTypeTag(ctxTpe).asInstanceOf[Type[Ctx]]
+  override def resType[A: Type]: Type[Res[A]] =
+    c.WeakTypeTag(resApply0(tpeOf[A]).asInstanceOf[c.Type]).asInstanceOf[Type[Res[A]]]
+
+  override def generateLift[In: Type, Out: Type](
+      body: (Expr[In], Expr[Ctx]) => Expr[Res[Out]]
+  ): Expr[Pipe[In, Out]] = {
     val inT = tpeOf[In]
     val outT = tpeOf[Out]
     val inName = TermName(c.freshName("in"))
     val ctxName = TermName(c.freshName("ctx"))
-    val inRef = mkExpr(Ident(inName)).asInstanceOf[Expr[In]]
-    val ctxRef = mkExpr(Ident(ctxName)).asInstanceOf[Expr[Any]]
-    val bodyExpr = body(inRef, ctxRef)
-    val bodyTree = bodyExpr.asInstanceOf[c.Expr[Any]].tree
-    val pipeOutTpe = pipeType[In, Out].asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val inRef = mkTyped[In](Ident(inName))
+    val ctxRef = mkTyped[Ctx](Ident(ctxName))
+    val bodyTree = treeOf(body(inRef, ctxRef))
     val finalBody = q"""($bodyTree).asInstanceOf[$pdStableRef.Result[$outT]]"""
     val tree = q"""$pdStableRef.lift[$inT, $outT](($inName: $inT, $ctxName: $pdStableRef.Context) => $finalBody)"""
-    c.Expr(tree)(c.WeakTypeTag(pipeOutTpe)).asInstanceOf[Expr[Pipe[In, Out]]]
+    mkTyped[Pipe[In, Out]](tree)(pipeType[In, Out])
   }
 
   private val ctxCastTpe = tq"$pdStableRef.Context"
 
-  override def generateUnlift(pipe: Expr[Any], in: Expr[Any], ctx: Expr[Any]): Expr[Any] = {
-    val p = pipe.asInstanceOf[c.Expr[Any]]
-    val i = in.asInstanceOf[c.Expr[Any]]
-    val ct = ctx.asInstanceOf[c.Expr[Any]]
-    mkExpr(q"""$pdStableRef.unlift($p, $i, $ct.asInstanceOf[$ctxCastTpe])""").asInstanceOf[Expr[Any]]
-  }
+  override def generateUnlift[In: Type, Out: Type](
+      pipe: Expr[Pipe[In, Out]],
+      in: Expr[In],
+      ctx: Expr[Ctx]
+  ): Expr[Res[Out]] =
+    mkTyped[Res[Out]](
+      q"""$pdStableRef.unlift(${treeOf(pipe)}, ${treeOf(in)}, ${treeOf(ctx)}.asInstanceOf[$ctxCastTpe])"""
+    )
 
-  override def generatePureResult(a: Expr[Any]): Expr[Any] = {
-    val ae = a.asInstanceOf[c.Expr[Any]]
-    mkExpr(q"""$pdStableRef.pureResult($ae)""").asInstanceOf[Expr[Any]]
-  }
+  override def generatePureResult[A: Type](a: Expr[A]): Expr[Res[A]] =
+    mkTyped[Res[A]](q"""$pdStableRef.pureResult(${treeOf(a)})""")
 
-  override def generateMergeResults(ctx: Expr[Any], ra: Expr[Any], rb: Expr[Any], f: Expr[Any]): Expr[Any] = {
-    val ce = ctx.asInstanceOf[c.Expr[Any]]
-    val rae = ra.asInstanceOf[c.Expr[Any]]
-    val rbe = rb.asInstanceOf[c.Expr[Any]]
-    val fe = f.asInstanceOf[c.Expr[Any]]
-    mkExpr(q"""$pdStableRef.mergeResults($ce.asInstanceOf[$ctxCastTpe], $rae, $rbe, $fe)""").asInstanceOf[Expr[Any]]
-  }
+  override def generateMergeResults[A: Type, B: Type, C: Type](
+      ctx: Expr[Ctx],
+      ra: Expr[Res[A]],
+      rb: Expr[Res[B]],
+      f: Expr[(A, B) => C]
+  ): Expr[Res[C]] =
+    mkTyped[Res[C]](
+      q"""$pdStableRef.mergeResults(${treeOf(ctx)}.asInstanceOf[$ctxCastTpe], ${treeOf(ra)}, ${treeOf(rb)}, ${treeOf(
+          f
+        )})"""
+    )
 
-  override def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any] = {
-    val ce = ctx.asInstanceOf[c.Expr[Any]]
-    val pe = path.asInstanceOf[c.Expr[Path]]
-    mkExpr(q"""$pdStableRef.updateContext($ce.asInstanceOf[$ctxCastTpe], $pe)""").asInstanceOf[Expr[Any]]
-  }
+  override def generateUpdateContext(ctx: Expr[Ctx], path: Expr[Path]): Expr[Ctx] =
+    mkTyped[Ctx](q"""$pdStableRef.updateContext(${treeOf(ctx)}.asInstanceOf[$ctxCastTpe], ${treeOf(path)})""")
 
   override def generateArrayToConstructorFn[Out: Type](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
-  ): Expr[Any] = {
+  ): Expr[(Array[Any], Unit) => Out] = {
     val outT = tpeOf[Out]
     val arrName = TermName(c.freshName("arr"))
     val valName = TermName(c.freshName("value"))
-    val caName = TermName(c.freshName("ca"))
     val outParams = outClass.primaryConstructor.totalParameters.flatten
     val ctorArgs = outParams.zipWithIndex.map { case ((_, param), idx) =>
       val paramT = param.tpe.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
-      q"""$caName($idx).asInstanceOf[$paramT]"""
+      q"""$arrName($idx).asInstanceOf[$paramT]"""
     }
-    val storeStmts = if (lastIndex >= 0) List(q"""$caName($lastIndex) = $valName""") else Nil
+    val storeStmts = if (lastIndex >= 0) List(q"""$arrName($lastIndex) = $valName""") else Nil
     val bodyTree = q"""
-      val $caName = $arrName.asInstanceOf[_root_.scala.Array[Any]]
       ..$storeStmts
       new $outT(..$ctorArgs)
     """
-    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"Any", EmptyTree)
-    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"Any", EmptyTree)
-    mkExpr(Function(List(arrParam, valParam), bodyTree)).asInstanceOf[Expr[Any]]
+    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"_root_.scala.Array[Any]", EmptyTree)
+    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"_root_.scala.Unit", EmptyTree)
+    mkTyped[(Array[Any], Unit) => Out](Function(List(arrParam, valParam), bodyTree))(Type.of[(Array[Any], Unit) => Out])
   }
 
   override def generateArrayToBeanFn[Out: Type](
@@ -149,28 +158,26 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], Ctx0, Res0[_], In0, Out0](v
       defaultConstructor: Method,
       lastIndex: Int,
       totalFields: Int
-  ): Expr[Any] = {
+  ): Expr[(Array[Any], Unit) => Out] = {
     val outT = tpeOf[Out]
     val arrName = TermName(c.freshName("arr"))
     val valName = TermName(c.freshName("value"))
     val beanName = TermName(c.freshName("bean"))
-    val caName = TermName(c.freshName("ca"))
     val setterStmts = beanFields.zipWithIndex.map { case ((fieldType, setter), idx) =>
       val paramT = fieldType.Underlying.asInstanceOf[c.WeakTypeTag[Any]].tpe
       val setterName = TermName(setter.name)
-      q"""$beanName.$setterName($caName($idx).asInstanceOf[$paramT])"""
+      q"""$beanName.$setterName($arrName($idx).asInstanceOf[$paramT])"""
     }
-    val storeStmts2 = if (lastIndex >= 0) List(q"""$caName($lastIndex) = $valName""") else Nil
+    val storeStmts2 = if (lastIndex >= 0) List(q"""$arrName($lastIndex) = $valName""") else Nil
     val bodyTree = q"""
-      val $caName = $arrName.asInstanceOf[_root_.scala.Array[Any]]
       ..$storeStmts2
       val $beanName = new $outT()
       ..$setterStmts
       $beanName
     """
-    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"Any", EmptyTree)
-    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"Any", EmptyTree)
-    mkExpr(Function(List(arrParam, valParam), bodyTree)).asInstanceOf[Expr[Any]]
+    val arrParam = ValDef(Modifiers(Flag.PARAM), arrName, tq"_root_.scala.Array[Any]", EmptyTree)
+    val valParam = ValDef(Modifiers(Flag.PARAM), valName, tq"_root_.scala.Unit", EmptyTree)
+    mkTyped[(Array[Any], Unit) => Out](Function(List(arrParam, valParam), bodyTree))(Type.of[(Array[Any], Unit) => Out])
   }
 
   // ---- Entry points ----

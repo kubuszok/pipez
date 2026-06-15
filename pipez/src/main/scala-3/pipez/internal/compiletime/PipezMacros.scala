@@ -67,105 +67,95 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
   private def pdTyped: Expr[PipeDerivation.Aux[P, Ctx0, Res0]] =
     pdExpr.asInstanceOf[Expr[PipeDerivation.Aux[P, Ctx0, Res0]]]
 
-  // ---- Code generation implementations ----
+  // ---- Context / Result threaded as Hearth types ----
+  // `Ctx`/`Res` stay abstract (inherited); the evidence carries the real types, and the generate* bodies cast between
+  // the abstract `Res[A]`/`Ctx` and the concrete `Res0[A]`/`Ctx0` internally.
 
-  override def generateLift[In: Type, Out: Type](
-      body: (Expr[In], Expr[Any]) => Expr[Any]
-  ): Expr[Pipe[In, Out]] =
-    generateLiftImpl[In, Out](
-      summon[Type[In]].asInstanceOf[SQType[In]],
-      summon[Type[Out]].asInstanceOf[SQType[Out]],
-      body
-    )
+  implicit override def ctxType: Type[Ctx] = ctxSQType.asInstanceOf[Type[Ctx]]
 
-  private def generateLiftImpl[In, Out](
-      inSQType: SQType[In],
-      outSQType: SQType[Out],
-      body: (Expr[In], Expr[Any]) => Expr[Any]
-  ): Expr[Pipe[In, Out]] = {
+  override def resType[A: Type]: Type[Res[A]] = {
+    val xRepr = TypeRepr.of(using summon[Type[A]].asInstanceOf[SQType[A]])
+    resCtorUntypedType.appliedTo(xRepr).asType.asInstanceOf[Type[Res[A]]]
+  }
+
+  // ---- Code generation implementations (typed `'{ }` quotes against `PipeDerivation.Aux[P, Ctx0, Res0]`) ----
+
+  private def sqExpr[A](e: Expr[A]): SQExpr[A] = e.asInstanceOf[SQExpr[A]]
+  // The abstract `Ctx`/`Res[A]` and the concrete `Ctx0`/`Res0[A]` are the same runtime type; relabel when splicing
+  // into the typed `pd.*` calls (which are declared in terms of `Ctx0`/`Res0`).
+  private def ctx0(e: Expr[Ctx]): SQExpr[Ctx0] = e.asInstanceOf[SQExpr[Ctx0]]
+  private def res0[A](e: Expr[Res[A]]): SQExpr[Res0[A]] = e.asInstanceOf[SQExpr[Res0[A]]]
+  private def pdSQ: SQExpr[PipeDerivation.Aux[P, Ctx0, Res0]] =
+    pdTyped.asInstanceOf[SQExpr[PipeDerivation.Aux[P, Ctx0, Res0]]]
+
+  // NOTE: on Scala 3, Hearth's `Type[X]` IS `scala.quoted.Type[X]`, so a `given SQType[X] = summon[Type[X]]` would
+  // resolve to itself and stack-overflow. Always build the `SQType` givens from the NAMED `Type` evidence, never via
+  // `summon`.
+
+  override def generateLift[In, Out](
+      body: (Expr[In], Expr[Ctx]) => Expr[Res[Out]]
+  )(using inT: Type[In], outT: Type[Out]): Expr[Pipe[In, Out]] = {
     given SQType[P] = pipeTypeQ
-    given SQType[In] = inSQType
-    given SQType[Out] = outSQType
-    val pd = pdTyped
-
+    given SQType[In] = inT.asInstanceOf[SQType[In]]
+    given SQType[Out] = outT.asInstanceOf[SQType[Out]]
+    val pd = pdSQ
     '{
       $pd.lift[In, Out] { (in: In, ctx: Ctx0) =>
-        val _in = in
-        val _ctx = ctx
         ${
-          val bodyResult = body(
-            '{ _in }.asInstanceOf[Expr[In]],
-            '{ _ctx }.asInstanceOf[Expr[Any]]
-          )
-          val bodyTerm = bodyResult.asInstanceOf[SQExpr[Any]].asTerm
-          val expectedType = resCtorUntypedType.appliedTo(TypeRepr.of[Out])
-          val casted = TypeApply(Select.unique(bodyTerm, "asInstanceOf"), List(Inferred(expectedType)))
-          casted.asExpr.asInstanceOf[Expr[Res0[Out]]]
+          sqExpr(body('in.asInstanceOf[Expr[In]], 'ctx.asInstanceOf[Expr[Ctx]]))
+            .asInstanceOf[SQExpr[Res0[Out]]]
         }
       }
     }.asInstanceOf[Expr[Pipe[In, Out]]]
   }
 
-  private def pdTerm: Term = pdExpr.asInstanceOf[SQExpr[Any]].asTerm
-  private def toTerm(e: Expr[Any]): Term = e.asInstanceOf[SQExpr[Any]].asTerm
-
-  override def generateUnlift(
-      pipe: Expr[Any],
-      in: Expr[Any],
-      ctx: Expr[Any]
-  ): Expr[Any] = {
-    val anyTR = TypeRepr.of[Any]
-    val pipeTR = PipeCtor.apply[Any, Any](using typeOfAny, typeOfAny).asInstanceOf[SQType[?]] match {
-      case '[t] => TypeRepr.of[t]
-    }
-    val unliftSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("unlift").head)
-    val pipeCast = TypeApply(Select.unique(toTerm(pipe), "asInstanceOf"), List(Inferred(pipeTR)))
-    val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
-    val applied = unliftSel
-      .appliedToTypes(List(anyTR, anyTR))
-      .appliedToArgs(List(pipeCast, toTerm(in), ctxCast))
-    applied.asExpr.asInstanceOf[Expr[Any]]
+  override def generateUnlift[In, Out](
+      pipe: Expr[Pipe[In, Out]],
+      in: Expr[In],
+      ctx: Expr[Ctx]
+  )(using inT: Type[In], outT: Type[Out]): Expr[Res[Out]] = {
+    given SQType[P] = pipeTypeQ
+    given SQType[In] = inT.asInstanceOf[SQType[In]]
+    given SQType[Out] = outT.asInstanceOf[SQType[Out]]
+    val pd = pdSQ
+    '{ $pd.unlift[In, Out](${ sqExpr(pipe) }, ${ sqExpr(in) }, ${ ctx0(ctx) }) }.asInstanceOf[Expr[Res[Out]]]
   }
 
-  override def generatePureResult(a: Expr[Any]): Expr[Any] = {
-    val anyTR = TypeRepr.of[Any]
-    val pureResultSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("pureResult").head)
-    val applied = pureResultSel.appliedToType(anyTR).appliedTo(toTerm(a))
-    applied.asExpr.asInstanceOf[Expr[Any]]
+  override def generatePureResult[A](a: Expr[A])(using aT: Type[A]): Expr[Res[A]] = {
+    given SQType[P] = pipeTypeQ
+    given SQType[A] = aT.asInstanceOf[SQType[A]]
+    val pd = pdSQ
+    '{ $pd.pureResult[A](${ sqExpr(a) }) }.asInstanceOf[Expr[Res[A]]]
   }
 
-  override def generateMergeResults(
-      ctx: Expr[Any],
-      ra: Expr[Any],
-      rb: Expr[Any],
-      f: Expr[Any]
-  ): Expr[Any] = {
-    val anyTR = TypeRepr.of[Any]
-    val resTR = resCtorUntypedType.appliedTo(anyTR)
-    val fn2TR = TypeRepr.of[(Any, Any) => Any]
-    val mergeResultsSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("mergeResults").head)
-    val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
-    val raCast = TypeApply(Select.unique(toTerm(ra), "asInstanceOf"), List(Inferred(resTR)))
-    val rbCast = TypeApply(Select.unique(toTerm(rb), "asInstanceOf"), List(Inferred(resTR)))
-    val fCast = TypeApply(Select.unique(toTerm(f), "asInstanceOf"), List(Inferred(fn2TR)))
-    val applied = mergeResultsSel
-      .appliedToTypes(List(anyTR, anyTR, anyTR))
-      .appliedToArgs(List(ctxCast, raCast, rbCast, fCast))
-    applied.asExpr.asInstanceOf[Expr[Any]]
+  override def generateMergeResults[A, B, C](
+      ctx: Expr[Ctx],
+      ra: Expr[Res[A]],
+      rb: Expr[Res[B]],
+      f: Expr[(A, B) => C]
+  )(using aT: Type[A], bT: Type[B], cT: Type[C]): Expr[Res[C]] = {
+    given SQType[P] = pipeTypeQ
+    given SQType[A] = aT.asInstanceOf[SQType[A]]
+    given SQType[B] = bT.asInstanceOf[SQType[B]]
+    given SQType[C] = cT.asInstanceOf[SQType[C]]
+    val pd = pdSQ
+    '{
+      $pd.mergeResults[A, B, C](${ ctx0(ctx) }, ${ res0(ra) }, ${ res0(rb) }, ${ sqExpr(f) })
+    }.asInstanceOf[Expr[Res[C]]]
   }
 
-  override def generateUpdateContext(ctx: Expr[Any], path: Expr[Path]): Expr[Any] = {
-    val ctxCast = TypeApply(Select.unique(toTerm(ctx), "asInstanceOf"), List(TypeTree.of(using ctxSQType)))
-    val updateContextSel = pdTerm.select(pdTerm.tpe.widen.typeSymbol.methodMember("updateContext").head)
-    val applied = updateContextSel.appliedToArgs(List(ctxCast, toTerm(path)))
-    applied.asExpr.asInstanceOf[Expr[Any]]
+  override def generateUpdateContext(ctx: Expr[Ctx], path: Expr[Path]): Expr[Ctx] = {
+    given SQType[P] = pipeTypeQ
+    val pd = pdSQ
+    '{ $pd.updateContext(${ ctx0(ctx) }, ${ sqExpr(path) }) }.asInstanceOf[Expr[Ctx]]
   }
 
-  override def generateArrayToConstructorFn[Out: Type](
+  override def generateArrayToConstructorFn[Out](
       outClass: CaseClass[Out],
       lastIndex: Int,
       totalFields: Int
-  ): Expr[Any] = {
+  )(using outT: Type[Out]): Expr[(Array[Any], Unit) => Out] = {
+    given SQType[Out] = outT.asInstanceOf[SQType[Out]]
     val outTR = UntypedType.fromTyped[Out].asInstanceOf[TypeRepr]
     val outParams = outClass.primaryConstructor.totalParameters.flatten
     val ctorSym = outTR.typeSymbol.primaryConstructor
@@ -173,14 +163,13 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
       case AppliedType(_, args) => args
       case _                    => Nil
     }
-
     val paramTypeReprs: List[TypeRepr] = outParams.map { case (_, param) =>
       val existential = param.tpe
       import existential.Underlying as ParamT
       UntypedType.fromTyped[ParamT].asInstanceOf[TypeRepr]
     }
 
-    '{ (arr: Array[Any], _dummy: Any) =>
+    '{ (arr: Array[Any], _dummy: Unit) =>
       ${
         val arrTerm = 'arr.asTerm
         val ctorArgs = paramTypeReprs.zipWithIndex.map { case (paramTR, idx) =>
@@ -194,17 +183,18 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
             .appliedToTypes(typeParams)
             .appliedToArgs(ctorArgs)
           else New(outTypeTree).select(ctorSym).appliedToArgs(ctorArgs)
-        newExpr.asExpr.asInstanceOf[SQExpr[Any]]
+        newExpr.asExpr.asInstanceOf[SQExpr[Out]]
       }
-    }.asInstanceOf[Expr[Any]]
+    }.asInstanceOf[Expr[(Array[Any], Unit) => Out]]
   }
 
-  override def generateArrayToBeanFn[Out: Type](
+  override def generateArrayToBeanFn[Out](
       beanFields: List[(??, Method)],
       defaultConstructor: Method,
       lastIndex: Int,
       totalFields: Int
-  ): Expr[Any] = {
+  )(using outT: Type[Out]): Expr[(Array[Any], Unit) => Out] = {
+    given SQType[Out] = outT.asInstanceOf[SQType[Out]]
     val outTR = UntypedType.fromTyped[Out].asInstanceOf[TypeRepr]
 
     val beanConstructorTerm = defaultConstructor.fold(
@@ -212,7 +202,7 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
       onTypes = _ => Map.empty,
       onValues = _ => Map.empty
     ) match {
-      case Right(result) => toTerm(result.value.asInstanceOf[Expr[Any]])
+      case Right(result) => result.value.asInstanceOf[Expr[Any]].asInstanceOf[SQExpr[Any]].asTerm
       case Left(err)     => throw new RuntimeException(s"Cannot call default constructor: $err")
     }
 
@@ -227,22 +217,20 @@ final private[pipez] class PipezMacros[P[_, _], In0, Out0](q: Quotes)(
       (paramTR, setterSym)
     }
 
-    '{ (arr: Array[Any], _dummy: Any) =>
+    '{ (arr: Array[Any], _dummy: Unit) =>
       ${
         val arrTerm = 'arr.asTerm
         val beanSym = Symbol.newVal(Symbol.spliceOwner, "bean", outTR, Flags.EmptyFlags, Symbol.noSymbol)
         val beanValDef = ValDef(beanSym, Some(beanConstructorTerm))
         val beanRef = Ref(beanSym)
-
         val setterStmts = setterInfo.zipWithIndex.map { case ((paramTR, setterSym), idx) =>
           val arrGet = Apply(Select.unique(arrTerm, "apply"), List(Literal(IntConstant(idx))))
           val castedValue = TypeApply(Select.unique(arrGet, "asInstanceOf"), List(Inferred(paramTR)))
           Apply(beanRef.select(setterSym), List(castedValue))
         }
-
-        Block(beanValDef :: setterStmts, beanRef).asExpr.asInstanceOf[SQExpr[Any]]
+        Block(beanValDef :: setterStmts, beanRef).asExpr.asInstanceOf[SQExpr[Out]]
       }
-    }.asInstanceOf[Expr[Any]]
+    }.asInstanceOf[Expr[(Array[Any], Unit) => Out]]
   }
 
   // ---- Forwarding entry points ----

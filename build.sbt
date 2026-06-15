@@ -7,14 +7,14 @@ import kubuszok.sbt.KubuszokPlugin.autoImport._
 
 val versions = new {
   val scala213 = "2.13.18"
-  val scala3   = "3.8.4"
+  val scala3 = "3.8.4"
 
-  val scalas    = List(scala213, scala3)
+  val scalas = List(scala213, scala3)
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
-  val hearth       = "0.3.1-47-g374c34d-SNAPSHOT"
+  val hearth = "0.3.1-47-g374c34d-SNAPSHOT"
   val kindProjector = "0.13.4"
-  val munit        = "1.3.3"
+  val munit = "1.3.3"
 }
 
 val dev = new DevProperties(
@@ -130,9 +130,9 @@ val settings = Seq(
 
 val dependencies = Seq(
   libraryDependencies ++= Seq(
-    "com.kubuszok" %%% "hearth"       % versions.hearth,
+    "com.kubuszok" %%% "hearth" % versions.hearth,
     "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test,
-    "org.scalameta" %%% "munit"       % versions.munit  % Test
+    "org.scalameta" %%% "munit" % versions.munit % Test
   ),
   testFrameworks += new TestFramework("munit.Framework"),
   libraryDependencies ++= foldVersion(scalaVersion.value)(

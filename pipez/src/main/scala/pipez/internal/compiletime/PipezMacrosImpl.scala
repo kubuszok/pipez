@@ -327,7 +327,115 @@ trait PipezMacrosImpl
       }
   }
 
-  // ---- Config parser (implemented by platform-specific bridges) ----
+  // ---- Config parser (shared across platforms via Hearth's DestructuredExpr) ----
 
-  def readConfig[In: Type, Out: Type](code: Expr[PipeDerivationConfig[Pipe, In, Out]]): Settings
+  /** Parses the `PipeDerivationConfig` builder chain (`.addField(_.foo, pipe).renameField(_.a, _.b)...`) into a list of
+    * [[ConfigEntry]] using Hearth's macro-agnostic [[DestructuredExpr]]. Replaces the two former platform-specific
+    * raw-AST walkers (`PipezConfigParserScala2`/`Scala3`).
+    */
+  def readConfig[In: Type, Out: Type](code: Expr[PipeDerivationConfig[Pipe, In, Out]]): Settings = {
+    import DestructuredExpr.MethodCall
+
+    def instanceOf(mc: MethodCall): Option[DestructuredExpr] =
+      mc.applied.collectFirst { case ai: MethodCall.AppliedInstance => ai.value }
+    def valuesOf(mc: MethodCall): List[DestructuredExpr] =
+      mc.applied.collect { case av: MethodCall.AppliedValues => av.args }.flatten
+    def typesOf(mc: MethodCall): List[??] =
+      mc.applied.collect { case at: MethodCall.AppliedTypes => at.typeArgs }.flatten
+
+    def toHExpr(node: DestructuredExpr): Expr[Any] = node.toUntypedExpr.asTyped[Any]
+
+    // Leaf field name of a path lambda `_.field` (or zero-arg accessor `_.getField`). Mirrors the old `extractPath`:
+    // for a nested `_.a.b` the outermost selection (the leaf) is what the config records.
+    def unwrapBlock(node: DestructuredExpr): DestructuredExpr = node match {
+      case b: DestructuredExpr.Block => unwrapBlock(b.result)
+      case other                     => other
+    }
+    def fieldName(node: DestructuredExpr): Either[String, String] = unwrapBlock(node) match {
+      case lam: DestructuredExpr.Lambda =>
+        unwrapBlock(lam.body) match {
+          case mc: MethodCall => Right(mc.method.name)
+          case other          => Left(s"Unsupported path expression: ${other.plainPrint}")
+        }
+      case mc: MethodCall => Right(mc.method.name)
+      case other          => Left(s"Unsupported path expression: ${other.plainPrint}")
+    }
+
+    def extract(node: DestructuredExpr, acc: List[ConfigEntry]): Either[String, Settings] = unwrapBlock(node) match {
+      case mc: MethodCall =>
+        def receiver: Either[String, DestructuredExpr] =
+          instanceOf(mc).toRight(s"Missing receiver for ${mc.method.name}")
+        def into(entry: ConfigEntry): Either[String, Settings] =
+          receiver.flatMap(r => extract(r, entry :: acc))
+        def intoE(entry: Either[String, ConfigEntry]): Either[String, Settings] =
+          entry.flatMap(into)
+
+        mc.method.name match {
+          case "apply" | "empty"              => Right(new Settings(acc))
+          case "enableDiagnostics"            => into(ConfigEntry.EnableDiagnostics)
+          case "fieldMatchingCaseInsensitive" => into(ConfigEntry.FieldCaseInsensitive)
+          case "enableFallbackToDefaults"     => into(ConfigEntry.EnableFallbackToDefaults)
+          case "enumMatchingCaseInsensitive"  => into(ConfigEntry.EnumCaseInsensitive)
+          case "recursiveDerivation"          => into(ConfigEntry.EnableRecursiveDerivation)
+          case "addField"                     =>
+            valuesOf(mc) match {
+              case List(outputField, pipe) =>
+                intoE(fieldName(outputField).map(out => ConfigEntry.AddField(out, toHExpr(pipe))))
+              case _ => Left("Unsupported addField arguments")
+            }
+          case "renameField" =>
+            valuesOf(mc) match {
+              case List(inputField, outputField) =>
+                intoE(for {
+                  in <- fieldName(inputField)
+                  out <- fieldName(outputField)
+                } yield ConfigEntry.RenameField(in, out))
+              case _ => Left("Unsupported renameField arguments")
+            }
+          case "plugInField" =>
+            valuesOf(mc) match {
+              case List(inputField, outputField, pipe) =>
+                intoE(for {
+                  in <- fieldName(inputField)
+                  out <- fieldName(outputField)
+                } yield ConfigEntry.PlugInField(in, out, toHExpr(pipe)))
+              case _ => Left("Unsupported plugInField arguments")
+            }
+          case "addFallbackToValue" =>
+            valuesOf(mc) match {
+              case List(fallbackValue) =>
+                val fallbackType = typesOf(mc).headOption.getOrElse(fallbackValue.tpe)
+                into(ConfigEntry.AddFallbackValue(fallbackType, toHExpr(fallbackValue)))
+              case _ => Left("Unsupported addFallbackToValue arguments")
+            }
+          case "removeSubtype" =>
+            (typesOf(mc), valuesOf(mc)) match {
+              case (inSubtype :: _, List(pipe)) =>
+                into(ConfigEntry.RemoveSubtype(inSubtype, toHExpr(pipe)))
+              case _ => Left("Unsupported removeSubtype arguments")
+            }
+          case "renameSubtype" =>
+            typesOf(mc) match {
+              case inSubtype :: outSubtype :: _ =>
+                into(ConfigEntry.RenameSubtype(inSubtype, outSubtype))
+              case _ => Left("Unsupported renameSubtype arguments")
+            }
+          case "plugInSubtype" =>
+            (typesOf(mc), valuesOf(mc)) match {
+              case (inSubtype :: outSubtype :: _, List(pipe)) =>
+                into(ConfigEntry.PlugInSubtype(inSubtype, outSubtype, toHExpr(pipe)))
+              case _ => Left("Unsupported plugInSubtype arguments")
+            }
+          case other =>
+            Left(s"Unsupported PipeDerivationConfig expression: $other")
+        }
+      case other =>
+        Left(s"Unsupported PipeDerivationConfig expression: ${other.plainPrint}")
+    }
+
+    extract(DestructuredExpr.parseUntyped(UntypedExpr.fromTyped(code)), Nil) match {
+      case Right(settings) => settings
+      case Left(err)       => throw new RuntimeException(s"Invalid configuration: $err")
+    }
+  }
 }

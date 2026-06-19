@@ -6,7 +6,7 @@
 
 [![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_2.13/scaladoc%202.13.svg)](https://javadoc.io/doc/com.kubuszok/pipez_2.13)
 [![Scaladoc](https://javadoc.io/badge2/com.kubuszok/pipez_3/scaladoc%203.svg)](https://javadoc.io/doc/com.kubuszok/pipez_3)
-![CI build](https://github.com/MateuszKubuszok/pipez/workflows/CI%20build/badge.svg)
+![CI Build](https://github.com/kubuszok/pipez/workflows/CI%20Build/badge.svg)
 [![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 Scala library for type-safe data-transformations, which allows you to build-in Chimney-like abilities to your own type classes and effects.

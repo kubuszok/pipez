@@ -494,7 +494,7 @@ trait PipezMacrosImpl
   // ---- Config parser (shared across platforms via Hearth's DestructuredExpr) ----
 
   /** Parses the `PipeDerivationConfig` builder chain (`.addField(_.foo, pipe).renameField(_.a, _.b)...`) into a list of
-    * [[ConfigEntry]] using Hearth's macro-agnostic [[DestructuredExpr]]. Replaces the two former platform-specific
+    * [[ConfigEntry]] using Hearth's macro-agnostic `DestructuredExpr`. Replaces the two former platform-specific
     * raw-AST walkers (`PipezConfigParserScala2`/`Scala3`).
     */
   def readConfig[In: Type, Out: Type](code: Expr[PipeDerivationConfig[Pipe, In, Out]]): Settings = {

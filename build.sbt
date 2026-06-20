@@ -1,26 +1,26 @@
-import sbtwelcome.UsefulTask
 import commandmatrix.extra.*
 import kubuszok.sbt._
 import kubuszok.sbt.KubuszokPlugin.autoImport._
 
 // Versions:
 
-val versions = new {
-  val scala213 = "2.13.18"
-  val scala3 = "3.8.4"
+// sbt 2.0's build dialect drops the structural-type refinement on `new { ... }`, so members of an
+// anonymous `val versions = new { ... }` object fail to resolve, and top-level objects aren't visible
+// to lifted setting expressions either. Use plain top-level vals (the proven sbt-2.0 pattern).
+val scala213 = "2.13.18"
+val scala3 = "3.8.4"
 
-  val scalas = List(scala213, scala3)
-  val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
+val scalas = List(scala213, scala3)
+val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
-  val hearth = "0.3.1-47-g374c34d-SNAPSHOT"
-  val kindProjector = "0.13.4"
-  val munit = "1.3.3"
-}
+val hearth = "0.3.1-54-g83c3eb5-SNAPSHOT"
+val kindProjector = "0.13.4"
+val munit = "1.3.3"
 
 val dev = new DevProperties(
-  scala213 = Some(versions.scala213),
-  scala3 = Some(versions.scala3),
-  platforms = versions.platforms
+  scala213 = Some(scala213),
+  scala3 = Some(scala3),
+  platforms = platforms
 )
 
 val logCrossQuotes = dev.props.getProperty("log.cross-quotes") match {
@@ -32,7 +32,7 @@ val logCrossQuotes = dev.props.getProperty("log.cross-quotes") match {
 
 // Common settings:
 
-val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
+val useCrossQuotes = scalas.flatMap { scalaVersion =>
   foldVersion(scalaVersion)(
     for2_13 = List(
       MatrixAction
@@ -44,7 +44,7 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
         .ForScala(_.isScala3)
         .Configure(
           _.settings(
-            libraryDependencies += compilerPlugin("com.kubuszok" %% "hearth-cross-quotes" % versions.hearth),
+            libraryDependencies += compilerPlugin("com.kubuszok" %% "hearth-cross-quotes" % hearth),
             scalacOptions += s"-P:hearth.cross-quotes:logging=$logCrossQuotes"
           )
         )
@@ -129,19 +129,43 @@ val settings = Seq(
 )
 
 val dependencies = Seq(
+  // sbt 2.0: %% is platform-aware (encodes Scala version + JS/Native suffix); %%% is gone.
   libraryDependencies ++= Seq(
-    "com.kubuszok" %%% "hearth" % versions.hearth,
-    "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test,
-    "org.scalameta" %%% "munit" % versions.munit % Test
+    "com.kubuszok" %% "hearth" % hearth,
+    "com.kubuszok" %% "hearth-munit" % hearth % Test,
+    "org.scalameta" %% "munit" % munit % Test
   ),
   testFrameworks += new TestFramework("munit.Framework"),
   libraryDependencies ++= foldVersion(scalaVersion.value)(
     for3 = Seq.empty,
     for2_13 = Seq(
-      compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
+      compilerPlugin("org.typelevel" % "kind-projector" % kindProjector cross CrossVersion.full)
     )
   ),
   resolvers += Resolver.mavenLocal
+)
+
+// sbt 2.0 + scoverage + `fork := true`: the scoverage runtime Invoker in the *forked* test JVM writes
+// per-thread measurement files into `<crossTarget>/scoverage-data`, but on sbt 2.0 that directory is no
+// longer pre-created in-process before the fork starts, so every instrumented test crashes with
+// `FileNotFoundException: .../scoverage-data/scoverage.measurements.*`. Ensure the directory exists;
+// piggy-back on Test/compile, which every test task depends on. Harmless when coverage is off.
+val coverageDirFix = Seq(
+  Test / compile := Def.uncached {
+    val analysis = (Test / compile).value
+    IO.createDirectory((Test / crossTarget).value / "scoverage-data")
+    analysis
+  }
+)
+
+// Scala Native 0.5.12: munit 1.3.3 pulls test-interface 0.5.12 while scalacheck 1.19.0 (transitive via
+// hearth-munit) still pulls 0.5.8; the Scala Native plugin marks test-interface with a "strict" scheme,
+// so the older request is reported as a binary-incompat eviction error on sbt 2.0. Coursier already
+// selects the newer 0.5.12, so demote that eviction to a warning on the native axis.
+val nativeEvictionFix = List(
+  MatrixAction
+    .ForPlatforms(VirtualAxis.native)
+    .Configure(_.settings(evictionErrorLevel := sbt.util.Level.Warn))
 )
 
 val publishSettings = Seq(
@@ -168,10 +192,42 @@ lazy val aliases = new Aliases(
   compileOnly = Seq.empty
 )
 
+// CI/test command aliases (e.g. ci-jvm-3, test-js-3), consumed by .github/workflows/ci.yml.
+// sbt-welcome used to register these via `usefulTasks`, but it has no sbt 2.0 build, so we register
+// them directly from the Aliases helper bundled with sbt-kubuszok.
+//
+// In sbt 2.0 the `test` task is incremental and machine-wide cached (it behaves like sbt 1.x's
+// `testQuick`), so a CI run that begins with `clean` can still report "No tests to run" and pass
+// vacuously. `testFull` is the uncached full run. Rewrite the generated `<id>/test` steps to
+// `<id>/testFull` so CI always executes the whole suite.
+def fullTests(command: String): String =
+  command
+    .split(";")
+    .map { step =>
+      val trimmed = step.trim
+      if (trimmed.endsWith("/test")) trimmed.stripSuffix("/test") + "/testFull" else trimmed
+    }
+    .mkString(" ; ")
+
+def aliasName(prefix: String, platform: String, scalaBinary: String): String =
+  s"$prefix-${platform.toLowerCase}-${scalaBinary.replace('.', '_')}"
+
+lazy val ciAliases: Seq[Def.Setting[?]] = {
+  val platformNames = List("JVM", "JS", "Native")
+  val scalaBinaries = List("2.13", "3")
+  val perCombination = for {
+    platform <- platformNames
+    scalaBinary <- scalaBinaries
+    setting <-
+      addCommandAlias(aliasName("ci", platform, scalaBinary), fullTests(aliases.ci(platform, scalaBinary))) ++
+        addCommandAlias(aliasName("test", platform, scalaBinary), fullTests(aliases.test(platform, scalaBinary)))
+  } yield setting
+  perCombination ++ addCommandAlias("ci-release", aliases.release)
+}
+
 lazy val pipezTestcases213 = projectMatrix
   .in(file("pipez-testcases-213"))
-  .someVariations(versions.scalas, versions.platforms)()
-  .disablePlugins(WelcomePlugin)
+  .someVariations(scalas, platforms)(nativeEvictionFix *)
   .settings(
     moduleName := "pipez-testcases-213",
     name := "pipez-testcases-213"
@@ -182,9 +238,8 @@ lazy val pipezTestcases213 = projectMatrix
 
 lazy val pipez = projectMatrix
   .in(file("pipez"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .someVariations(scalas, platforms)((useCrossQuotes ++ nativeEvictionFix ++ dev.only1VersionInIDE) *)
   .enablePlugins(GitVersioning)
-  .disablePlugins(WelcomePlugin)
   .dependsOn(pipezTestcases213 % Test)
   .settings(
     moduleName := "pipez",
@@ -192,40 +247,32 @@ lazy val pipez = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
+  .settings(coverageDirFix *)
   .settings(publishSettings *)
 
 lazy val pipezDsl = projectMatrix
   .in(file("pipez-dsl"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .someVariations(scalas, platforms)((useCrossQuotes ++ nativeEvictionFix ++ dev.only1VersionInIDE) *)
   .enablePlugins(GitVersioning)
-  .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "pipez-dsl",
     name := "pipez-dsl"
   )
   .settings(settings *)
   .settings(dependencies *)
+  .settings(coverageDirFix *)
   .settings(publishSettings *)
   .dependsOn(pipez % "compile->compile;test->test")
 
 lazy val root = project
   .in(file("."))
-  .enablePlugins(GitVersioning, WelcomePlugin)
+  .enablePlugins(GitVersioning)
   .aggregate(pipez.projectRefs *)
   .aggregate(pipezDsl.projectRefs *)
   .settings(
-    name := "pipez-build",
-    logo :=
-      s"""Pipez ${version.value} build for (${versions.scala213}, ${versions.scala3}) x (JVM, Scala.js, Scala Native)
-         |
-         |This build uses sbt-projectmatrix with sbt-kubuszok:
-         | - Scala JVM adds no suffix to a project name seen in build.sbt
-         | - Scala.js adds the "JS" suffix to a project name seen in build.sbt
-         | - Scala Native adds the "Native" suffix to a project name seen in build.sbt
-         | - Scala 2.13 adds no suffix to a project name seen in build.sbt
-         | - Scala 3 adds the suffix "3" to a project name seen in build.sbt""".stripMargin,
-    usefulTasks := aliases.usefulTasks()
+    name := "pipez-build"
   )
+  .settings(ciAliases)
   .settings(settings *)
   .settings(publishSettings *)
   .settings(noPublishSettings *)

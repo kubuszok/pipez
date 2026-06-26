@@ -2,7 +2,7 @@ package pipez
 
 class BugReportSpec extends munit.FunSuite {
 
-  test("Bug report https://github.com/MateuszKubuszok/pipez/issues/27") {
+  test("Bug report https://github.com/kubuszok/pipez/issues/27") {
     // Bug was related to weird behavior in Scala 3 macros where symbols for case class fields are doubled:
     // - there is one "val fieldName"
     // - and there is one "method fieldName " (with space at the end!)

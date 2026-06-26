@@ -173,7 +173,7 @@ val publishSettings = Seq(
   homepage := Some(url("https://kubuszok.com")),
   licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
   scmInfo := Some(
-    ScmInfo(url("https://github.com/MateuszKubuszok/pipez"), "scm:git@github.com/MateuszKubuszok/pipez.git")
+    ScmInfo(url("https://github.com/kubuszok/pipez"), "scm:git@github.com/kubuszok/pipez.git")
   ),
   developers := List(
     Developer("MateuszKubuszok", "Mateusz Kubuszok", "", url("https://kubuszok.com"))

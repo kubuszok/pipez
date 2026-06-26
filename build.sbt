@@ -13,7 +13,7 @@ val scala3 = "3.8.4"
 val scalas = List(scala213, scala3)
 val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
-val hearth = "0.3.1-54-g83c3eb5-SNAPSHOT"
+val hearth = "0.4.0"
 val kindProjector = "0.13.4"
 val munit = "1.3.3"
 

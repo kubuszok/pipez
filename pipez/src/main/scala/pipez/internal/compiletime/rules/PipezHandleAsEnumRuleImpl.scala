@@ -43,7 +43,7 @@ trait PipezHandleAsEnumRuleImpl { this: PipezMacrosImpl & MacroCommons & StdExte
         outEnum: Enum[Out]
     )(implicit dctx: DerivationCtx[In, Out]): MIO[Expr[Res[Out]]] = {
       implicit val resOut: Type[Res[Out]] = resType[Out]
-      val outChildTypes: Map[String, ??] = outEnum.directChildren.toList.map { case (name, child) =>
+      val outChildTypes: Map[String, ??] = outEnum.directChildren.iterator.map { case (name, child) =>
         import child.Underlying as ChildType
         name -> Type[ChildType].as_??
       }.toMap

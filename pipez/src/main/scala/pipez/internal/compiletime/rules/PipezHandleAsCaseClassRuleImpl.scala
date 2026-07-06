@@ -80,10 +80,10 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
     private def detectBeanOut[A: Type]: Option[BeanInfo[A]] = {
       val defaultCtorOpt = Type[A].constructors.find(_.totalParameters.flatten.isEmpty)
       defaultCtorOpt.flatMap { defaultCtor =>
-        val setterFields = Type[A].methods.flatMap { method =>
+        val setterFields = Type[A].unsortedMethods.flatMap { method =>
           extractSetterFieldName(method.name).flatMap { fieldName =>
             val params = method.totalParameters.flatten
-            if (params.size == 1) {
+            if (params.sizeIs == 1) {
               val (_, param) = params.head
               Some(BeanField(fieldName, param.tpe, method))
             } else None
@@ -340,7 +340,7 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
       CaseClass.parse[In].toEither match {
         case Right(inClass) =>
           val inParams = inClass.primaryConstructor.totalParameters.flatten
-          if (index < inParams.size) {
+          if (inParams.sizeIs > index) {
             val (paramName, param) = inParams(index)
             import param.tpe.Underlying as F
             Some(inFieldGetter[In, F] { in =>

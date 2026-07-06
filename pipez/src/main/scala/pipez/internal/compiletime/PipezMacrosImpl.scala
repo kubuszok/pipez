@@ -340,39 +340,41 @@ trait PipezMacrosImpl
   def deriveResultRecursively[In: Type, Out: Type](implicit
       ctx: DerivationCtx[In, Out]
   ): MIO[Expr[Pipe[In, Out]]] =
-    Log.namedScope(s"Deriving Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") {
-      getHelper[In, Out](ctx.cache).flatMap {
-        case Some(helperCall) =>
-          Log.info(s"Found cached helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
-            MIO.pure(generateLift[In, Out]((in, ctxE) => helperCall(in, ctxE)))
-        case None =>
-          getPipe[In, Out](ctx.cache).flatMap {
-            case Some(pipe) =>
-              Log.info(s"Found cached pipe for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
-                MIO.pure(pipe)
-            case None =>
-              val summoned = if (!ctx.isTopLevel) summonPipe[In, Out] else None
-              summoned match {
-                case Some(pipe) =>
-                  Log.info(s"Summoned implicit Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
-                    setPipe[In, Out](ctx.cache)(pipe) >> MIO.pure(pipe)
-                case None =>
-                  val ruleCtx = ctx.copy(isTopLevel = false)
-                  setHelper[In, Out](ctx.cache) { (inExpr, ctxExpr) =>
-                    deriveBodyViaRules[In, Out](inExpr, ctxExpr, ruleCtx)
-                  } >> getHelper[In, Out](ctx.cache).flatMap {
-                    case Some(helperCall) =>
-                      MIO.pure(generateLift[In, Out]((in, ctxE) => helperCall(in, ctxE)))
-                    case None =>
-                      MIO.fail(
-                        new RuntimeException(
-                          s"Failed to build helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]"
+    // Cheap constant scope name; the expensive prettyPrints move into a by-name Log.info only built when rendered.
+    Log.namedScope("Deriving Pipe") {
+      Log.info(s"Deriving Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+        getHelper[In, Out](ctx.cache).flatMap {
+          case Some(helperCall) =>
+            Log.info(s"Found cached helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+              MIO.pure(generateLift[In, Out]((in, ctxE) => helperCall(in, ctxE)))
+          case None =>
+            getPipe[In, Out](ctx.cache).flatMap {
+              case Some(pipe) =>
+                Log.info(s"Found cached pipe for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+                  MIO.pure(pipe)
+              case None =>
+                val summoned = if (!ctx.isTopLevel) summonPipe[In, Out] else None
+                summoned match {
+                  case Some(pipe) =>
+                    Log.info(s"Summoned implicit Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]") >>
+                      setPipe[In, Out](ctx.cache)(pipe) >> MIO.pure(pipe)
+                  case None =>
+                    val ruleCtx = ctx.copy(isTopLevel = false)
+                    setHelper[In, Out](ctx.cache) { (inExpr, ctxExpr) =>
+                      deriveBodyViaRules[In, Out](inExpr, ctxExpr, ruleCtx)
+                    } >> getHelper[In, Out](ctx.cache).flatMap {
+                      case Some(helperCall) =>
+                        MIO.pure(generateLift[In, Out]((in, ctxE) => helperCall(in, ctxE)))
+                      case None =>
+                        MIO.fail(
+                          new RuntimeException(
+                            s"Failed to build helper for Pipe[${Type[In].prettyPrint}, ${Type[Out].prettyPrint}]"
+                          )
                         )
-                      )
-                  }
-              }
-          }
-      }
+                    }
+                }
+            }
+        }
     }
 
   private def deriveBodyViaRules[In: Type, Out: Type](

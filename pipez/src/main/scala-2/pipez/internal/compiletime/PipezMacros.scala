@@ -64,7 +64,7 @@ final private[pipez] class PipezMacrosImpl2[P[_, _], In0, Out0](val c: blackbox.
     val companionSym = pipeTpe.asInstanceOf[c.Type].typeSymbol.companion
     if (companionSym != c.universe.NoSymbol) {
       val companionTag: Type[Any] = c.WeakTypeTag(companionSym.info).asInstanceOf[Type[Any]]
-      companionTag.methods.collect {
+      companionTag.unsortedMethods.collect {
         case m if m.name == "deriveAutomatic" || m.name == "derive" => m.asUntyped
       }.toSeq
     } else Seq.empty

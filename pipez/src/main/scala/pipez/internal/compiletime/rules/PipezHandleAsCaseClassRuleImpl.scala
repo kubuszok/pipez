@@ -380,34 +380,38 @@ trait PipezHandleAsCaseClassRuleImpl { this: PipezMacrosImpl & MacroCommons & St
     private def findMethodGetter[In: Type](name: String)(implicit
         dctx: DerivationCtx[?, ?]
     ): Option[InFieldGetter[In]] =
-      Type[In].methods.iterator
-        .flatMap { method =>
-          if (
+      // Filter-first pattern (hearth#347): `unsortedMethods` skips the expensive position-resolving sort, and
+      // `Method.sort` restores the exact stable order on the few name-matched candidates, so the deterministic
+      // winner of a fuzzy-name tie (e.g. `getName` vs `name`) stays the same as with sorted `methods`.
+      Method
+        .sort(
+          Type[In].unsortedMethods.filter { method =>
             !ignoredMethodNames(method.name) &&
             !method.name.contains("$default$") &&
             method.totalParameters.flatten.isEmpty &&
             inputNameMatchesOutputName(dropGetIs(method.name), name, dctx.settings.isFieldCaseInsensitive)
-          ) {
-            def mkGetter[FF: Type]: InFieldGetter[In] = inFieldGetter[In, FF] { in =>
-              method.fold(
-                onInstance = oi => in.asInstanceOf[Expr[oi.Instance]].as_??(oi.Instance),
-                onTypes = _ => Map.empty,
-                onValues = _ => Map.empty
-              ) match {
-                case Right(result) => result.value.asInstanceOf[Expr[FF]]
-                case Left(err)     => throw new RuntimeException(s"Cannot call getter ${method.name}: $err")
-              }
+          }
+        )
+        .headOption
+        .map { method =>
+          def mkGetter[FF: Type]: InFieldGetter[In] = inFieldGetter[In, FF] { in =>
+            method.fold(
+              onInstance = oi => in.asInstanceOf[Expr[oi.Instance]].as_??(oi.Instance),
+              onTypes = _ => Map.empty,
+              onValues = _ => Map.empty
+            ) match {
+              case Right(result) => result.value.asInstanceOf[Expr[FF]]
+              case Left(err)     => throw new RuntimeException(s"Cannot call getter ${method.name}: $err")
             }
-            method.knownReturning match {
-              case Some(rt) =>
-                import rt.Underlying as F
-                Some(mkGetter[F])
-              case None =>
-                Some(mkGetter[Any](typeOfAny))
-            }
-          } else None
+          }
+          method.knownReturning match {
+            case Some(rt) =>
+              import rt.Underlying as F
+              mkGetter[F]
+            case None =>
+              mkGetter[Any](typeOfAny)
+          }
         }
-        .nextOption()
 
     private def extractFieldFromIn[In: Type](fieldName: String)(implicit
         dctx: DerivationCtx[?, ?]

@@ -1,6 +1,8 @@
 import commandmatrix.extra.*
 import kubuszok.sbt._
 import kubuszok.sbt.KubuszokPlugin.autoImport._
+import com.typesafe.tools.mima.core.*
+import com.typesafe.tools.mima.core.ProblemFilters.*
 
 // Versions:
 
@@ -13,7 +15,7 @@ val scala3 = "3.8.4"
 val scalas = List(scala213, scala3)
 val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
-val hearth = "0.4.0-54-gcad79ee-SNAPSHOT"
+val hearth = "0.4.1"
 val kindProjector = "0.13.4"
 val munit = "1.3.3"
 
@@ -184,13 +186,40 @@ val publishSettings = Seq(
 val noPublishSettings =
   Seq(projectType := ProjectType.NonPublished)
 
+// Binary-compatibility check against the last release, so a version we are preparing cannot break users.
+// 0.6.0 was the FIRST Hearth-based release (0.5.x and earlier predated the Hearth rewrite), so it is the correct
+// baseline - diffing against a pre-Hearth version would just report the whole migration. Pipez's public surface is
+// macro traits users mix into their own bundles, so the same nested-vs-top-level rule as Hearth applies (see
+// docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED scope may be
+// filtered here, each with a justification.
+val mimaPreviousVersion = "0.6.0"
+
+val mimaSettings = Seq(
+  // `.cross(crossVersion.value)` selects the matching platform+Scala artifact (pipez_3, pipez_sjs1_3,
+  // pipez_native0.5_3, pipez_2.13, ...) instead of always resolving the JVM one. 0.6.0 was published for every
+  // platform, so all of them have a baseline.
+  mimaPreviousArtifacts := Set((organization.value % moduleName.value % mimaPreviousVersion).cross(crossVersion.value)),
+  mimaFailOnNoPrevious := true,
+  mimaBinaryIssueFilters ++= Seq(
+    // `pipez.internal.*` is macro-implementation detail, never part of the published API.
+    ProblemFilters.exclude[Problem]("pipez.internal.*")
+  )
+)
+
 // Modules:
 
 lazy val aliases = new Aliases(
   published = Seq(pipez, pipezDsl),
   testOnly = Seq.empty,
   compileOnly = Seq.empty
-)
+) {
+  // Run MiMa as part of CI on every platform (0.6.0 has a JVM/JS/Native baseline for both modules).
+  override def ci(platform: String, scalaBinary: String): String = {
+    val base = super.ci(platform, scalaBinary)
+    val reports = projectIds(published, platform, scalaBinary).map(id => s"$id/mimaReportBinaryIssues")
+    if (reports.nonEmpty) s"$base ; ${reports.mkString(" ; ")}" else base
+  }
+}
 
 // CI/test command aliases (e.g. ci-jvm-3, test-js-3), consumed by .github/workflows/ci.yml.
 // sbt-welcome used to register these via `usefulTasks`, but it has no sbt 2.0 build, so we register
@@ -249,6 +278,7 @@ lazy val pipez = projectMatrix
   .settings(dependencies *)
   .settings(coverageDirFix *)
   .settings(publishSettings *)
+  .settings(mimaSettings *)
 
 lazy val pipezDsl = projectMatrix
   .in(file("pipez-dsl"))
@@ -262,6 +292,7 @@ lazy val pipezDsl = projectMatrix
   .settings(dependencies *)
   .settings(coverageDirFix *)
   .settings(publishSettings *)
+  .settings(mimaSettings *)
   .dependsOn(pipez % "compile->compile;test->test")
 
 lazy val root = project

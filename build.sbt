@@ -187,12 +187,12 @@ val noPublishSettings =
   Seq(projectType := ProjectType.NonPublished)
 
 // Binary-compatibility check against the last release, so a version we are preparing cannot break users.
-// 0.6.0 was the FIRST Hearth-based release (0.5.x and earlier predated the Hearth rewrite), so it is the correct
-// baseline - diffing against a pre-Hearth version would just report the whole migration. Pipez's public surface is
-// macro traits users mix into their own bundles, so the same nested-vs-top-level rule as Hearth applies (see
-// docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED scope may be
-// filtered here, each with a justification.
-val mimaPreviousVersion = "0.6.0"
+// The last released version we check binary compatibility against. Bump this on every release. 0.6.0 was the FIRST
+// Hearth-based release (0.5.x and earlier predated the Hearth rewrite); every version from 0.6.0 on is a valid
+// apples-to-apples baseline. Pipez's public surface is macro traits users mix into their own bundles, so the same
+// nested-vs-top-level rule as Hearth applies (see docs/contributing/binary-compatibility-and-mixins.md in hearth):
+// only members added inside a NESTED scope may be filtered here, each with a justification.
+val mimaPreviousVersion = "0.6.1"
 
 val mimaSettings = Seq(
   // `.cross(crossVersion.value)` selects the matching platform+Scala artifact (pipez_3, pipez_sjs1_3,

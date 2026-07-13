@@ -9,7 +9,7 @@
 ![CI Build](https://github.com/kubuszok/pipez/workflows/CI%20Build/badge.svg)
 [![License](http://img.shields.io/:license-Apache%202-green.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 
-Scala library for type-safe data-transformations, which allows you to build-in Chimney-like abilities to your own type classes and effects.
+Scala library for type-safe data-transformations, which allows you to build-in Chimney-like abilities to your own type classes and effects. Powered by [Hearth](https://github.com/kubuszok/hearth).
 
 > Pipez is a result of research about possible ways of migrating Chimney to Scala 3. It focuses on a certain **deprecated** type class from Chimney- `TransformerF` - and while it attempts to replicate as much features as possible it is **not** intended to replace Chimney nor reimplement all of its features.
 

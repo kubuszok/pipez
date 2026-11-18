@@ -147,19 +147,6 @@ val dependencies = Seq(
   resolvers += Resolver.mavenLocal
 )
 
-// sbt 2.0 + scoverage + `fork := true`: the scoverage runtime Invoker in the *forked* test JVM writes
-// per-thread measurement files into `<crossTarget>/scoverage-data`, but on sbt 2.0 that directory is no
-// longer pre-created in-process before the fork starts, so every instrumented test crashes with
-// `FileNotFoundException: .../scoverage-data/scoverage.measurements.*`. Ensure the directory exists;
-// piggy-back on Test/compile, which every test task depends on. Harmless when coverage is off.
-val coverageDirFix = Seq(
-  Test / compile := Def.uncached {
-    val analysis = (Test / compile).value
-    IO.createDirectory((Test / crossTarget).value / "scoverage-data")
-    analysis
-  }
-)
-
 // Scala Native 0.5.12: munit 1.3.3 pulls test-interface 0.5.12 while scalacheck 1.19.0 (transitive via
 // hearth-munit) still pulls 0.5.8; the Scala Native plugin marks test-interface with a "strict" scheme,
 // so the older request is reported as a binary-incompat eviction error on sbt 2.0. Coursier already
@@ -239,7 +226,6 @@ lazy val pipezTestcases213 = projectMatrix
 lazy val pipez = projectMatrix
   .in(file("pipez"))
   .someVariations(scalas, platforms)((useCrossQuotes ++ nativeEvictionFix ++ dev.only1VersionInIDE) *)
-  .enablePlugins(GitVersioning)
   .dependsOn(pipezTestcases213 % Test)
   .settings(
     moduleName := "pipez",
@@ -247,28 +233,25 @@ lazy val pipez = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(coverageDirFix *)
   .settings(publishSettings *)
   .settings(mimaSettings *)
 
 lazy val pipezDsl = projectMatrix
   .in(file("pipez-dsl"))
   .someVariations(scalas, platforms)((useCrossQuotes ++ nativeEvictionFix ++ dev.only1VersionInIDE) *)
-  .enablePlugins(GitVersioning)
   .settings(
     moduleName := "pipez-dsl",
     name := "pipez-dsl"
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(coverageDirFix *)
   .settings(publishSettings *)
   .settings(mimaSettings *)
   .dependsOn(pipez % "compile->compile;test->test")
 
 lazy val root = project
   .in(file("."))
-  .enablePlugins(GitVersioning)
+  .enablePlugins(KubuszokRootPlugin)
   .aggregate(pipez.projectRefs *)
   .aggregate(pipezDsl.projectRefs *)
   .settings(
@@ -276,5 +259,4 @@ lazy val root = project
   )
   .settings(ciAliases)
   .settings(settings *)
-  .settings(publishSettings *)
   .settings(noPublishSettings *)

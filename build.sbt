@@ -25,11 +25,11 @@ val dev = new DevProperties(
   platforms = platforms
 )
 
-val logCrossQuotes = dev.props.getProperty("log.cross-quotes") match {
-  case "true"                          => true
-  case "false"                         => false
-  case otherwise if otherwise.nonEmpty => otherwise
-  case _                               => !isCI
+val logCrossQuotes = dev.prop("log.cross-quotes") match {
+  case Some("true")    => true
+  case Some("false")   => false
+  case Some(otherwise) => otherwise
+  case None            => !isCI
 }
 
 // Common settings:
@@ -222,37 +222,8 @@ lazy val aliases = new Aliases(
 }
 
 // CI/test command aliases (e.g. ci-jvm-3, test-js-3), consumed by .github/workflows/ci.yml.
-// sbt-welcome used to register these via `usefulTasks`, but it has no sbt 2.0 build, so we register
-// them directly from the Aliases helper bundled with sbt-kubuszok.
-//
-// In sbt 2.0 the `test` task is incremental and machine-wide cached (it behaves like sbt 1.x's
-// `testQuick`), so a CI run that begins with `clean` can still report "No tests to run" and pass
-// vacuously. `testFull` is the uncached full run. Rewrite the generated `<id>/test` steps to
-// `<id>/testFull` so CI always executes the whole suite.
-def fullTests(command: String): String =
-  command
-    .split(";")
-    .map { step =>
-      val trimmed = step.trim
-      if (trimmed.endsWith("/test")) trimmed.stripSuffix("/test") + "/testFull" else trimmed
-    }
-    .mkString(" ; ")
-
-def aliasName(prefix: String, platform: String, scalaBinary: String): String =
-  s"$prefix-${platform.toLowerCase}-${scalaBinary.replace('.', '_')}"
-
-lazy val ciAliases: Seq[Def.Setting[?]] = {
-  val platformNames = List("JVM", "JS", "Native")
-  val scalaBinaries = List("2.13", "3")
-  val perCombination = for {
-    platform <- platformNames
-    scalaBinary <- scalaBinaries
-    setting <-
-      addCommandAlias(aliasName("ci", platform, scalaBinary), fullTests(aliases.ci(platform, scalaBinary))) ++
-        addCommandAlias(aliasName("test", platform, scalaBinary), fullTests(aliases.test(platform, scalaBinary)))
-  } yield setting
-  perCombination ++ addCommandAlias("ci-release", aliases.release)
-}
+// On sbt 2 they use `<id>/testFull` and `ci` also runs `<id>/doc`; `ci-release` is provided by sbt-kubuszok.
+lazy val ciAliases: Seq[Def.Setting[?]] = aliases.commandAliases()
 
 lazy val pipezTestcases213 = projectMatrix
   .in(file("pipez-testcases-213"))
